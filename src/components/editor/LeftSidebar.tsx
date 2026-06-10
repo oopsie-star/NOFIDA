@@ -8,9 +8,11 @@ import {
   Frame,
   Image,
   Layers3,
+  LayoutGrid,
   Lock,
   MousePointer2,
   Plus,
+  Smartphone,
   Square,
   Trash2,
   Type,
@@ -168,15 +170,15 @@ export function LeftSidebar({
   }
 
   return (
-    <aside className="left-sidebar">
+    <aside className="w-full h-full bg-white border-r border-neutral-200/60 flex flex-col overflow-hidden min-h-0 min-w-0 select-none">
 
       {/* AI Generation Terminal Header */}
-      <div className="p-3 border-b border-gray-200 bg-white flex flex-col gap-2">
+      <div className="p-3 border-b border-neutral-200/60 bg-white flex flex-col gap-2">
         <div className="flex justify-between items-center">
-          <h2 className="text-xs font-mono uppercase tracking-wider font-bold text-[#1A1A1A]">
+          <h2 className="text-[11px] font-mono uppercase tracking-wider font-bold text-neutral-900">
             Nofida Workspace
           </h2>
-          <span className="text-[9px] bg-[#1A1A1A] text-emerald-400 font-mono px-1.5 py-0.5 rounded uppercase tracking-tighter animate-pulse">
+          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-md uppercase tracking-wider bg-neutral-900 text-white">
             AI Core v1
           </span>
         </div>
@@ -187,19 +189,15 @@ export function LeftSidebar({
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
             placeholder="Ask AI to generate views (e.g., 'Auth Flow')..."
-            className="w-full text-[11px] font-mono px-2 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-black transition-colors"
+            className="w-full text-[11px] font-mono px-2.5 py-1.5 bg-neutral-50 border border-neutral-200/80 rounded-md focus:outline-none focus:border-neutral-900 focus:bg-white transition-all text-neutral-800 placeholder:text-neutral-400"
             disabled={isGenerating}
           />
           <button
             type="submit"
             disabled={!aiPrompt.trim() || isGenerating}
-            className={`w-full text-[10px] font-mono font-bold uppercase py-1 rounded transition-all text-center ${
-              isGenerating
-                ? "bg-amber-500 text-white animate-pulse"
-                : "bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98]"
-            }`}
+            className="w-full text-[10px] font-mono font-bold uppercase py-1.5 tracking-wider rounded-md text-white bg-neutral-900 hover:bg-black btn-interact shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {isGenerating ? "⚡ Compiling System Vector..." : "✦ Generate Workspace Architecture"}
+            {isGenerating ? "Compiling System Vector…" : "Generate Workspace Architecture"}
           </button>
         </form>
       </div>
@@ -234,13 +232,13 @@ export function LeftSidebar({
         </button>
       </div>
 
-      <div className="sidebar-content">
+      <div className="sidebar-content flex-1 overflow-y-auto custom-scrollbar bg-white">
         {tab === "pages" && (
           <section>
             {/* Manifest Workspace Flows */}
             <div className="sidebar-section-title flex items-center justify-between">
               <span>Active Architecture Flows</span>
-              <span className="text-gray-300 text-[10px] font-mono">
+              <span className="text-neutral-300 text-[10px] font-mono">
                 ({manifest.structure.pages.length})
               </span>
             </div>
@@ -249,25 +247,33 @@ export function LeftSidebar({
               {manifest.structure.pages.map((page) => {
                 const isActive = page.id === activeManifestPageId;
                 const isAiNode = page.id.startsWith("ai_");
+                const TypeIcon = page.type === "board" ? LayoutGrid : Smartphone;
                 return (
                   <button
                     key={page.id}
                     type="button"
                     onClick={() => onPageSelect(page.id)}
-                    className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-all flex items-center justify-between gap-2 ${
+                    className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] font-mono transition-all flex items-center justify-between gap-2 border border-transparent ${
                       isActive
-                        ? "bg-[#1A1A1A] text-white shadow-sm font-semibold"
-                        : "text-gray-700 hover:bg-white border border-transparent hover:border-gray-200"
+                        ? "bg-neutral-900 text-white font-medium shadow-sm hover:bg-neutral-900"
+                        : "text-neutral-700 hover:bg-neutral-50 hover:text-neutral-950"
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <span className="opacity-60">
-                        {page.type === "board" ? "📋" : "📱"}
-                      </span>
-                      <span className="truncate">{page.name}</span>
+                      <TypeIcon
+                        size={13}
+                        className={isActive ? "opacity-90 shrink-0" : "opacity-50 shrink-0"}
+                      />
+                      <span className="truncate tracking-tight">{page.name}</span>
                     </div>
                     {isAiNode && (
-                      <span className="shrink-0 text-[8px] bg-emerald-500/20 text-emerald-700 font-bold px-1 rounded uppercase tracking-wide">
+                      <span
+                        className={`shrink-0 text-[8px] font-bold px-1 rounded uppercase tracking-wide ${
+                          isActive
+                            ? "bg-white/15 text-white"
+                            : "bg-neutral-100 text-neutral-500"
+                        }`}
+                      >
                         AI
                       </span>
                     )}

@@ -1139,3 +1139,44 @@ button:disabled {
     display: none;
   }
 }
+
+/* ========================================================================
+   Premium Design System — global studio utilities
+   ===================================================================== */
+@layer utilities {
+  /* Premium self-hiding design-studio scrollbars (WebKit/Blink) */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+  }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+  }
+  /* Firefox parity for the same thin, self-hiding track */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+  }
+
+  /* Micro-interaction active-state spring physics */
+  .btn-interact {
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-interact:active {
+    transform: scale(0.97);
+  }
+}
+
+/* Eliminate system default selections globally for layout components */
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+}

@@ -14,7 +14,7 @@ import {
   Type,
   Unlock
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { foundationTokens } from "../../data/seed";
 import { tr } from "../../i18n";
 import {
@@ -56,15 +56,64 @@ const codeBlockStyle = {
   margin: 0,
   maxHeight: 260,
   overflow: "auto",
-  borderRadius: 12,
-  border: "1px solid #dbe2ee",
-  background: "#0f172a",
-  color: "#e2e8f0",
+  borderRadius: 8,
+  border: "1px solid #171717",
+  background: "#0a0a0a",
+  color: "#d4d4d4",
   padding: 12,
   fontSize: 11,
   lineHeight: 1.55,
   whiteSpace: "pre-wrap" as const
 };
+
+// Lightweight, allocation-only syntax highlighter for the studio code previews.
+// Splits on strings / line comments / keywords and wraps each token in a span —
+// it never throws, so it stays safe for the build's correctness gate.
+const SYNTAX_KEYWORDS = new Set([
+  "import",
+  "from",
+  "export",
+  "const",
+  "return",
+  "interface",
+  "React",
+  "className",
+  "style",
+  "onClick",
+  "button"
+]);
+
+const HIGHLIGHT_PATTERN =
+  /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\bimport\b|\bfrom\b|\bexport\b|\bconst\b|\breturn\b|\binterface\b|\bReact\b|\bclassName\b|\bstyle\b|\bonClick\b|\bbutton\b)/g;
+
+function highlightCode(code: string): ReactNode[] {
+  return code.split(HIGHLIGHT_PATTERN).map((token, index) => {
+    if (!token) return null;
+    const first = token[0];
+    if (first === '"' || first === "'" || first === "`") {
+      return (
+        <span key={index} className="text-amber-300">
+          {token}
+        </span>
+      );
+    }
+    if (token.startsWith("//")) {
+      return (
+        <span key={index} className="text-neutral-500 italic">
+          {token}
+        </span>
+      );
+    }
+    if (SYNTAX_KEYWORDS.has(token)) {
+      return (
+        <span key={index} className="text-emerald-400">
+          {token}
+        </span>
+      );
+    }
+    return <span key={index}>{token}</span>;
+  });
+}
 
 const tokenInputStyle = {
   width: "100%",
@@ -265,19 +314,19 @@ export function RightInspector({ manifest }: RightInspectorProps) {
   }
 
   return (
-    <aside className="right-inspector">
+    <aside className="h-full flex flex-col bg-white border-l border-neutral-200/60 overflow-y-auto min-h-0 min-w-0 custom-scrollbar select-none">
 
       {/* Top-level tab navigator */}
-      <div className="flex border-b border-gray-200 bg-white shrink-0">
+      <div className="flex border-b border-neutral-200/60 bg-white text-[10px] font-mono font-medium tracking-wider text-neutral-400 shrink-0">
         {(["design", "inspect", "properties"] as ActiveTab[]).map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2.5 text-center text-[10px] font-mono uppercase tracking-wider transition-all ${
+            className={`flex-1 py-2.5 text-center uppercase tracking-wider btn-interact ${
               activeTab === tab
-                ? "border-b-2 border-[#1A1A1A] font-bold text-[#1A1A1A]"
-                : "text-gray-400 hover:text-gray-600"
+                ? "border-b-2 border-neutral-900 text-neutral-900 font-bold bg-neutral-50/50"
+                : "border-b-2 border-transparent hover:text-neutral-700"
             }`}
           >
             {tab === "design" ? "Design" : tab === "inspect" ? "Inspect" : "Properties"}
@@ -287,44 +336,27 @@ export function RightInspector({ manifest }: RightInspectorProps) {
 
       {/* ── Design Tokens Tab ── */}
       {activeTab === "design" && (
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-4">
           <div>
-            <div className="text-[10px] font-mono text-gray-400 uppercase tracking-tight mb-2">
+            <div className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider mb-2">
               Color Palette
             </div>
             <div className="flex flex-col gap-2">
               {Object.entries(manifest.tokens.colors).map(([key, value]) => (
                 <div
                   key={key}
-                  className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm"
+                  className="p-2 bg-white rounded-lg border border-neutral-200/60 flex items-center justify-between shadow-xs transition-all hover:border-neutral-300"
                 >
                   <div className="flex items-center gap-2">
                     <div
-                      className="w-4 h-4 rounded border border-gray-300 shadow-inner"
+                      className="w-4 h-4 rounded-md border border-neutral-300 shadow-inner"
                       style={{ backgroundColor: value }}
                     />
-                    <span className="text-xs font-mono font-medium text-gray-700 capitalize">
+                    <span className="text-xs font-mono font-medium text-neutral-700 capitalize tracking-tight">
                       {key}
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-400 uppercase">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-[10px] font-mono text-gray-400 uppercase tracking-tight mb-2">
-              Layout Radii
-            </div>
-            <div className="flex flex-col gap-2">
-              {Object.entries(manifest.tokens.radii).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm text-xs font-mono"
-                >
-                  <span className="text-gray-700 capitalize">{key} corner</span>
-                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-semibold">
+                  <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wide">
                     {value}
                   </span>
                 </div>
@@ -332,7 +364,26 @@ export function RightInspector({ manifest }: RightInspectorProps) {
             </div>
           </div>
 
-          <div className="mt-auto pt-2 border-t border-gray-100 text-[10px] font-mono text-gray-400 text-center">
+          <div>
+            <div className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider mb-2">
+              Layout Radii
+            </div>
+            <div className="flex flex-col gap-2">
+              {Object.entries(manifest.tokens.radii).map(([key, value]) => (
+                <div
+                  key={key}
+                  className="p-2 bg-white rounded-lg border border-neutral-200/60 flex items-center justify-between shadow-xs transition-all hover:border-neutral-300 text-xs font-mono"
+                >
+                  <span className="text-neutral-700 capitalize tracking-tight">{key} corner</span>
+                  <span className="bg-neutral-100 px-1.5 py-0.5 rounded-md text-neutral-500 font-semibold tracking-wide">
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-auto pt-2 border-t border-neutral-100 text-[10px] font-mono text-neutral-400 text-center tracking-wide">
             Manifest v{manifest.version} · {manifest.projectId}
           </div>
         </div>
@@ -340,53 +391,53 @@ export function RightInspector({ manifest }: RightInspectorProps) {
 
       {/* ── Inspect / Handoff Tab ── */}
       {activeTab === "inspect" && (
-        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 flex flex-col gap-4">
 
           {/* Target context label */}
           <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-mono text-gray-400 uppercase">Target Context</span>
-            <span className="text-xs font-mono font-bold text-gray-900 truncate">{contextName}</span>
+            <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">Target Context</span>
+            <span className="text-xs font-mono font-bold text-neutral-900 truncate tracking-tight">{contextName}</span>
           </div>
 
           {/* Tailwind utility classes */}
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-mono text-gray-500 uppercase font-bold">
+              <span className="text-[10px] font-mono text-neutral-500 uppercase font-bold tracking-wider">
                 Tailwind Utility Classes
               </span>
               <button
                 type="button"
                 onClick={() => handleCopyToClipboard(generateTailwindClasses(), 'tw')}
-                className="text-[9px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded hover:bg-black transition-all active:scale-95"
+                className="text-[9px] font-mono bg-neutral-900 text-white px-2 py-0.5 rounded-md hover:bg-black btn-interact"
               >
                 {copiedType === 'tw' ? '✓ Copied' : 'Copy'}
               </button>
             </div>
-            <pre className="p-2 bg-gray-900 text-emerald-400 text-[10px] rounded overflow-x-auto font-mono whitespace-pre border border-gray-800 shadow-inner">
-              {generateTailwindClasses()}
+            <pre className="w-full flex-1 p-3 bg-neutral-950 text-neutral-300 text-[10px] rounded-lg overflow-x-auto font-mono whitespace-pre border border-neutral-900 shadow-sm custom-scrollbar">
+              {highlightCode(generateTailwindClasses())}
             </pre>
           </div>
 
           {/* React TS component */}
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-mono text-gray-500 uppercase font-bold">
+              <span className="text-[10px] font-mono text-neutral-500 uppercase font-bold tracking-wider">
                 React TS Component
               </span>
               <button
                 type="button"
                 onClick={() => handleCopyToClipboard(generateReactComponent(), 'react')}
-                className="text-[9px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded hover:bg-black transition-all active:scale-95"
+                className="text-[9px] font-mono bg-neutral-900 text-white px-2 py-0.5 rounded-md hover:bg-black btn-interact"
               >
                 {copiedType === 'react' ? '✓ Copied' : 'Copy'}
               </button>
             </div>
-            <pre className="p-2 bg-gray-900 text-blue-400 text-[10px] rounded overflow-x-auto font-mono whitespace-pre border border-gray-800 shadow-inner">
-              {generateReactComponent()}
+            <pre className="w-full flex-1 p-3 bg-neutral-950 text-neutral-300 text-[10px] rounded-lg overflow-x-auto font-mono whitespace-pre border border-neutral-900 shadow-sm custom-scrollbar">
+              {highlightCode(generateReactComponent())}
             </pre>
           </div>
 
-          <div className="text-[9px] font-mono text-gray-400 italic">
+          <div className="text-[9px] font-mono text-neutral-400 italic tracking-wide">
             Tokens sourced from manifest · v{manifest.version}
           </div>
         </div>
