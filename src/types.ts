@@ -6,6 +6,16 @@ export type SidebarTab = "pages" | "layers" | "assets";
 
 export type CanvasTool = "select" | "frame" | "rectangle" | "text" | "button";
 
+export type AlignMode =
+  | "left"
+  | "centerX"
+  | "right"
+  | "top"
+  | "centerY"
+  | "bottom";
+
+export type DistributionAxis = "horizontal" | "vertical";
+
 export type LayerType =
   | "frame"
   | "group"
@@ -13,6 +23,15 @@ export type LayerType =
   | "text"
   | "button"
   | "image";
+
+export type DesignTokenType =
+  | "color"
+  | "font"
+  | "spacing"
+  | "radius"
+  | "shadow"
+  | "border"
+  | "opacity";
 
 export interface LayerNode {
   id: string;
@@ -57,7 +76,9 @@ export interface DesignToken {
   id: string;
   name: string;
   value: string;
-  type: "color" | "font" | "spacing" | "radius" | "shadow";
+  type: DesignTokenType;
+  group: string;
+  description?: string;
 }
 
 export interface DaosProject {

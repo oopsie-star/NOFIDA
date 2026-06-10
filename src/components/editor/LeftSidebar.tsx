@@ -1,13 +1,20 @@
 import {
   Box,
   Component,
+  Copy,
+  Eye,
+  EyeOff,
   FileStack,
   Frame,
   Image,
   Layers3,
+  Lock,
   MousePointer2,
+  Plus,
   Square,
-  Type
+  Trash2,
+  Type,
+  Unlock
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { tr } from "../../i18n";
@@ -32,9 +39,18 @@ export function LeftSidebar() {
   const language = useDaosStore((state) => state.language);
   const project = useDaosStore((state) => state.project);
   const activePageId = useDaosStore((state) => state.activePageId);
-  const selectedLayerId = useDaosStore((state) => state.selectedLayerId);
+  const selectedLayerIds = useDaosStore((state) => state.selectedLayerIds);
   const setActivePage = useDaosStore((state) => state.setActivePage);
-  const selectLayer = useDaosStore((state) => state.selectLayer);
+  const createPage = useDaosStore((state) => state.createPage);
+  const renamePage = useDaosStore((state) => state.renamePage);
+  const duplicatePage = useDaosStore((state) => state.duplicatePage);
+  const deletePage = useDaosStore((state) => state.deletePage);
+  const selectSingleLayer = useDaosStore((state) => state.selectSingleLayer);
+  const toggleLayerSelection = useDaosStore((state) => state.toggleLayerSelection);
+  const toggleLayerVisibility = useDaosStore(
+    (state) => state.toggleLayerVisibility
+  );
+  const toggleLayerLock = useDaosStore((state) => state.toggleLayerLock);
 
   const activeFile = useDaosStore(getActiveFile);
   const activePage = useDaosStore(getActivePage);
@@ -60,19 +76,54 @@ export function LeftSidebar() {
   function renderLayer(layer: LayerNode, depth = 0) {
     const Icon = layerIcons[layer.type];
     const children = childLayers.get(layer.id) ?? [];
-    const isSelected = selectedLayerId === layer.id;
+    const isSelected = selectedLayerIds.includes(layer.id);
+    const VisibilityIcon = layer.visible ? Eye : EyeOff;
+    const LockIcon = layer.locked ? Lock : Unlock;
 
     return (
       <div key={layer.id}>
-        <button
-          className={isSelected ? "layer-row selected" : "layer-row"}
-          style={{ paddingLeft: 10 + depth * 16 }}
-          type="button"
-          onClick={() => selectLayer(layer.id)}
-        >
-          <Icon size={14} />
-          <span>{layer.name}</span>
-        </button>
+        <div className={isSelected ? "layer-item selected" : "layer-item"}>
+          <button
+            className={layer.visible ? "layer-row" : "layer-row muted"}
+            style={{ paddingLeft: 10 + depth * 16 }}
+            type="button"
+            onClick={(event) => {
+              if (event.shiftKey) {
+                toggleLayerSelection(layer.id);
+                return;
+              }
+
+              selectSingleLayer(layer.id);
+            }}
+          >
+            <Icon size={14} />
+            <span>{layer.name}</span>
+          </button>
+
+          <div className="layer-actions">
+            <button
+              type="button"
+              title={tr(language, layer.visible ? "action.hide" : "action.show")}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleLayerVisibility(layer.id);
+              }}
+            >
+              <VisibilityIcon size={13} />
+            </button>
+
+            <button
+              type="button"
+              title={tr(language, layer.locked ? "action.unlock" : "action.lock")}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleLayerLock(layer.id);
+              }}
+            >
+              <LockIcon size={13} />
+            </button>
+          </div>
+        </div>
 
         {children.map((child) => renderLayer(child, depth + 1))}
       </div>
@@ -119,18 +170,75 @@ export function LeftSidebar() {
 
             <div className="file-name">{activeFile.name}</div>
 
+            <div className="page-editor-card">
+              <div className="page-name-field">
+                <span>{tr(language, "page.active")}</span>
+                <input
+                  aria-label={tr(language, "page.name")}
+                  type="text"
+                  value={activePage.name}
+                  onChange={(event) => renamePage(activePageId, event.target.value)}
+                />
+              </div>
+
+              <button className="page-create-button" type="button" onClick={createPage}>
+                <Plus size={14} />
+                <span>{tr(language, "page.create")}</span>
+              </button>
+            </div>
+
             <div className="page-list">
-              {activeFile.pages.map((page) => (
-                <button
-                  className={page.id === activePageId ? "page-row active" : "page-row"}
-                  key={page.id}
-                  type="button"
-                  onClick={() => setActivePage(page.id)}
-                >
-                  <span>{page.name}</span>
-                  <small>{page.layers.filter((layer) => layer.type === "frame").length}</small>
-                </button>
-              ))}
+              {activeFile.pages.map((page) => {
+                const isActive = page.id === activePageId;
+                const canDelete = activeFile.pages.length > 1;
+
+                return (
+                  <div
+                    className={isActive ? "page-item active" : "page-item"}
+                    key={page.id}
+                  >
+                    <button
+                      className="page-row"
+                      type="button"
+                      onClick={() => setActivePage(page.id)}
+                    >
+                      <span>{page.name}</span>
+                      <small>
+                        {page.layers.filter((layer) => layer.type === "frame").length}
+                      </small>
+                    </button>
+
+                    <div className="page-actions">
+                      <button
+                        type="button"
+                        title={tr(language, "page.duplicate")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          duplicatePage(page.id);
+                        }}
+                      >
+                        <Copy size={13} />
+                      </button>
+
+                      <button
+                        disabled={!canDelete}
+                        type="button"
+                        title={
+                          canDelete
+                            ? tr(language, "page.delete")
+                            : tr(language, "page.protected")
+                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deletePage(page.id);
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}

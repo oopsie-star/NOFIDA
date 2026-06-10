@@ -10,14 +10,26 @@ export function StatusBar() {
   const zoom = useDaosStore((state) => state.zoom);
   const setZoom = useDaosStore((state) => state.setZoom);
   const selectedLayer = useDaosStore(getSelectedLayer);
+  const selectedLayerIds = useDaosStore((state) => state.selectedLayerIds);
   const activeTool = useDaosStore((state) => state.activeTool);
+  const selectedCount = selectedLayerIds.length;
+
+  function getSelectionLabel(): string {
+    if (selectedCount > 1) {
+      return `${tr(language, "selection.count")}: ${selectedCount}`;
+    }
+
+    return selectedLayer?.name ?? tr(language, "status.none");
+  }
 
   return (
     <footer className="status-bar">
       <div>
         <strong>{tr(language, "status.selected")}:</strong>{" "}
-        <span>{selectedLayer?.name ?? tr(language, "status.none")}</span>
+        <span>{getSelectionLabel()}</span>
       </div>
+
+      <div className="status-hotkeys">{tr(language, "canvas.hotkeys")}</div>
 
       <div className="status-right">
         <span>

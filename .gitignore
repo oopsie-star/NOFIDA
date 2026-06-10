@@ -33,3 +33,8 @@ Thumbs.db
 
 # misc
 coverage/
+*.tsbuildinfo
+.codex-temp/
+.playwright-mcp/
+test-results/
+screenshot-*.png
