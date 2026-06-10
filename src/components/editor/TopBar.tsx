@@ -167,17 +167,16 @@ export function TopBar() {
           <span>{tr(language, "top.export")}</span>
         </button>
 
-        {import.meta.env.DEV && (
-          <button
-            className="ghost-button top-action-secondary"
-            type="button"
-            title={tr(language, "top.resetTitle")}
-            onClick={handleReset}
-          >
-            <RotateCcw size={15} />
-            <span>{tr(language, "top.reset")}</span>
-          </button>
-        )}
+        <button
+          aria-label={tr(language, "top.reset")}
+          className="ghost-button top-action-secondary"
+          type="button"
+          title={tr(language, "top.resetTitle")}
+          onClick={handleReset}
+        >
+          <RotateCcw size={15} />
+          <span>{tr(language, "top.reset")}</span>
+        </button>
 
         <button className="ghost-button top-action-secondary" type="button">
           <Eye size={15} />
