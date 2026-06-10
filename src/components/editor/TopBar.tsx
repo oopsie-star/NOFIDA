@@ -7,10 +7,12 @@ import {
   MousePointer2,
   PenTool,
   Play,
+  Redo2,
   RotateCcw,
   Search,
   Share2,
   Sparkles,
+  Undo2,
   Upload
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -53,6 +55,10 @@ export function TopBar() {
   const resetLocalEditorState = useDaosStore(
     (state) => state.resetLocalEditorState
   );
+  const undo = useDaosStore((state) => state.undo);
+  const redo = useDaosStore((state) => state.redo);
+  const canUndo = useDaosStore((state) => state.history.past.length > 0);
+  const canRedo = useDaosStore((state) => state.history.future.length > 0);
   const activeFileName =
     project.files.find((file) => file.id === activeFileId)?.name ??
     project.files[0]?.name ??
@@ -144,6 +150,28 @@ export function TopBar() {
       </nav>
 
       <div className="top-actions">
+        <button
+          className="ghost-button top-action-secondary"
+          type="button"
+          disabled={!canUndo}
+          title={tr(language, "top.undoTitle")}
+          onClick={undo}
+        >
+          <Undo2 size={15} />
+          <span>{tr(language, "top.undo")}</span>
+        </button>
+
+        <button
+          className="ghost-button top-action-secondary"
+          type="button"
+          disabled={!canRedo}
+          title={tr(language, "top.redoTitle")}
+          onClick={redo}
+        >
+          <Redo2 size={15} />
+          <span>{tr(language, "top.redo")}</span>
+        </button>
+
         <button className="ghost-button search-button top-action-secondary" type="button">
           <Search size={15} />
           <span>{tr(language, "top.search")}</span>

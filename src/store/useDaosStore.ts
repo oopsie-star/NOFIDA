@@ -21,6 +21,50 @@ import {
 } from "../utils/layers";
 import type { NofidaFileSnapshot } from "../utils/nofidaFile";
 
+// ── History ──────────────────────────────────────────────────────────────────
+
+interface EditorSnapshot {
+  project: DaosProject;
+  activeFileId: string;
+  activePageId: string;
+  selectedLayerId?: string;
+  selectedLayerIds: string[];
+  mode: EditorMode;
+}
+
+interface History {
+  past: EditorSnapshot[];
+  future: EditorSnapshot[];
+}
+
+const HISTORY_LIMIT = 50;
+
+function captureSnapshot(state: {
+  project: DaosProject;
+  activeFileId: string;
+  activePageId: string;
+  selectedLayerId?: string;
+  selectedLayerIds: string[];
+  mode: EditorMode;
+}): EditorSnapshot {
+  return {
+    project: state.project,
+    activeFileId: state.activeFileId,
+    activePageId: state.activePageId,
+    selectedLayerId: state.selectedLayerId,
+    selectedLayerIds: state.selectedLayerIds,
+    mode: state.mode
+  };
+}
+
+function withHistory(state: { project: DaosProject; activeFileId: string; activePageId: string; selectedLayerId?: string; selectedLayerIds: string[]; mode: EditorMode; history: History }): History {
+  const snapshot = captureSnapshot(state);
+  const past = [...state.history.past, snapshot].slice(-HISTORY_LIMIT);
+  return { past, future: [] };
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 type LayerInput = Omit<LayerNode, "id" | "visible" | "locked"> &
   Partial<Pick<LayerNode, "id" | "visible" | "locked">>;
 
@@ -42,6 +86,7 @@ interface DaosState {
   selectedLayerId?: string;
   selectedLayerIds: string[];
   zoom: number;
+  history: History;
   setLanguage: (language: Language) => void;
   setMode: (mode: EditorMode) => void;
   setActiveTool: (tool: CanvasTool) => void;
@@ -76,6 +121,9 @@ interface DaosState {
   toggleLayerLock: (layerId: string) => void;
   groupSelectedLayers: () => void;
   ungroupSelectedLayers: () => void;
+  undo: () => void;
+  redo: () => void;
+  checkpointHistory: () => void;
 }
 
 const firstFile = seedProject.files[0];
@@ -295,6 +343,7 @@ export const useDaosStore = create<DaosState>()(
       selectedLayerId: defaultSelection.selectedLayerId,
       selectedLayerIds: defaultSelection.selectedLayerIds,
       zoom: 82,
+      history: { past: [], future: [] },
 
       setLanguage: (language) => set({ language }),
       setMode: (mode) => set({ mode }),
@@ -316,7 +365,7 @@ export const useDaosStore = create<DaosState>()(
         }),
 
       importSnapshot: (snapshot) =>
-        set(() => {
+        set((state) => {
           const firstImportedFile = snapshot.project.files[0];
           const importedFile =
             snapshot.project.files.find((file) => file.id === snapshot.activeFileId) ??
@@ -334,6 +383,7 @@ export const useDaosStore = create<DaosState>()(
           );
 
           return {
+            history: withHistory(state),
             language: snapshot.language,
             mode: snapshot.mode,
             activeTool: "select",
@@ -350,6 +400,7 @@ export const useDaosStore = create<DaosState>()(
 
       installFoundationTokens: () =>
         set((state) => ({
+          history: withHistory(state),
           project: {
             ...state.project,
             tokens: mergeFoundationTokens(state.project.tokens ?? [])
@@ -358,6 +409,7 @@ export const useDaosStore = create<DaosState>()(
 
       updateTokenValue: (tokenId, value) =>
         set((state) => ({
+          history: withHistory(state),
           project: {
             ...state.project,
             tokens: state.project.tokens.map((token) =>
@@ -423,6 +475,7 @@ export const useDaosStore = create<DaosState>()(
           const nextPage = updateLayers(page, patches);
 
           return {
+            history: withHistory(state),
             project: updateActivePage(
               state.project,
               state.activeFileId,
@@ -442,6 +495,7 @@ export const useDaosStore = create<DaosState>()(
           };
 
           return {
+            history: withHistory(state),
             activePageId: newPage.id,
             ...emptySelection(),
             project: updateActiveFile(state.project, state.activeFileId, (file) => ({
@@ -453,6 +507,7 @@ export const useDaosStore = create<DaosState>()(
 
       renamePage: (pageId, name) =>
         set((state) => ({
+          history: withHistory(state),
           project: updateActiveFile(state.project, state.activeFileId, (file) => ({
             ...file,
             pages: file.pages.map((page) =>
@@ -481,6 +536,7 @@ export const useDaosStore = create<DaosState>()(
           const pageIndex = activeFile.pages.findIndex((page) => page.id === pageId);
 
           return {
+            history: withHistory(state),
             activePageId: duplicatedPage.id,
             ...emptySelection(),
             project: updateActiveFile(state.project, state.activeFileId, (file) => {
@@ -507,6 +563,7 @@ export const useDaosStore = create<DaosState>()(
             const fallbackPage = nextPages[fallbackIndex];
 
             return {
+              history: withHistory(state),
               activePageId: fallbackPage.id,
               ...emptySelection(),
               project: updateActiveFile(state.project, state.activeFileId, (file) => ({
@@ -517,6 +574,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             project: updateActiveFile(state.project, state.activeFileId, (file) => ({
               ...file,
               pages: nextPages
@@ -575,6 +633,7 @@ export const useDaosStore = create<DaosState>()(
           };
 
           return {
+            history: withHistory(state),
             activeTool: "select",
             selectedLayerId: newLayer.id,
             selectedLayerIds: [newLayer.id],
@@ -590,6 +649,7 @@ export const useDaosStore = create<DaosState>()(
           };
         }),
 
+      // Used by Canvas drag/resize — no history push (checkpointHistory called at interaction start)
       updateLayer: (layerId, patch) =>
         set((state) => ({
           project: updateLayerInProject(
@@ -601,14 +661,21 @@ export const useDaosStore = create<DaosState>()(
           )
         })),
 
-      updateSelectedLayer: (patch) => {
-        const selectedLayerId = get().selectedLayerId;
-        if (!selectedLayerId) {
-          return;
-        }
-
-        get().updateLayer(selectedLayerId, patch);
-      },
+      updateSelectedLayer: (patch) =>
+        set((state) => {
+          const { selectedLayerId } = state;
+          if (!selectedLayerId) return state;
+          return {
+            history: withHistory(state),
+            project: updateLayerInProject(
+              state.project,
+              state.activeFileId,
+              state.activePageId,
+              selectedLayerId,
+              patch
+            )
+          };
+        }),
 
       deleteSelectedLayers: () =>
         set((state) => {
@@ -629,6 +696,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             ...emptySelection(),
             project: updateActivePage(
               state.project,
@@ -693,6 +761,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             project: updateActivePage(
               state.project,
               state.activeFileId,
@@ -734,6 +803,7 @@ export const useDaosStore = create<DaosState>()(
           const nextPage = updateLayers(page, patches);
 
           return {
+            history: withHistory(state),
             project: updateActivePage(
               state.project,
               state.activeFileId,
@@ -750,6 +820,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             project: updateActivePage(
               state.project,
               state.activeFileId,
@@ -834,6 +905,7 @@ export const useDaosStore = create<DaosState>()(
           const nextPage = updateLayers(page, patches);
 
           return {
+            history: withHistory(state),
             project: updateActivePage(
               state.project,
               state.activeFileId,
@@ -906,6 +978,7 @@ export const useDaosStore = create<DaosState>()(
           const nextPage = updateLayers(page, patches);
 
           return {
+            history: withHistory(state),
             project: updateActivePage(
               state.project,
               state.activeFileId,
@@ -925,6 +998,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             project: updateLayerInProject(
               state.project,
               state.activeFileId,
@@ -947,6 +1021,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             project: updateLayerInProject(
               state.project,
               state.activeFileId,
@@ -1028,6 +1103,7 @@ export const useDaosStore = create<DaosState>()(
           }
 
           return {
+            history: withHistory(state),
             selectedLayerId: groupId,
             selectedLayerIds: [groupId],
             project: updateActivePage(
@@ -1074,6 +1150,7 @@ export const useDaosStore = create<DaosState>()(
             });
 
           return {
+            history: withHistory(state),
             selectedLayerId:
               ungroupedChildIds.length > 0
                 ? ungroupedChildIds[ungroupedChildIds.length - 1]
@@ -1086,6 +1163,45 @@ export const useDaosStore = create<DaosState>()(
               () => ({ ...page, layers: updatedLayers })
             )
           };
+        }),
+
+      undo: () =>
+        set((state) => {
+          const { past, future } = state.history;
+          if (past.length === 0) return state;
+
+          const newPast = [...past];
+          const snapshot = newPast.pop()!;
+          const current = captureSnapshot(state);
+          const newFuture = [current, ...future].slice(0, HISTORY_LIMIT);
+
+          return {
+            ...snapshot,
+            history: { past: newPast, future: newFuture }
+          };
+        }),
+
+      redo: () =>
+        set((state) => {
+          const { past, future } = state.history;
+          if (future.length === 0) return state;
+
+          const newFuture = [...future];
+          const snapshot = newFuture.shift()!;
+          const current = captureSnapshot(state);
+          const newPast = [...past, current].slice(-HISTORY_LIMIT);
+
+          return {
+            ...snapshot,
+            history: { past: newPast, future: newFuture }
+          };
+        }),
+
+      checkpointHistory: () =>
+        set((state) => {
+          const snapshot = captureSnapshot(state);
+          const past = [...state.history.past, snapshot].slice(-HISTORY_LIMIT);
+          return { history: { past, future: [] } };
         })
     }),
     {
@@ -1100,13 +1216,15 @@ export const useDaosStore = create<DaosState>()(
         selectedLayerId: state.selectedLayerId,
         selectedLayerIds: state.selectedLayerIds,
         zoom: state.zoom
+        // history is intentionally excluded from persistence
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<DaosState> | undefined;
         const mergedState = {
           ...currentState,
           ...persisted,
-          activeTool: "select"
+          activeTool: "select",
+          history: { past: [], future: [] }
         } as DaosState;
         const selection = makeSelectionState(
           getActivePage(mergedState),

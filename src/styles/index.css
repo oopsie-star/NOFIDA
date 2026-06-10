@@ -50,6 +50,11 @@ button {
   cursor: default;
 }
 
+button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .daos-app {
   width: 100vw;
   height: 100vh;

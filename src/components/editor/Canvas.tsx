@@ -120,6 +120,9 @@ export function Canvas() {
   const moveSelectedLayer = useDaosStore((state) => state.moveSelectedLayer);
   const groupSelectedLayers = useDaosStore((state) => state.groupSelectedLayers);
   const ungroupSelectedLayers = useDaosStore((state) => state.ungroupSelectedLayers);
+  const undo = useDaosStore((state) => state.undo);
+  const redo = useDaosStore((state) => state.redo);
+  const checkpointHistory = useDaosStore((state) => state.checkpointHistory);
 
   // Keep a ref so wheel/keyboard handlers see the latest zoom without re-subscribing.
   const zoomRef = useRef(zoom);
@@ -269,6 +272,18 @@ export function Canvas() {
         return;
       }
 
+      if (hasCommand && key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if (hasCommand && (key === "y" || (key === "z" && event.shiftKey))) {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
       if (hasCommand || event.altKey || event.shiftKey) {
         return;
       }
@@ -299,8 +314,10 @@ export function Canvas() {
     duplicateSelectedLayers,
     groupSelectedLayers,
     moveSelectedLayer,
+    redo,
     selectedLayerIds.length,
     setActiveTool,
+    undo,
     ungroupSelectedLayers
   ]);
 
@@ -501,6 +518,8 @@ export function Canvas() {
       return;
     }
 
+    checkpointHistory();
+
     setInteraction({
       kind: "drag",
       startX: point.x,
@@ -532,6 +551,8 @@ export function Canvas() {
     if (!point) {
       return;
     }
+
+    checkpointHistory();
 
     setInteraction({
       kind: "resize",
