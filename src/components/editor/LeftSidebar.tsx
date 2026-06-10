@@ -16,7 +16,7 @@ import {
   Type,
   Unlock
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { tr } from "../../i18n";
 import {
   getActiveFile,
@@ -48,16 +48,19 @@ interface LeftSidebarProps {
   };
   activePageId?: string;
   onPageSelect: (pageId: string) => void;
-  onAddAiPage?: () => void;
+  onAiGenerateLayout: (prompt: string) => void;
 }
 
 export function LeftSidebar({
   manifest,
   activePageId: activeManifestPageId,
   onPageSelect,
-  onAddAiPage
+  onAiGenerateLayout
 }: LeftSidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("layers");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const language = useDaosStore((state) => state.language);
   const project = useDaosStore((state) => state.project);
   const storeActivePageId = useDaosStore((state) => state.activePageId);
@@ -94,6 +97,18 @@ export function LeftSidebar({
 
     return result;
   }, [activePage.layers]);
+
+  function handleSubmitAiPrompt(e: FormEvent) {
+    e.preventDefault();
+    if (!aiPrompt.trim() || isGenerating) return;
+
+    setIsGenerating(true);
+    setTimeout(() => {
+      onAiGenerateLayout(aiPrompt);
+      setAiPrompt("");
+      setIsGenerating(false);
+    }, 800);
+  }
 
   function renderLayer(layer: LayerNode, depth = 0) {
     const Icon = layerIcons[layer.type];
@@ -154,6 +169,42 @@ export function LeftSidebar({
 
   return (
     <aside className="left-sidebar">
+
+      {/* AI Generation Terminal Header */}
+      <div className="p-3 border-b border-gray-200 bg-white flex flex-col gap-2">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xs font-mono uppercase tracking-wider font-bold text-[#1A1A1A]">
+            Nofida Workspace
+          </h2>
+          <span className="text-[9px] bg-[#1A1A1A] text-emerald-400 font-mono px-1.5 py-0.5 rounded uppercase tracking-tighter animate-pulse">
+            AI Core v1
+          </span>
+        </div>
+
+        <form onSubmit={handleSubmitAiPrompt} className="flex flex-col gap-1.5 mt-1">
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="Ask AI to generate views (e.g., 'Auth Flow')..."
+            className="w-full text-[11px] font-mono px-2 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-black transition-colors"
+            disabled={isGenerating}
+          />
+          <button
+            type="submit"
+            disabled={!aiPrompt.trim() || isGenerating}
+            className={`w-full text-[10px] font-mono font-bold uppercase py-1 rounded transition-all text-center ${
+              isGenerating
+                ? "bg-amber-500 text-white animate-pulse"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98]"
+            }`}
+          >
+            {isGenerating ? "⚡ Compiling System Vector..." : "✦ Generate Workspace Architecture"}
+          </button>
+        </form>
+      </div>
+
+      {/* Tab Navigation */}
       <div className="sidebar-tabs">
         <button
           className={tab === "pages" ? "sidebar-tab active" : "sidebar-tab"}
@@ -188,37 +239,38 @@ export function LeftSidebar({
           <section>
             {/* Manifest Workspace Flows */}
             <div className="sidebar-section-title flex items-center justify-between">
-              <span>Workspace Flows</span>
-              {onAddAiPage && (
-                <button
-                  type="button"
-                  onClick={onAddAiPage}
-                  className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-mono px-2 py-0.5 rounded transition-colors"
-                  title="Simulate AI generating a new product interface page"
-                >
-                  + AI Page
-                </button>
-              )}
+              <span>Active Architecture Flows</span>
+              <span className="text-gray-300 text-[10px] font-mono">
+                ({manifest.structure.pages.length})
+              </span>
             </div>
 
             <div className="flex flex-col gap-0.5 mb-3">
               {manifest.structure.pages.map((page) => {
                 const isActive = page.id === activeManifestPageId;
+                const isAiNode = page.id.startsWith("ai_");
                 return (
                   <button
                     key={page.id}
                     type="button"
                     onClick={() => onPageSelect(page.id)}
-                    className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-all flex items-center gap-2 ${
+                    className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-all flex items-center justify-between gap-2 ${
                       isActive
-                        ? 'bg-[#1A1A1A] text-white shadow-sm font-semibold'
-                        : 'text-gray-700 hover:bg-white border border-transparent hover:border-gray-200'
+                        ? "bg-[#1A1A1A] text-white shadow-sm font-semibold"
+                        : "text-gray-700 hover:bg-white border border-transparent hover:border-gray-200"
                     }`}
                   >
-                    <span className="opacity-50">
-                      {page.type === 'board' ? '📋' : '📱'}
-                    </span>
-                    <span className="truncate">{page.name}</span>
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="opacity-60">
+                        {page.type === "board" ? "📋" : "📱"}
+                      </span>
+                      <span className="truncate">{page.name}</span>
+                    </div>
+                    {isAiNode && (
+                      <span className="shrink-0 text-[8px] bg-emerald-500/20 text-emerald-700 font-bold px-1 rounded uppercase tracking-wide">
+                        AI
+                      </span>
+                    )}
                   </button>
                 );
               })}
