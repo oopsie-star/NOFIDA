@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  nofida-penpot-frontend:
+    image: penpotapp/frontend:latest
+    ports:
+      - "9001:80"
+    volumes:
+      - penpot_assets:/opt/data
+    depends_on:
+      - nofida-penpot-backend
+    networks:
+      - nofida-network
+
+  nofida-penpot-backend:
+    image: penpotapp/backend:latest
+    volumes:
+      - penpot_assets:/opt/data
+    depends_on:
+      - nofida-penpot-postgres
+      - nofida-penpot-redis
+    networks:
+      - nofida-network
+    environment:
+      - PENPOT_DATABASE_URI=postgresql://penpot:penpot@nofida-penpot-postgres/penpot
+      - PENPOT_REDIS_URI=redis://nofida-penpot-redis:6379/0
+      - PENPOT_ASSETS_STORAGE_BACKEND=assets-fs
+      - PENPOT_STORAGE_FS_DIRECTORY=/opt/data
+      - PENPOT_FLAGS=enable-all-flags
+
+  nofida-penpot-postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=penpot
+      - POSTGRES_USER=penpot
+      - POSTGRES_PASSWORD=penpot
+    volumes:
+      - penpot_postgres_data:/var/lib/postgresql/data
+    networks:
+      - nofida-network
+
+  nofida-penpot-redis:
+    image: redis:7-alpine
+    volumes:
+      - penpot_redis_data:/data
+    networks:
+      - nofida-network
+
+volumes:
+  penpot_postgres_data:
+  penpot_redis_data:
+  penpot_assets:
+
+networks:
+  nofida-network:
+    driver: bridge
