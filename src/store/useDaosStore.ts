@@ -74,6 +74,8 @@ interface DaosState {
   distributeSelectedLayers: (axis: DistributionAxis) => void;
   toggleLayerVisibility: (layerId: string) => void;
   toggleLayerLock: (layerId: string) => void;
+  groupSelectedLayers: () => void;
+  ungroupSelectedLayers: () => void;
 }
 
 const firstFile = seedProject.files[0];
@@ -953,6 +955,135 @@ export const useDaosStore = create<DaosState>()(
               {
                 locked: !layer.locked
               }
+            )
+          };
+        }),
+
+      groupSelectedLayers: () =>
+        set((state) => {
+          const page = getActivePage(state);
+
+          const rootSelectedIds = getRootLayerIds(page.layers, state.selectedLayerIds);
+          if (rootSelectedIds.length < 2) return state;
+
+          const rootSelectedSet = new Set(rootSelectedIds);
+          const rootSelectedLayers = page.layers.filter((l) => rootSelectedSet.has(l.id));
+
+          const parentIds = new Set(rootSelectedLayers.map((l) => l.parentId));
+          if (parentIds.size !== 1) return state;
+
+          const commonParentId = rootSelectedLayers[0].parentId;
+
+          const minX = Math.min(...rootSelectedLayers.map((l) => l.x));
+          const minY = Math.min(...rootSelectedLayers.map((l) => l.y));
+          const maxX = Math.max(...rootSelectedLayers.map((l) => l.x + l.width));
+          const maxY = Math.max(...rootSelectedLayers.map((l) => l.y + l.height));
+
+          const groupId = makeId("group");
+          const group: LayerNode = {
+            id: groupId,
+            name: "Group",
+            type: "group",
+            parentId: commonParentId,
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+            visible: true,
+            locked: false
+          };
+
+          const updatedLayers: LayerNode[] = [];
+          let groupInserted = false;
+
+          for (const layer of page.layers) {
+            if (rootSelectedSet.has(layer.id)) {
+              if (!groupInserted) {
+                updatedLayers.push(group);
+                for (const sel of rootSelectedLayers) {
+                  updatedLayers.push({
+                    ...sel,
+                    parentId: groupId,
+                    x: sel.x - minX,
+                    y: sel.y - minY
+                  });
+                }
+                groupInserted = true;
+              }
+              continue;
+            }
+            updatedLayers.push(layer);
+          }
+
+          if (!groupInserted) {
+            updatedLayers.push(group);
+            for (const sel of rootSelectedLayers) {
+              updatedLayers.push({
+                ...sel,
+                parentId: groupId,
+                x: sel.x - minX,
+                y: sel.y - minY
+              });
+            }
+          }
+
+          return {
+            selectedLayerId: groupId,
+            selectedLayerIds: [groupId],
+            project: updateActivePage(
+              state.project,
+              state.activeFileId,
+              state.activePageId,
+              () => ({ ...page, layers: updatedLayers })
+            )
+          };
+        }),
+
+      ungroupSelectedLayers: () =>
+        set((state) => {
+          const page = getActivePage(state);
+          const selectedSet = new Set(state.selectedLayerIds);
+
+          const selectedGroups = page.layers.filter(
+            (l) => selectedSet.has(l.id) && l.type === "group"
+          );
+
+          if (selectedGroups.length === 0) return state;
+
+          const groupIds = new Set(selectedGroups.map((g) => g.id));
+          const ungroupedChildIds: string[] = [];
+          const childPatches = new Map<string, Partial<LayerNode>>();
+
+          for (const group of selectedGroups) {
+            const children = page.layers.filter((l) => l.parentId === group.id);
+            for (const child of children) {
+              childPatches.set(child.id, {
+                parentId: group.parentId,
+                x: child.x + group.x,
+                y: child.y + group.y
+              });
+              ungroupedChildIds.push(child.id);
+            }
+          }
+
+          const updatedLayers = page.layers
+            .filter((l) => !groupIds.has(l.id))
+            .map((l) => {
+              const patch = childPatches.get(l.id);
+              return patch ? { ...l, ...patch } : l;
+            });
+
+          return {
+            selectedLayerId:
+              ungroupedChildIds.length > 0
+                ? ungroupedChildIds[ungroupedChildIds.length - 1]
+                : undefined,
+            selectedLayerIds: ungroupedChildIds,
+            project: updateActivePage(
+              state.project,
+              state.activeFileId,
+              state.activePageId,
+              () => ({ ...page, layers: updatedLayers })
             )
           };
         })

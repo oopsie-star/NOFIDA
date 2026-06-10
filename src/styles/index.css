@@ -739,6 +739,25 @@ button {
   pointer-events: none;
 }
 
+.group-node {
+  position: absolute;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+.group-node.selected {
+  outline: 2px dashed rgba(124, 58, 237, 0.6);
+  outline-offset: 3px;
+}
+
+.group-node.primary-selected {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}
+
 .canvas-layer {
   position: absolute;
   display: block;

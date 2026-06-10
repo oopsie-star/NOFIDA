@@ -29,6 +29,7 @@ import type {
   LayerNode
 } from "../../types";
 import { getLayerCss, getLayerHandoffRows, getLayerJson } from "../../utils/handoff";
+import { buildLayerMap, getRootLayerIds } from "../../utils/layers";
 
 type CopiedTarget = "css" | "json" | undefined;
 
@@ -122,6 +123,8 @@ export function RightInspector() {
   const applyTokenToSelectedLayer = useDaosStore(
     (state) => state.applyTokenToSelectedLayer
   );
+  const groupSelectedLayers = useDaosStore((state) => state.groupSelectedLayers);
+  const ungroupSelectedLayers = useDaosStore((state) => state.ungroupSelectedLayers);
 
   const selectedCount = selectedLayerIds.length;
   const isMultiSelection = selectedCount > 1;
@@ -134,6 +137,22 @@ export function RightInspector() {
   const needsFoundationTokens = foundationTokens.some(
     (token) => !tokens.some((existing) => existing.id === token.id)
   );
+
+  const canGroup = useMemo(() => {
+    const rootSelected = getRootLayerIds(activePage.layers, selectedLayerIds);
+    if (rootSelected.length < 2) return false;
+    const layerMap = buildLayerMap(activePage.layers);
+    const layers = rootSelected
+      .map((id) => layerMap.get(id))
+      .filter((l): l is LayerNode => Boolean(l));
+    const parentIds = new Set(layers.map((l) => l.parentId));
+    return parentIds.size === 1;
+  }, [activePage.layers, selectedLayerIds]);
+
+  const hasSelectedGroups = useMemo(() => {
+    const selectedSet = new Set(selectedLayerIds);
+    return activePage.layers.some((l) => selectedSet.has(l.id) && l.type === "group");
+  }, [activePage.layers, selectedLayerIds]);
 
   const handoffRows = useMemo(
     () => (selectedLayer ? getLayerHandoffRows(selectedLayer) : []),
@@ -425,6 +444,18 @@ export function RightInspector() {
                 {tr(language, "action.delete")}
               </button>
 
+              {canGroup && (
+                <button type="button" onClick={groupSelectedLayers}>
+                  {tr(language, "action.group")}
+                </button>
+              )}
+
+              {hasSelectedGroups && (
+                <button type="button" onClick={ungroupSelectedLayers}>
+                  {tr(language, "action.ungroup")}
+                </button>
+              )}
+
               {alignActions.map((action) => (
                 <button
                   key={action.mode}
@@ -482,6 +513,12 @@ export function RightInspector() {
                 {selectedLayer.locked ? <Unlock size={14} /> : <Lock size={14} />}
                 {tr(language, selectedLayer.locked ? "action.unlock" : "action.lock")}
               </button>
+
+              {selectedLayer.type === "group" && (
+                <button type="button" onClick={ungroupSelectedLayers}>
+                  {tr(language, "action.ungroup")}
+                </button>
+              )}
 
               <button
                 className="danger-action"

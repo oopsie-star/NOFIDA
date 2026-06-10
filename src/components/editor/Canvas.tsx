@@ -7,7 +7,7 @@ import {
   Type
 } from "lucide-react";
 import type { PointerEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { tr } from "../../i18n";
 import { getActivePage, useDaosStore } from "../../store/useDaosStore";
 import type { CanvasTool, LayerNode } from "../../types";
@@ -118,6 +118,8 @@ export function Canvas() {
     (state) => state.duplicateSelectedLayers
   );
   const moveSelectedLayer = useDaosStore((state) => state.moveSelectedLayer);
+  const groupSelectedLayers = useDaosStore((state) => state.groupSelectedLayers);
+  const ungroupSelectedLayers = useDaosStore((state) => state.ungroupSelectedLayers);
 
   // Keep a ref so wheel/keyboard handlers see the latest zoom without re-subscribing.
   const zoomRef = useRef(zoom);
@@ -257,6 +259,16 @@ export function Canvas() {
         return;
       }
 
+      if (hasCommand && key === "g") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          ungroupSelectedLayers();
+        } else {
+          groupSelectedLayers();
+        }
+        return;
+      }
+
       if (hasCommand || event.altKey || event.shiftKey) {
         return;
       }
@@ -285,9 +297,11 @@ export function Canvas() {
     clearSelection,
     deleteSelectedLayers,
     duplicateSelectedLayers,
+    groupSelectedLayers,
     moveSelectedLayer,
     selectedLayerIds.length,
-    setActiveTool
+    setActiveTool,
+    ungroupSelectedLayers
   ]);
 
   function getCanvasPoint(event: PointerEvent): CanvasPoint | undefined {
@@ -764,6 +778,35 @@ export function Canvas() {
     );
   }
 
+  function renderGroupLayer(group: LayerNode): ReactNode {
+    if (!group.visible) {
+      return null;
+    }
+
+    const children = activePage.layers.filter((l) => l.parentId === group.id);
+
+    return (
+      <div
+        className={getSelectionClassName("group-node", group.id)}
+        key={group.id}
+        role="button"
+        tabIndex={0}
+        style={{
+          left: group.x,
+          top: group.y,
+          width: group.width,
+          height: group.height
+        }}
+        onPointerDown={(event) => startDrag(event, group)}
+      >
+        {children.map((child) => {
+          if (child.type === "group") return renderGroupLayer(child);
+          return renderPrimitiveLayer(child);
+        })}
+      </div>
+    );
+  }
+
   function renderFrame(frame: LayerNode) {
     if (!frame.visible) {
       return null;
@@ -789,7 +832,10 @@ export function Canvas() {
         onPointerDown={(event) => startDrag(event, frame)}
       >
         <span className="frame-label">{frame.name}</span>
-        {children.map(renderPrimitiveLayer)}
+        {children.map((child) => {
+          if (child.type === "group") return renderGroupLayer(child);
+          return renderPrimitiveLayer(child);
+        })}
         {renderResizeHandle(frame)}
       </div>
     );
@@ -869,7 +915,9 @@ export function Canvas() {
             {frames.length > 0 || rootLooseLayers.length > 0 ? (
               <>
                 {frames.map(renderFrame)}
-                {rootLooseLayers.map(renderPrimitiveLayer)}
+                {rootLooseLayers.map((layer) =>
+                  layer.type === "group" ? renderGroupLayer(layer) : renderPrimitiveLayer(layer)
+                )}
               </>
             ) : (
               <div className="canvas-empty">{tr(language, "canvas.empty")}</div>
