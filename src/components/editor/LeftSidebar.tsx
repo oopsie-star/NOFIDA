@@ -183,7 +183,7 @@ export function LeftSidebar({
           </span>
         </div>
 
-        <form onSubmit={handleSubmitAiPrompt} className="flex flex-col gap-1.5 mt-1">
+        <form onSubmit={handleSubmitAiPrompt} className="flex flex-col gap-1.5 mt-1 mb-3">
           <input
             type="text"
             value={aiPrompt}
@@ -194,8 +194,12 @@ export function LeftSidebar({
           />
           <button
             type="submit"
-            disabled={!aiPrompt.trim() || isGenerating}
-            className="w-full text-[10px] font-mono font-bold uppercase py-1.5 tracking-wider rounded-md text-white bg-neutral-900 hover:bg-black btn-interact shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-disabled={!aiPrompt.trim() || isGenerating}
+            className={`w-full text-[10px] font-mono font-semibold uppercase py-1.5 tracking-wider rounded-md text-white btn-interact shadow-sm transition-all ${
+              !aiPrompt.trim() || isGenerating
+                ? "bg-neutral-500 cursor-not-allowed"
+                : "bg-neutral-900 hover:bg-black"
+            }`}
           >
             {isGenerating ? "Compiling System Vector…" : "Generate Workspace Architecture"}
           </button>
