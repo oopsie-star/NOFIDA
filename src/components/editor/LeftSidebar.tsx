@@ -34,11 +34,33 @@ const layerIcons: Record<LayerType, typeof Square> = {
   image: Image
 };
 
-export function LeftSidebar() {
+interface PageItem {
+  id: string;
+  name: string;
+  type: string;
+}
+
+interface LeftSidebarProps {
+  manifest: {
+    structure: {
+      pages: PageItem[];
+    };
+  };
+  activePageId?: string;
+  onPageSelect: (pageId: string) => void;
+  onAddAiPage?: () => void;
+}
+
+export function LeftSidebar({
+  manifest,
+  activePageId: activeManifestPageId,
+  onPageSelect,
+  onAddAiPage
+}: LeftSidebarProps) {
   const [tab, setTab] = useState<SidebarTab>("layers");
   const language = useDaosStore((state) => state.language);
   const project = useDaosStore((state) => state.project);
-  const activePageId = useDaosStore((state) => state.activePageId);
+  const storeActivePageId = useDaosStore((state) => state.activePageId);
   const selectedLayerIds = useDaosStore((state) => state.selectedLayerIds);
   const setActivePage = useDaosStore((state) => state.setActivePage);
   const createPage = useDaosStore((state) => state.createPage);
@@ -164,6 +186,45 @@ export function LeftSidebar() {
       <div className="sidebar-content">
         {tab === "pages" && (
           <section>
+            {/* Manifest Workspace Flows */}
+            <div className="sidebar-section-title flex items-center justify-between">
+              <span>Workspace Flows</span>
+              {onAddAiPage && (
+                <button
+                  type="button"
+                  onClick={onAddAiPage}
+                  className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-mono px-2 py-0.5 rounded transition-colors"
+                  title="Simulate AI generating a new product interface page"
+                >
+                  + AI Page
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-0.5 mb-3">
+              {manifest.structure.pages.map((page) => {
+                const isActive = page.id === activeManifestPageId;
+                return (
+                  <button
+                    key={page.id}
+                    type="button"
+                    onClick={() => onPageSelect(page.id)}
+                    className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-all flex items-center gap-2 ${
+                      isActive
+                        ? 'bg-[#1A1A1A] text-white shadow-sm font-semibold'
+                        : 'text-gray-700 hover:bg-white border border-transparent hover:border-gray-200'
+                    }`}
+                  >
+                    <span className="opacity-50">
+                      {page.type === 'board' ? '📋' : '📱'}
+                    </span>
+                    <span className="truncate">{page.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Existing store-backed file/page management */}
             <div className="sidebar-section-title">
               {tr(language, "sidebar.currentFile")}
             </div>
@@ -177,7 +238,7 @@ export function LeftSidebar() {
                   aria-label={tr(language, "page.name")}
                   type="text"
                   value={activePage.name}
-                  onChange={(event) => renamePage(activePageId, event.target.value)}
+                  onChange={(event) => renamePage(storeActivePageId, event.target.value)}
                 />
               </div>
 
@@ -189,7 +250,7 @@ export function LeftSidebar() {
 
             <div className="page-list">
               {activeFile.pages.map((page) => {
-                const isActive = page.id === activePageId;
+                const isActive = page.id === storeActivePageId;
                 const canDelete = activeFile.pages.length > 1;
 
                 return (
