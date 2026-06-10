@@ -104,6 +104,7 @@ interface RightInspectorProps {
 export function RightInspector({ manifest }: RightInspectorProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>("design");
   const [copiedTarget, setCopiedTarget] = useState<CopiedTarget>();
+  const [copiedType, setCopiedType] = useState<string | null>(null);
 
   const language = useDaosStore((state) => state.language);
   const mode = useDaosStore((state) => state.mode);
@@ -175,6 +176,66 @@ export function RightInspector({ manifest }: RightInspectorProps) {
     () => (selectedLayer ? getLayerJson(selectedLayer) : ""),
     [selectedLayer]
   );
+
+  // ── Token-to-code compiler helpers ──────────────────────────────────────
+  const primaryColor = manifest.tokens.colors.primary ?? '#1A1A1A';
+  const accentColor  = manifest.tokens.colors.accent  ?? '#BFFF00';
+  const baseRadius   = manifest.tokens.radii.md        ?? '8px';
+  const contextName  = selectedLayer?.name ?? 'Selected Component';
+
+  function generateTailwindClasses(): string {
+    return (
+      `// Tailwind Utility Blueprint for ${contextName}\n` +
+      `className="w-full p-4 \n` +
+      `  bg-[${primaryColor}] \n` +
+      `  text-[${accentColor}] \n` +
+      `  border border-gray-200 \n` +
+      `  rounded-[${baseRadius}] \n` +
+      `  shadow-sm hover:opacity-90 transition-all"`
+    );
+  }
+
+  function generateReactComponent(): string {
+    const raw = contextName.replace(/[^a-zA-Z0-9]/g, '').replace(/^\d+/, '') || 'CustomWidget';
+    const cleanName = raw.charAt(0).toUpperCase() + raw.slice(1);
+    return (
+      `import React from 'react';\n\n` +
+      `interface ${cleanName}Props {\n` +
+      `  label?: string;\n` +
+      `  onClick?: () => void;\n` +
+      `}\n\n` +
+      `export const ${cleanName}: React.FC<${cleanName}Props> = ({\n` +
+      `  label = "${contextName}",\n` +
+      `  onClick\n` +
+      `}) => {\n` +
+      `  return (\n` +
+      `    <button\n` +
+      `      onClick={onClick}\n` +
+      `      style={{\n` +
+      `        backgroundColor: '${primaryColor}',\n` +
+      `        color: '${accentColor}',\n` +
+      `        borderRadius: '${baseRadius}',\n` +
+      `        padding: '12px 24px',\n` +
+      `        border: 'none',\n` +
+      `        fontWeight: 'bold',\n` +
+      `        cursor: 'pointer'\n` +
+      `      }}\n` +
+      `    >\n` +
+      `      {label}\n` +
+      `    </button>\n` +
+      `  );\n` +
+      `};\n\n` +
+      `export default ${cleanName};`
+    );
+  }
+
+  function handleCopyToClipboard(text: string, type: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedType(type);
+      setTimeout(() => setCopiedType(null), 2000);
+    }).catch(() => { /* clipboard unavailable */ });
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   function updateNumber(
     field: "x" | "y" | "width" | "height" | "radius",
@@ -279,29 +340,54 @@ export function RightInspector({ manifest }: RightInspectorProps) {
 
       {/* ── Inspect / Handoff Tab ── */}
       {activeTab === "inspect" && (
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-          <div className="text-[10px] font-mono text-gray-400 uppercase tracking-tight">
-            Handoff JSON Manifest
-          </div>
-          <div className="bg-[#1A1A1A] rounded p-3 overflow-x-auto border border-gray-800 shadow-inner">
-            <pre className="text-[11px] font-mono text-emerald-400 leading-relaxed select-all">
-              {JSON.stringify(
-                {
-                  tokens: manifest.tokens,
-                  projectId: manifest.projectId,
-                  build: manifest.version
-                },
-                null,
-                2
-              )}
-            </pre>
-          </div>
-          <div className="text-[9px] font-mono text-gray-400 italic">
-            * Click inside the terminal view to copy clean JSON spec directly into your codebase.
+        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+
+          {/* Target context label */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-mono text-gray-400 uppercase">Target Context</span>
+            <span className="text-xs font-mono font-bold text-gray-900 truncate">{contextName}</span>
           </div>
 
-          <div className="mt-2 text-[10px] font-mono text-gray-400 uppercase tracking-tight">
-            Scope: Enterprise Production Handoff
+          {/* Tailwind utility classes */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono text-gray-500 uppercase font-bold">
+                Tailwind Utility Classes
+              </span>
+              <button
+                type="button"
+                onClick={() => handleCopyToClipboard(generateTailwindClasses(), 'tw')}
+                className="text-[9px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded hover:bg-black transition-all active:scale-95"
+              >
+                {copiedType === 'tw' ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre className="p-2 bg-gray-900 text-emerald-400 text-[10px] rounded overflow-x-auto font-mono whitespace-pre border border-gray-800 shadow-inner">
+              {generateTailwindClasses()}
+            </pre>
+          </div>
+
+          {/* React TS component */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono text-gray-500 uppercase font-bold">
+                React TS Component
+              </span>
+              <button
+                type="button"
+                onClick={() => handleCopyToClipboard(generateReactComponent(), 'react')}
+                className="text-[9px] bg-[#1A1A1A] text-white px-2 py-0.5 rounded hover:bg-black transition-all active:scale-95"
+              >
+                {copiedType === 'react' ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre className="p-2 bg-gray-900 text-blue-400 text-[10px] rounded overflow-x-auto font-mono whitespace-pre border border-gray-800 shadow-inner">
+              {generateReactComponent()}
+            </pre>
+          </div>
+
+          <div className="text-[9px] font-mono text-gray-400 italic">
+            Tokens sourced from manifest · v{manifest.version}
           </div>
         </div>
       )}
