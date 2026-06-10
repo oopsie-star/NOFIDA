@@ -30,8 +30,10 @@ import type {
 } from "../../types";
 import { getLayerCss, getLayerHandoffRows, getLayerJson } from "../../utils/handoff";
 import { buildLayerMap, getRootLayerIds } from "../../utils/layers";
+import type { ProjectManifest } from "./Canvas";
 
 type CopiedTarget = "css" | "json" | undefined;
+type ActiveTab = "design" | "inspect" | "properties";
 
 const alignActions: Array<{ mode: AlignMode; labelKey: string }> = [
   { mode: "left", labelKey: "align.left" },
@@ -95,7 +97,12 @@ function getSelectionSummary(language: "ru" | "en", count: number): string {
   return `${tr(language, "selection.count")}: ${count}`;
 }
 
-export function RightInspector() {
+interface RightInspectorProps {
+  manifest: ProjectManifest;
+}
+
+export function RightInspector({ manifest }: RightInspectorProps) {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("design");
   const [copiedTarget, setCopiedTarget] = useState<CopiedTarget>();
 
   const language = useDaosStore((state) => state.language);
@@ -196,459 +203,561 @@ export function RightInspector() {
     }
   }
 
-  if (mode === "tokens") {
-    return (
-      <aside className="right-inspector">
-        <div className="inspector-header">
-          <Braces size={17} />
-          <span>{tr(language, "tokens.title")}</span>
-        </div>
-
-        <div className="inspector-stack">
-          <p className="inspector-empty" style={{ minHeight: 0 }}>
-            {tr(language, "tokens.description")}
-          </p>
-
-          {needsFoundationTokens && (
-            <button type="button" onClick={installFoundationTokens}>
-              {tr(language, "tokens.installFoundation")}
-            </button>
-          )}
-
-          <p className="inspector-empty" style={{ minHeight: 0, paddingTop: 0 }}>
-            {isMultiSelection
-              ? getSelectionSummary(language, selectedCount)
-              : selectedLayer
-                ? `${tr(language, "tokens.selectedLayer")}: ${selectedLayer.name}`
-                : tr(language, "tokens.noSelectedLayer")}
-          </p>
-
-          {tokenGroups.map(([group, groupItems]) => (
-            <section className="inspector-section" key={group}>
-              <div className="section-title">{tr(language, group)}</div>
-
-              <div className="token-list" style={{ padding: 0 }}>
-                {groupItems.map((token) => (
-                  <div className="token-row" key={token.id}>
-                    <div>
-                      <span>{token.name}</span>
-                      <small>{token.type}</small>
-                    </div>
-
-                    <input
-                      style={tokenInputStyle}
-                      value={token.value}
-                      onChange={(event) =>
-                        updateTokenValue(token.id, event.target.value)
-                      }
-                    />
-
-                    {selectedCount > 0 && (
-                      <div className="action-grid" style={{ gridTemplateColumns: "1fr" }}>
-                        {token.type === "color" && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => applyTokenToSelectedLayer(token.id, "fill")}
-                            >
-                              {tr(language, "tokens.applyFill")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => applyTokenToSelectedLayer(token.id, "stroke")}
-                            >
-                              {tr(language, "tokens.applyStroke")}
-                            </button>
-                          </>
-                        )}
-
-                        {token.type === "radius" && (
-                          <button
-                            type="button"
-                            onClick={() => applyTokenToSelectedLayer(token.id, "radius")}
-                          >
-                            {tr(language, "tokens.applyRadius")}
-                          </button>
-                        )}
-
-                        {isFontSizeToken(token) && (
-                          <button
-                            type="button"
-                            onClick={() => applyTokenToSelectedLayer(token.id, "fontSize")}
-                          >
-                            {tr(language, "tokens.applyFontSize")}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {token.description && <small>{token.description}</small>}
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      </aside>
-    );
-  }
-
-  if (mode === "inspect") {
-    return (
-      <aside className="right-inspector">
-        <div className="inspector-header">
-          <Code2 size={17} />
-          <span>{tr(language, "inspect.title")}</span>
-        </div>
-
-        {selectedCount === 0 && (
-          <div className="inspector-empty">
-            <FileJson size={24} />
-            <p>{tr(language, "inspect.noSelection")}</p>
-          </div>
-        )}
-
-        {isMultiSelection && (
-          <div className="inspector-stack">
-            <section className="inspector-section">
-              <div className="section-title">{tr(language, "inspect.summary")}</div>
-
-              <div className="token-list" style={{ padding: 0 }}>
-                <div className="token-row">
-                  <div>
-                    <span>{getSelectionSummary(language, selectedCount)}</span>
-                    <small>{tr(language, "selection.multiple")}</small>
-                  </div>
-
-                  <code>{selectedCount}</code>
-                </div>
-
-                {selectedLayers.map((layer) => (
-                  <div className="token-row" key={layer.id}>
-                    <div>
-                      <span>{layer.name}</span>
-                      <small>{layer.id}</small>
-                    </div>
-
-                    <code>{layer.type}</code>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <p className="inspector-empty" style={{ minHeight: 0, padding: 0 }}>
-              {tr(language, "selection.multiple")}
-            </p>
-          </div>
-        )}
-
-        {selectedLayer && !isMultiSelection && (
-          <div className="inspector-stack">
-            <section className="inspector-section">
-              <div className="section-title">{tr(language, "inspect.summary")}</div>
-
-              <div className="token-list" style={{ padding: 0 }}>
-                {handoffRows.map((row) => (
-                  <div className="token-row" key={row.label}>
-                    <div>
-                      <span>{row.label}</span>
-                    </div>
-
-                    <code>{row.value}</code>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="inspector-section">
-              <div className="section-title">
-                <Code2 size={14} />
-                {tr(language, "inspect.css")}
-              </div>
-
-              <div className="action-grid">
-                <button type="button" onClick={() => copyText("css", handoffCss)}>
-                  {copiedTarget === "css" ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedTarget === "css"
-                    ? tr(language, "inspect.copied")
-                    : tr(language, "inspect.copyCss")}
-                </button>
-              </div>
-
-              <pre style={codeBlockStyle}>{handoffCss}</pre>
-            </section>
-
-            <section className="inspector-section">
-              <div className="section-title">
-                <FileJson size={14} />
-                {tr(language, "inspect.json")}
-              </div>
-
-              <div className="action-grid">
-                <button type="button" onClick={() => copyText("json", handoffJson)}>
-                  {copiedTarget === "json" ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedTarget === "json"
-                    ? tr(language, "inspect.copied")
-                    : tr(language, "inspect.copyJson")}
-                </button>
-              </div>
-
-              <pre style={codeBlockStyle}>{handoffJson}</pre>
-            </section>
-
-            <p className="inspector-empty" style={{ minHeight: 0, padding: 0 }}>
-              {tr(language, "inspect.note")}
-            </p>
-          </div>
-        )}
-      </aside>
-    );
-  }
-
   return (
     <aside className="right-inspector">
-      <div className="inspector-header">
-        <SlidersHorizontal size={17} />
-        <span>{tr(language, "inspector.title")}</span>
+
+      {/* Top-level tab navigator */}
+      <div className="flex border-b border-gray-200 bg-white shrink-0">
+        {(["design", "inspect", "properties"] as ActiveTab[]).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2.5 text-center text-[10px] font-mono uppercase tracking-wider transition-all ${
+              activeTab === tab
+                ? "border-b-2 border-[#1A1A1A] font-bold text-[#1A1A1A]"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            {tab === "design" ? "Design" : tab === "inspect" ? "Inspect" : "Properties"}
+          </button>
+        ))}
       </div>
 
-      {selectedCount === 0 && (
-        <div className="inspector-empty">
-          <Lock size={22} />
-          <p>{tr(language, "inspector.noSelection")}</p>
+      {/* ── Design Tokens Tab ── */}
+      {activeTab === "design" && (
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          <div>
+            <div className="text-[10px] font-mono text-gray-400 uppercase tracking-tight mb-2">
+              Color Palette
+            </div>
+            <div className="flex flex-col gap-2">
+              {Object.entries(manifest.tokens.colors).map(([key, value]) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 rounded border border-gray-300 shadow-inner"
+                      style={{ backgroundColor: value }}
+                    />
+                    <span className="text-xs font-mono font-medium text-gray-700 capitalize">
+                      {key}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-gray-400 uppercase">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-mono text-gray-400 uppercase tracking-tight mb-2">
+              Layout Radii
+            </div>
+            <div className="flex flex-col gap-2">
+              {Object.entries(manifest.tokens.radii).map(([key, value]) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm text-xs font-mono"
+                >
+                  <span className="text-gray-700 capitalize">{key} corner</span>
+                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-semibold">
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-auto pt-2 border-t border-gray-100 text-[10px] font-mono text-gray-400 text-center">
+            Manifest v{manifest.version} · {manifest.projectId}
+          </div>
         </div>
       )}
 
-      {isMultiSelection && (
-        <div className="inspector-stack">
-          <section className="inspector-section">
-            <div className="section-title">{tr(language, "selection.multiple")}</div>
-            <div className="type-pill">{getSelectionSummary(language, selectedCount)}</div>
-          </section>
-
-          <section className="inspector-section">
-            <div className="section-title">{tr(language, "inspector.actions")}</div>
-
-            <div className="action-grid multi-selection-actions">
-              <button type="button" onClick={duplicateSelectedLayers}>
-                <Copy size={14} />
-                {tr(language, "action.duplicate")}
-              </button>
-
-              <button
-                className="danger-action"
-                type="button"
-                onClick={deleteSelectedLayers}
-              >
-                <Trash2 size={14} />
-                {tr(language, "action.delete")}
-              </button>
-
-              {canGroup && (
-                <button type="button" onClick={groupSelectedLayers}>
-                  {tr(language, "action.group")}
-                </button>
+      {/* ── Inspect / Handoff Tab ── */}
+      {activeTab === "inspect" && (
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+          <div className="text-[10px] font-mono text-gray-400 uppercase tracking-tight">
+            Handoff JSON Manifest
+          </div>
+          <div className="bg-[#1A1A1A] rounded p-3 overflow-x-auto border border-gray-800 shadow-inner">
+            <pre className="text-[11px] font-mono text-emerald-400 leading-relaxed select-all">
+              {JSON.stringify(
+                {
+                  tokens: manifest.tokens,
+                  projectId: manifest.projectId,
+                  build: manifest.version
+                },
+                null,
+                2
               )}
+            </pre>
+          </div>
+          <div className="text-[9px] font-mono text-gray-400 italic">
+            * Click inside the terminal view to copy clean JSON spec directly into your codebase.
+          </div>
 
-              {hasSelectedGroups && (
-                <button type="button" onClick={ungroupSelectedLayers}>
-                  {tr(language, "action.ungroup")}
-                </button>
-              )}
-
-              {alignActions.map((action) => (
-                <button
-                  key={action.mode}
-                  type="button"
-                  onClick={() => alignSelectedLayers(action.mode)}
-                >
-                  {tr(language, action.labelKey)}
-                </button>
-              ))}
-
-              {distributionActions.map((action) => (
-                <button
-                  key={action.axis}
-                  type="button"
-                  onClick={() => distributeSelectedLayers(action.axis)}
-                >
-                  {tr(language, action.labelKey)}
-                </button>
-              ))}
-            </div>
-          </section>
+          <div className="mt-2 text-[10px] font-mono text-gray-400 uppercase tracking-tight">
+            Scope: Enterprise Production Handoff
+          </div>
         </div>
       )}
 
-      {selectedLayer && !isMultiSelection && (
-        <div className="inspector-stack">
-          <section className="inspector-section">
-            <div className="section-title">{tr(language, "inspector.actions")}</div>
+      {/* ── Properties Tab — existing store-based inspector ── */}
+      {activeTab === "properties" && mode === "tokens" && (
+        <>
+          <div className="inspector-header">
+            <Braces size={17} />
+            <span>{tr(language, "tokens.title")}</span>
+          </div>
 
-            <div className="action-grid">
-              <button type="button" onClick={duplicateSelectedLayers}>
-                <Copy size={14} />
-                {tr(language, "action.duplicate")}
+          <div className="inspector-stack">
+            <p className="inspector-empty" style={{ minHeight: 0 }}>
+              {tr(language, "tokens.description")}
+            </p>
+
+            {needsFoundationTokens && (
+              <button type="button" onClick={installFoundationTokens}>
+                {tr(language, "tokens.installFoundation")}
               </button>
+            )}
 
-              <button type="button" onClick={() => moveSelectedLayer("forward")}>
-                <ArrowUp size={14} />
-                {tr(language, "action.moveUp")}
-              </button>
+            <p className="inspector-empty" style={{ minHeight: 0, paddingTop: 0 }}>
+              {isMultiSelection
+                ? getSelectionSummary(language, selectedCount)
+                : selectedLayer
+                  ? `${tr(language, "tokens.selectedLayer")}: ${selectedLayer.name}`
+                  : tr(language, "tokens.noSelectedLayer")}
+            </p>
 
-              <button type="button" onClick={() => moveSelectedLayer("backward")}>
-                <ArrowDown size={14} />
-                {tr(language, "action.moveDown")}
-              </button>
+            {tokenGroups.map(([group, groupItems]) => (
+              <section className="inspector-section" key={group}>
+                <div className="section-title">{tr(language, group)}</div>
 
-              <button
-                type="button"
-                onClick={() => toggleLayerVisibility(selectedLayer.id)}
-              >
-                {selectedLayer.visible ? <EyeOff size={14} /> : <Eye size={14} />}
-                {tr(language, selectedLayer.visible ? "action.hide" : "action.show")}
-              </button>
+                <div className="token-list" style={{ padding: 0 }}>
+                  {groupItems.map((token) => (
+                    <div className="token-row" key={token.id}>
+                      <div>
+                        <span>{token.name}</span>
+                        <small>{token.type}</small>
+                      </div>
 
-              <button type="button" onClick={() => toggleLayerLock(selectedLayer.id)}>
-                {selectedLayer.locked ? <Unlock size={14} /> : <Lock size={14} />}
-                {tr(language, selectedLayer.locked ? "action.unlock" : "action.lock")}
-              </button>
+                      <input
+                        style={tokenInputStyle}
+                        value={token.value}
+                        onChange={(event) =>
+                          updateTokenValue(token.id, event.target.value)
+                        }
+                      />
 
-              {selectedLayer.type === "group" && (
-                <button type="button" onClick={ungroupSelectedLayers}>
-                  {tr(language, "action.ungroup")}
-                </button>
-              )}
+                      {selectedCount > 0 && (
+                        <div className="action-grid" style={{ gridTemplateColumns: "1fr" }}>
+                          {token.type === "color" && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => applyTokenToSelectedLayer(token.id, "fill")}
+                              >
+                                {tr(language, "tokens.applyFill")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyTokenToSelectedLayer(token.id, "stroke")}
+                              >
+                                {tr(language, "tokens.applyStroke")}
+                              </button>
+                            </>
+                          )}
 
-              <button
-                className="danger-action"
-                type="button"
-                onClick={deleteSelectedLayers}
-              >
-                <Trash2 size={14} />
-                {tr(language, "action.delete")}
-              </button>
+                          {token.type === "radius" && (
+                            <button
+                              type="button"
+                              onClick={() => applyTokenToSelectedLayer(token.id, "radius")}
+                            >
+                              {tr(language, "tokens.applyRadius")}
+                            </button>
+                          )}
+
+                          {isFontSizeToken(token) && (
+                            <button
+                              type="button"
+                              onClick={() => applyTokenToSelectedLayer(token.id, "fontSize")}
+                            >
+                              {tr(language, "tokens.applyFontSize")}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {token.description && <small>{token.description}</small>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
+
+      {activeTab === "properties" && mode === "inspect" && (
+        <>
+          <div className="inspector-header">
+            <Code2 size={17} />
+            <span>{tr(language, "inspect.title")}</span>
+          </div>
+
+          {selectedCount === 0 && (
+            <div className="inspector-empty">
+              <FileJson size={24} />
+              <p>{tr(language, "inspect.noSelection")}</p>
             </div>
-          </section>
-
-          <section className="inspector-section">
-            <div className="section-title">{tr(language, "inspector.layerType")}</div>
-
-            <label className="field-row wide">
-              <span>{tr(language, "inspector.name")}</span>
-              <input
-                value={selectedLayer.name}
-                onChange={(event) =>
-                  updateSelectedLayer({
-                    name: event.target.value
-                  })
-                }
-              />
-            </label>
-
-            <div className="type-pill">{selectedLayer.type}</div>
-          </section>
-
-          <section className="inspector-section">
-            <div className="section-title">{tr(language, "inspector.position")}</div>
-
-            <div className="field-grid">
-              <label className="field-row">
-                <span>{tr(language, "field.x")}</span>
-                <input
-                  type="number"
-                  value={selectedLayer.x}
-                  onChange={(event) => updateNumber("x", event.target.value)}
-                />
-              </label>
-
-              <label className="field-row">
-                <span>{tr(language, "field.y")}</span>
-                <input
-                  type="number"
-                  value={selectedLayer.y}
-                  onChange={(event) => updateNumber("y", event.target.value)}
-                />
-              </label>
-
-              <label className="field-row">
-                <span>{tr(language, "field.width")}</span>
-                <input
-                  type="number"
-                  value={selectedLayer.width}
-                  onChange={(event) => updateNumber("width", event.target.value)}
-                />
-              </label>
-
-              <label className="field-row">
-                <span>{tr(language, "field.height")}</span>
-                <input
-                  type="number"
-                  value={selectedLayer.height}
-                  onChange={(event) => updateNumber("height", event.target.value)}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className="inspector-section">
-            <div className="section-title">{tr(language, "inspector.appearance")}</div>
-
-            <label className="field-row wide">
-              <span>{tr(language, "field.radius")}</span>
-              <input
-                type="number"
-                value={selectedLayer.radius ?? 0}
-                onChange={(event) => updateNumber("radius", event.target.value)}
-              />
-            </label>
-
-            <label className="field-row wide">
-              <span>{tr(language, "field.fill")}</span>
-              <input
-                value={selectedLayer.fill ?? ""}
-                onChange={(event) =>
-                  updateSelectedLayer({
-                    fill: event.target.value
-                  })
-                }
-              />
-            </label>
-
-            <label className="field-row wide">
-              <span>{tr(language, "field.stroke")}</span>
-              <input
-                value={selectedLayer.stroke ?? ""}
-                onChange={(event) =>
-                  updateSelectedLayer({
-                    stroke: event.target.value
-                  })
-                }
-              />
-            </label>
-          </section>
-
-          {(selectedLayer.type === "text" || selectedLayer.type === "button") && (
-            <section className="inspector-section">
-              <div className="section-title">
-                <Type size={14} />
-                {tr(language, "inspector.content")}
-              </div>
-
-              <label className="field-row wide textarea-field">
-                <span>{tr(language, "field.text")}</span>
-                <textarea
-                  value={selectedLayer.text ?? ""}
-                  onChange={(event) =>
-                    updateSelectedLayer({
-                      text: event.target.value
-                    })
-                  }
-                />
-              </label>
-            </section>
           )}
-        </div>
+
+          {isMultiSelection && (
+            <div className="inspector-stack">
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspect.summary")}</div>
+
+                <div className="token-list" style={{ padding: 0 }}>
+                  <div className="token-row">
+                    <div>
+                      <span>{getSelectionSummary(language, selectedCount)}</span>
+                      <small>{tr(language, "selection.multiple")}</small>
+                    </div>
+
+                    <code>{selectedCount}</code>
+                  </div>
+
+                  {selectedLayers.map((layer) => (
+                    <div className="token-row" key={layer.id}>
+                      <div>
+                        <span>{layer.name}</span>
+                        <small>{layer.id}</small>
+                      </div>
+
+                      <code>{layer.type}</code>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <p className="inspector-empty" style={{ minHeight: 0, padding: 0 }}>
+                {tr(language, "selection.multiple")}
+              </p>
+            </div>
+          )}
+
+          {selectedLayer && !isMultiSelection && (
+            <div className="inspector-stack">
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspect.summary")}</div>
+
+                <div className="token-list" style={{ padding: 0 }}>
+                  {handoffRows.map((row) => (
+                    <div className="token-row" key={row.label}>
+                      <div>
+                        <span>{row.label}</span>
+                      </div>
+
+                      <code>{row.value}</code>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="section-title">
+                  <Code2 size={14} />
+                  {tr(language, "inspect.css")}
+                </div>
+
+                <div className="action-grid">
+                  <button type="button" onClick={() => copyText("css", handoffCss)}>
+                    {copiedTarget === "css" ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedTarget === "css"
+                      ? tr(language, "inspect.copied")
+                      : tr(language, "inspect.copyCss")}
+                  </button>
+                </div>
+
+                <pre style={codeBlockStyle}>{handoffCss}</pre>
+              </section>
+
+              <section className="inspector-section">
+                <div className="section-title">
+                  <FileJson size={14} />
+                  {tr(language, "inspect.json")}
+                </div>
+
+                <div className="action-grid">
+                  <button type="button" onClick={() => copyText("json", handoffJson)}>
+                    {copiedTarget === "json" ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedTarget === "json"
+                      ? tr(language, "inspect.copied")
+                      : tr(language, "inspect.copyJson")}
+                  </button>
+                </div>
+
+                <pre style={codeBlockStyle}>{handoffJson}</pre>
+              </section>
+
+              <p className="inspector-empty" style={{ minHeight: 0, padding: 0 }}>
+                {tr(language, "inspect.note")}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === "properties" && mode !== "tokens" && mode !== "inspect" && (
+        <>
+          <div className="inspector-header">
+            <SlidersHorizontal size={17} />
+            <span>{tr(language, "inspector.title")}</span>
+          </div>
+
+          {selectedCount === 0 && (
+            <div className="inspector-empty">
+              <Lock size={22} />
+              <p>{tr(language, "inspector.noSelection")}</p>
+            </div>
+          )}
+
+          {isMultiSelection && (
+            <div className="inspector-stack">
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "selection.multiple")}</div>
+                <div className="type-pill">{getSelectionSummary(language, selectedCount)}</div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspector.actions")}</div>
+
+                <div className="action-grid multi-selection-actions">
+                  <button type="button" onClick={duplicateSelectedLayers}>
+                    <Copy size={14} />
+                    {tr(language, "action.duplicate")}
+                  </button>
+
+                  <button
+                    className="danger-action"
+                    type="button"
+                    onClick={deleteSelectedLayers}
+                  >
+                    <Trash2 size={14} />
+                    {tr(language, "action.delete")}
+                  </button>
+
+                  {canGroup && (
+                    <button type="button" onClick={groupSelectedLayers}>
+                      {tr(language, "action.group")}
+                    </button>
+                  )}
+
+                  {hasSelectedGroups && (
+                    <button type="button" onClick={ungroupSelectedLayers}>
+                      {tr(language, "action.ungroup")}
+                    </button>
+                  )}
+
+                  {alignActions.map((action) => (
+                    <button
+                      key={action.mode}
+                      type="button"
+                      onClick={() => alignSelectedLayers(action.mode)}
+                    >
+                      {tr(language, action.labelKey)}
+                    </button>
+                  ))}
+
+                  {distributionActions.map((action) => (
+                    <button
+                      key={action.axis}
+                      type="button"
+                      onClick={() => distributeSelectedLayers(action.axis)}
+                    >
+                      {tr(language, action.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {selectedLayer && !isMultiSelection && (
+            <div className="inspector-stack">
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspector.actions")}</div>
+
+                <div className="action-grid">
+                  <button type="button" onClick={duplicateSelectedLayers}>
+                    <Copy size={14} />
+                    {tr(language, "action.duplicate")}
+                  </button>
+
+                  <button type="button" onClick={() => moveSelectedLayer("forward")}>
+                    <ArrowUp size={14} />
+                    {tr(language, "action.moveUp")}
+                  </button>
+
+                  <button type="button" onClick={() => moveSelectedLayer("backward")}>
+                    <ArrowDown size={14} />
+                    {tr(language, "action.moveDown")}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleLayerVisibility(selectedLayer.id)}
+                  >
+                    {selectedLayer.visible ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {tr(language, selectedLayer.visible ? "action.hide" : "action.show")}
+                  </button>
+
+                  <button type="button" onClick={() => toggleLayerLock(selectedLayer.id)}>
+                    {selectedLayer.locked ? <Unlock size={14} /> : <Lock size={14} />}
+                    {tr(language, selectedLayer.locked ? "action.unlock" : "action.lock")}
+                  </button>
+
+                  {selectedLayer.type === "group" && (
+                    <button type="button" onClick={ungroupSelectedLayers}>
+                      {tr(language, "action.ungroup")}
+                    </button>
+                  )}
+
+                  <button
+                    className="danger-action"
+                    type="button"
+                    onClick={deleteSelectedLayers}
+                  >
+                    <Trash2 size={14} />
+                    {tr(language, "action.delete")}
+                  </button>
+                </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspector.layerType")}</div>
+
+                <label className="field-row wide">
+                  <span>{tr(language, "inspector.name")}</span>
+                  <input
+                    value={selectedLayer.name}
+                    onChange={(event) =>
+                      updateSelectedLayer({
+                        name: event.target.value
+                      })
+                    }
+                  />
+                </label>
+
+                <div className="type-pill">{selectedLayer.type}</div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspector.position")}</div>
+
+                <div className="field-grid">
+                  <label className="field-row">
+                    <span>{tr(language, "field.x")}</span>
+                    <input
+                      type="number"
+                      value={selectedLayer.x}
+                      onChange={(event) => updateNumber("x", event.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-row">
+                    <span>{tr(language, "field.y")}</span>
+                    <input
+                      type="number"
+                      value={selectedLayer.y}
+                      onChange={(event) => updateNumber("y", event.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-row">
+                    <span>{tr(language, "field.width")}</span>
+                    <input
+                      type="number"
+                      value={selectedLayer.width}
+                      onChange={(event) => updateNumber("width", event.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-row">
+                    <span>{tr(language, "field.height")}</span>
+                    <input
+                      type="number"
+                      value={selectedLayer.height}
+                      onChange={(event) => updateNumber("height", event.target.value)}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="section-title">{tr(language, "inspector.appearance")}</div>
+
+                <label className="field-row wide">
+                  <span>{tr(language, "field.radius")}</span>
+                  <input
+                    type="number"
+                    value={selectedLayer.radius ?? 0}
+                    onChange={(event) => updateNumber("radius", event.target.value)}
+                  />
+                </label>
+
+                <label className="field-row wide">
+                  <span>{tr(language, "field.fill")}</span>
+                  <input
+                    value={selectedLayer.fill ?? ""}
+                    onChange={(event) =>
+                      updateSelectedLayer({
+                        fill: event.target.value
+                      })
+                    }
+                  />
+                </label>
+
+                <label className="field-row wide">
+                  <span>{tr(language, "field.stroke")}</span>
+                  <input
+                    value={selectedLayer.stroke ?? ""}
+                    onChange={(event) =>
+                      updateSelectedLayer({
+                        stroke: event.target.value
+                      })
+                    }
+                  />
+                </label>
+              </section>
+
+              {(selectedLayer.type === "text" || selectedLayer.type === "button") && (
+                <section className="inspector-section">
+                  <div className="section-title">
+                    <Type size={14} />
+                    {tr(language, "inspector.content")}
+                  </div>
+
+                  <label className="field-row wide textarea-field">
+                    <span>{tr(language, "field.text")}</span>
+                    <textarea
+                      value={selectedLayer.text ?? ""}
+                      onChange={(event) =>
+                        updateSelectedLayer({
+                          text: event.target.value
+                        })
+                      }
+                    />
+                  </label>
+                </section>
+              )}
+            </div>
+          )}
+        </>
       )}
     </aside>
   );

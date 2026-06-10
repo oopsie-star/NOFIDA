@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Canvas, type CanvasHandle, type ProjectManifest } from "./components/editor/Canvas";
 import { LeftSidebar } from "./components/editor/LeftSidebar";
 import { RightInspector } from "./components/editor/RightInspector";
+
 import { StatusBar } from "./components/editor/StatusBar";
 import { TopBar } from "./components/editor/TopBar";
 
@@ -54,7 +55,7 @@ export default function App() {
           onAddAiPage={handleAddAiPage}
         />
         <Canvas ref={canvasRef} manifest={currentManifest} />
-        <RightInspector />
+        <RightInspector manifest={currentManifest} />
       </section>
 
       <StatusBar />
