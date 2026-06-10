@@ -24,7 +24,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isEngineLoading, setIsEngineLoading] = useState<boolean>(true);
 
-  const PENPOT_LOCAL_URL = 'http://localhost:9001';
+  const PENPOT_CLOUD_URL = 'https://design.penpot.app';
 
   const sendManifestToEngine = (actionType: string, dataPayload: unknown) => {
     if (!iframeRef.current?.contentWindow) {
@@ -32,7 +32,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       return;
     }
     const messagePayload = { source: 'nofida-shell', type: actionType, payload: dataPayload };
-    iframeRef.current.contentWindow.postMessage(messagePayload, PENPOT_LOCAL_URL);
+    iframeRef.current.contentWindow.postMessage(messagePayload, PENPOT_CLOUD_URL);
     console.log(`[NOFIDA Bridge] Outbound event dispatched [${actionType}]:`, messagePayload);
   };
 
@@ -40,7 +40,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
 
   useEffect(() => {
     const handleInboundEngineMessages = (event: MessageEvent) => {
-      if (event.origin !== PENPOT_LOCAL_URL) return;
+      if (event.origin !== PENPOT_CLOUD_URL) return;
       const { type, payload } = event.data;
       console.log(`[NOFIDA Bridge] Inbound event received [${type}]:`, payload);
       switch (type) {
@@ -60,7 +60,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
 
   const handleEngineLoad = () => {
     setIsEngineLoading(false);
-    console.log('Penpot Core Graphics Engine successfully initialized inside NOFIDA Shell.');
+    console.log('Nofida Cloud Graphics Core successfully initialized.');
     sendManifestToEngine('NOFIDA_INIT_PROJECT', manifest);
   };
 
@@ -77,8 +77,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       {/* Infrastructure Diagnostic Console Overlay */}
       <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur px-3 py-2 rounded-md shadow-sm border border-gray-200 flex flex-col gap-2 pointer-events-auto">
         <div className="flex gap-4 text-xs font-mono text-gray-600">
-          <span>Engine: <b className="text-green-600">Connected</b></span>
-          <span>Bridge: <b className="text-blue-600">Active (postMessage)</b></span>
+          <span>Engine: <b className="text-emerald-600">Cloud Core</b></span>
+          <span>Bridge: <b className="text-blue-600">Active</b></span>
         </div>
         <button
           onClick={triggerTestAiTokenUpdate}
@@ -92,7 +92,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#F5F5F0] text-[#1A1A1A]">
           <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-xs font-mono tracking-widest uppercase opacity-70">
-            Initializing Nofida Core Engine...
+            Connecting Cloud Graphics Core...
           </p>
         </div>
       )}
@@ -100,7 +100,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       {/* Graphics Canvas Viewport */}
       <iframe
         ref={iframeRef}
-        src={PENPOT_LOCAL_URL}
+        src={PENPOT_CLOUD_URL}
         title="Nofida Core Graphics Engine"
         className="w-full h-full border-0 m-0 p-0"
         allow="clipboard-read; clipboard-write; focus-without-user-activation"
