@@ -25,7 +25,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isEngineLoading, setIsEngineLoading] = useState<boolean>(true);
 
-  const PENPOT_CLOUD_URL = 'https://design.penpot.app';
+  const PROD_ENGINE_URL = 'http://178.105.237.128:9001';
 
   const sendManifestToEngine = (actionType: string, dataPayload: unknown) => {
     if (!iframeRef.current?.contentWindow) {
@@ -33,7 +33,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       return;
     }
     const messagePayload = { source: 'nofida-shell', type: actionType, payload: dataPayload };
-    iframeRef.current.contentWindow.postMessage(messagePayload, PENPOT_CLOUD_URL);
+    iframeRef.current.contentWindow.postMessage(messagePayload, PROD_ENGINE_URL);
     console.log(`[NOFIDA Bridge] Outbound event dispatched [${actionType}]:`, messagePayload);
   };
 
@@ -41,7 +41,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
 
   useEffect(() => {
     const handleInboundEngineMessages = (event: MessageEvent) => {
-      if (event.origin !== PENPOT_CLOUD_URL) return;
+      if (event.origin !== PROD_ENGINE_URL) return;
       const { type, payload } = event.data;
       console.log(`[NOFIDA Bridge] Inbound event received [${type}]:`, payload);
       switch (type) {
@@ -64,9 +64,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
   useEffect(() => {
     if (iframeRef.current) {
       globalBridge.setIframe(iframeRef.current);
-      // Placeholder origin during local/dev bring-up. Swap '*' for the real
-      // server origin (e.g. the Hetzner host) before shipping to production.
-      globalBridge.setTargetOrigin('*');
+      globalBridge.setTargetOrigin(PROD_ENGINE_URL);
     }
   }, []);
 
@@ -130,7 +128,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       {/* Graphics Canvas Viewport */}
       <iframe
         ref={iframeRef}
-        src={PENPOT_CLOUD_URL}
+        src={PROD_ENGINE_URL}
         title="Nofida Core Graphics Engine"
         className="w-full h-full border-0 m-0 p-0"
         allow="clipboard-read; clipboard-write; focus-without-user-activation"
