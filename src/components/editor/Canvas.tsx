@@ -25,7 +25,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isEngineLoading, setIsEngineLoading] = useState<boolean>(true);
 
-  const PROD_ENGINE_URL = 'https://178-105-237-128.sslip.io';
+  // Engine origin is injectable per Vercel environment (set VITE_PENPOT_ENGINE_URL
+  // in the project's env vars); falls back to the live sslip.io instance so the
+  // build works with zero dashboard config.
+  const PROD_ENGINE_URL =
+    import.meta.env.VITE_PENPOT_ENGINE_URL || 'https://178-105-237-128.sslip.io';
 
   const sendManifestToEngine = (actionType: string, dataPayload: unknown) => {
     if (!iframeRef.current?.contentWindow) {
