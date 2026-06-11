@@ -25,11 +25,9 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isEngineLoading, setIsEngineLoading] = useState<boolean>(true);
 
-  // Engine origin is injectable per Vercel environment (set VITE_PENPOT_ENGINE_URL
-  // in the project's env vars); falls back to the production engine subdomain so
-  // the build works with zero dashboard config.
-  const PROD_ENGINE_URL =
-    import.meta.env.VITE_PENPOT_ENGINE_URL || 'https://engine.sys.bachopus.com';
+  const DEFAULT_PENPOT_ENGINE_URL = 'https://engine.sys.bachopus.com';
+  const PENPOT_ENGINE_URL =
+    import.meta.env.VITE_PENPOT_ENGINE_URL?.trim() || DEFAULT_PENPOT_ENGINE_URL;
 
   const sendManifestToEngine = (actionType: string, dataPayload: unknown) => {
     if (!iframeRef.current?.contentWindow) {
@@ -37,7 +35,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       return;
     }
     const messagePayload = { source: 'nofida-shell', type: actionType, payload: dataPayload };
-    iframeRef.current.contentWindow.postMessage(messagePayload, PROD_ENGINE_URL);
+    iframeRef.current.contentWindow.postMessage(messagePayload, PENPOT_ENGINE_URL);
     console.log(`[NOFIDA Bridge] Outbound event dispatched [${actionType}]:`, messagePayload);
   };
 
@@ -45,7 +43,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
 
   useEffect(() => {
     const handleInboundEngineMessages = (event: MessageEvent) => {
-      if (event.origin !== PROD_ENGINE_URL) return;
+      if (event.origin !== PENPOT_ENGINE_URL) return;
       const { type, payload } = event.data;
       console.log(`[NOFIDA Bridge] Inbound event received [${type}]:`, payload);
       switch (type) {
@@ -68,7 +66,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
   useEffect(() => {
     if (iframeRef.current) {
       globalBridge.setIframe(iframeRef.current);
-      globalBridge.setTargetOrigin(PROD_ENGINE_URL);
+      globalBridge.setTargetOrigin(PENPOT_ENGINE_URL);
     }
   }, []);
 
@@ -132,7 +130,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
       {/* Graphics Canvas Viewport */}
       <iframe
         ref={iframeRef}
-        src={PROD_ENGINE_URL}
+        src={PENPOT_ENGINE_URL}
         title="Nofida Core Graphics Engine"
         className="w-full h-full border-0 m-0 p-0"
         allow="clipboard-read; clipboard-write; focus-without-user-activation"
