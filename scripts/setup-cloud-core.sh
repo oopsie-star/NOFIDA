@@ -14,8 +14,11 @@
 # DOMAIN ARCHITECTURE — shared second-level domain (fixes third-party cookies):
 #   - Frontend (Vercel) : https://app.sys.bachopus.com
 #   - Engine   (this box): https://engine.sys.bachopus.com  ← NOFIDA_DOMAIN
+#   - Legacy compat     : https://178-105-237-128.sslip.io ← NOFIDA_LEGACY_ENGINE_ALIAS
 #   Both live under bachopus.com, so the iframe's auth cookies are first-party
 #   to the registrable domain and survive Chrome/Blink third-party-cookie blocks.
+#   The sslip.io host is kept as a compatibility alias for stale public Vercel
+#   bundles that may still embed the old engine origin during rollout.
 #
 #   PREREQUISITE: an A record  engine.sys.bachopus.com → 178.105.237.128  must
 #   already resolve (Caddy needs it to obtain the Let's Encrypt certificate).
@@ -26,6 +29,7 @@
 #
 #   Or override either value:
 #        NOFIDA_DOMAIN=engine.example.com \
+#        NOFIDA_LEGACY_ENGINE_ALIAS=203-0-113-10.sslip.io \
 #        NOFIDA_SHELL_ORIGIN=https://app.example.com \
 #        bash scripts/setup-cloud-core.sh
 #
@@ -43,15 +47,35 @@ export DEBIAN_FRONTEND=noninteractive
 # third-party by the browser.
 NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-engine.sys.bachopus.com}"
 
+# Legacy HTTPS alias retained so older public bundles that still point at the
+# historical sslip.io hostname can complete the TLS handshake and keep working.
+NOFIDA_LEGACY_ENGINE_ALIAS="${NOFIDA_LEGACY_ENGINE_ALIAS:-178-105-237-128.sslip.io}"
+
 # The only origin allowed to embed the engine: the Vercel-hosted frontend on its
 # custom domain. Scoped to the exact host (no wildcard) for the shared-cookie
 # architecture. To also embed from *.vercel.app preview deploys, append it here.
 NOFIDA_SHELL_ORIGIN="${NOFIDA_SHELL_ORIGIN:-https://app.sys.bachopus.com}"
 
+# Preview origin kept for Vercel's default project domain so production and
+# preview builds can both embed the engine while deployment caches settle.
+NOFIDA_PREVIEW_ORIGIN="${NOFIDA_PREVIEW_ORIGIN:-https://nofida.vercel.app}"
+
+NOFIDA_CADDY_HOSTS="${NOFIDA_DOMAIN}"
+if [ -n "${NOFIDA_LEGACY_ENGINE_ALIAS}" ]; then
+  NOFIDA_CADDY_HOSTS="${NOFIDA_CADDY_HOSTS}, ${NOFIDA_LEGACY_ENGINE_ALIAS}"
+fi
+
+NOFIDA_FRAME_ANCESTORS="${NOFIDA_SHELL_ORIGIN}"
+if [ -n "${NOFIDA_PREVIEW_ORIGIN}" ]; then
+  NOFIDA_FRAME_ANCESTORS="${NOFIDA_FRAME_ANCESTORS} ${NOFIDA_PREVIEW_ORIGIN}"
+fi
+
 echo ""
 echo "🚀 [Nofida DevOps] Starting remote machine core orchestration..."
-echo "   Domain      : ${NOFIDA_DOMAIN}"
-echo "   Shell origin: ${NOFIDA_SHELL_ORIGIN}"
+echo "   Domain         : ${NOFIDA_DOMAIN}"
+echo "   Legacy alias   : ${NOFIDA_LEGACY_ENGINE_ALIAS}"
+echo "   Shell origin   : ${NOFIDA_SHELL_ORIGIN}"
+echo "   Preview origin : ${NOFIDA_PREVIEW_ORIGIN}"
 echo ""
 
 # ── 1. System baseline ───────────────────────────────────────────────────────
@@ -146,10 +170,11 @@ echo "⚡ Starting Penpot containers (base + override)..."
 sudo docker compose up -d
 
 # ── 6. Caddyfile — TLS termination + iframe-safe proxy ───────────────────────
-# Caddy automatically obtains and renews a Let's Encrypt certificate for
-# NOFIDA_DOMAIN. It strips Penpot's X-Frame-Options / Content-Security-Policy
-# headers (which would block cross-origin framing) and re-injects a scoped
-# frame-ancestors header that restricts embedding to the Nofida shell origin only.
+# Caddy automatically obtains and renews Let's Encrypt certificates for the
+# primary engine hostname and the legacy sslip.io compatibility alias. The
+# legacy host gets a tiny host-specific config.js override so stale public
+# bundles keep Penpot same-origin on sslip.io instead of calling back into the
+# shared-domain hostname and tripping CORS.
 echo "🔐 Writing Caddyfile..."
 sudo tee /etc/caddy/Caddyfile > /dev/null <<CADDYFILE
 # Nofida — Penpot engine reverse proxy with automatic TLS
@@ -160,12 +185,34 @@ ${NOFIDA_DOMAIN} {
     header -X-Frame-Options
     header -Content-Security-Policy
 
-    # Re-inject a scoped frame-ancestors policy: only the Nofida shell origin
-    # is allowed to embed this server. Defaults to the Vercel domain pool;
-    # override NOFIDA_SHELL_ORIGIN to pin your exact production domain.
-    header Content-Security-Policy "frame-ancestors ${NOFIDA_SHELL_ORIGIN};"
+    # Re-inject a scoped frame-ancestors policy: allow the production shell and
+    # the default Vercel preview domain to embed the engine during rollouts.
+    header Content-Security-Policy "frame-ancestors ${NOFIDA_FRAME_ANCESTORS};"
 
     # Standard security headers (keep these regardless of embedding).
+    header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    header X-Content-Type-Options "nosniff"
+    header Referrer-Policy "strict-origin-when-cross-origin"
+}
+
+${NOFIDA_LEGACY_ENGINE_ALIAS} {
+    @legacy_config path /js/config.js
+    handle @legacy_config {
+        header Content-Type "application/javascript; charset=utf-8"
+        respond <<EOF
+// Frontend configuration
+var penpotFlags = "enable-registration enable-login-with-password disable-email-verification";
+var penpotPublicURI = "https://${NOFIDA_LEGACY_ENGINE_ALIAS}";
+EOF
+    }
+
+    handle {
+        reverse_proxy localhost:9001
+    }
+
+    header -X-Frame-Options
+    header -Content-Security-Policy
+    header Content-Security-Policy "frame-ancestors ${NOFIDA_FRAME_ANCESTORS};"
     header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
     header X-Content-Type-Options "nosniff"
     header Referrer-Policy "strict-origin-when-cross-origin"
@@ -183,13 +230,14 @@ echo ""
 echo "✅ [Nofida DevOps] Deployment complete."
 echo ""
 echo "   Penpot engine : running (Docker, internal port 9001)"
-echo "   TLS proxy     : Caddy serving  https://${NOFIDA_DOMAIN}  (cert auto-managed)"
-echo "   Frame policy  : frame-ancestors scoped to ${NOFIDA_SHELL_ORIGIN}"
+echo "   TLS proxy     : Caddy serving  ${NOFIDA_CADDY_HOSTS}  (cert auto-managed)"
+echo "   Frame policy  : frame-ancestors scoped to ${NOFIDA_FRAME_ANCESTORS}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  VERIFY:"
 echo "    1. Open  https://${NOFIDA_DOMAIN}  in a browser — it should load"
 echo "       Penpot over a valid (green-lock) TLS certificate."
+echo "       Legacy fallback  https://${NOFIDA_LEGACY_ENGINE_ALIAS}  should also answer."
 echo "    2. Frontend VITE_PENPOT_ENGINE_URL is set to https://${NOFIDA_DOMAIN}."
 echo "    3. The frontend at ${NOFIDA_SHELL_ORIGIN} can embed it — both share"
 echo "       the bachopus.com registrable domain, so session cookies stay first-party."
