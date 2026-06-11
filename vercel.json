@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "build": {
     "env": {
-      "VITE_PENPOT_ENGINE_URL": "https://178-105-237-128.sslip.io"
+      "VITE_PENPOT_ENGINE_URL": "https://engine.sys.bachopus.com"
     }
   },
   "rewrites": [

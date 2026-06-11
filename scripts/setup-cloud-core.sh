@@ -11,22 +11,25 @@
 # headers, and re-injects a scoped frame-ancestors so the Vercel-hosted shell
 # can embed the canvas without hitting Mixed Content blocks in the browser.
 #
-# PLAN B — sslip.io + Vercel (no registered domain required yet):
-#   - NOFIDA_DOMAIN defaults to 178-105-237-128.sslip.io, which resolves to the
-#     server's IP automatically via sslip.io wildcard DNS. That gives Let's
-#     Encrypt a real hostname to certify (it cannot issue certs for bare IPs).
-#   - The frontend is hosted on Vercel over HTTPS, so the embedded engine must
-#     also be HTTPS to avoid Mixed Content blocks. Caddy provides that TLS below.
+# DOMAIN ARCHITECTURE — shared second-level domain (fixes third-party cookies):
+#   - Frontend (Vercel) : https://app.sys.bachopus.com
+#   - Engine   (this box): https://engine.sys.bachopus.com  ← NOFIDA_DOMAIN
+#   Both live under bachopus.com, so the iframe's auth cookies are first-party
+#   to the registrable domain and survive Chrome/Blink third-party-cookie blocks.
 #
-#   Just run it — plan B defaults are baked in:
+#   PREREQUISITE: an A record  engine.sys.bachopus.com → 178.105.237.128  must
+#   already resolve (Caddy needs it to obtain the Let's Encrypt certificate).
+#   Verify with:  dig +short engine.sys.bachopus.com
+#
+#   Run it — defaults are baked in:
 #        bash scripts/setup-cloud-core.sh
 #
 #   Or override either value:
-#        NOFIDA_DOMAIN=penpot.yourdomain.com \
-#        NOFIDA_SHELL_ORIGIN=https://your-app.vercel.app \
+#        NOFIDA_DOMAIN=engine.example.com \
+#        NOFIDA_SHELL_ORIGIN=https://app.example.com \
 #        bash scripts/setup-cloud-core.sh
 #
-#   Canvas.tsx (PROD_ENGINE_URL) is already wired to https://178-105-237-128.sslip.io.
+#   Canvas.tsx (VITE_PENPOT_ENGINE_URL) targets https://engine.sys.bachopus.com.
 #
 # Run as a user with sudo privileges.
 # NOTE: not executed by CI.
@@ -35,17 +38,15 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 # ── 0. Resolve target domain + embedding origin ──────────────────────────────
-# Plan B: sslip.io wildcard DNS gives us a real hostname without registering a
-# domain. "178-105-237-128.sslip.io" resolves to 178.105.237.128 automatically,
-# so Let's Encrypt can issue a certificate for it.
-NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-178-105-237-128.sslip.io}"
+# Engine domain on this server. Shares the bachopus.com registrable domain with
+# the frontend so the embedded canvas's session cookies are not treated as
+# third-party by the browser.
+NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-engine.sys.bachopus.com}"
 
-# Frontend is on Vercel. Allow the Vercel domain pool (preview + production,
-# all *.vercel.app) to embed the engine via CSP frame-ancestors. This is a
-# deliberately scoped wildcard for the testing phase — it is NOT "no filtering":
-# only Vercel-hosted origins can frame the engine. Tighten it to your exact
-# production domain (e.g. https://nofida.vercel.app) once that is stable.
-NOFIDA_SHELL_ORIGIN="${NOFIDA_SHELL_ORIGIN:-https://*.vercel.app}"
+# The only origin allowed to embed the engine: the Vercel-hosted frontend on its
+# custom domain. Scoped to the exact host (no wildcard) for the shared-cookie
+# architecture. To also embed from *.vercel.app preview deploys, append it here.
+NOFIDA_SHELL_ORIGIN="${NOFIDA_SHELL_ORIGIN:-https://app.sys.bachopus.com}"
 
 echo ""
 echo "🚀 [Nofida DevOps] Starting remote machine core orchestration..."
@@ -189,9 +190,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  VERIFY:"
 echo "    1. Open  https://${NOFIDA_DOMAIN}  in a browser — it should load"
 echo "       Penpot over a valid (green-lock) TLS certificate."
-echo "    2. Canvas.tsx PROD_ENGINE_URL is already set to https://${NOFIDA_DOMAIN}."
-echo "    3. Deploy the frontend on Vercel; it will be served from *.vercel.app,"
-echo "       which the frame-ancestors policy above already permits."
+echo "    2. Frontend VITE_PENPOT_ENGINE_URL is set to https://${NOFIDA_DOMAIN}."
+echo "    3. The frontend at ${NOFIDA_SHELL_ORIGIN} can embed it — both share"
+echo "       the bachopus.com registrable domain, so session cookies stay first-party."
 echo ""
 echo "  If the cert does not issue, confirm ports 80/443 are reachable and that"
 echo "  ${NOFIDA_DOMAIN} resolves:  dig +short ${NOFIDA_DOMAIN}"
