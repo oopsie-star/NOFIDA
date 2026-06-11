@@ -11,21 +11,22 @@
 # headers, and re-injects a scoped frame-ancestors so the GitHub Pages shell
 # can embed the canvas without hitting Mixed Content blocks in the browser.
 #
-# ⚠️  REQUIRED BEFORE RUNNING:
-#   1. You need a real DNS hostname (A record) pointing at this server's IP.
-#      Let's Encrypt does NOT issue certificates for bare IP addresses.
-#   2. Export the two variables below (or pass them inline):
+# PLAN B — sslip.io + Vercel (no registered domain required yet):
+#   - NOFIDA_DOMAIN defaults to 178-105-237-128.sslip.io, which resolves to the
+#     server's IP automatically via sslip.io wildcard DNS. That gives Let's
+#     Encrypt a real hostname to certify (it cannot issue certs for bare IPs).
+#   - The frontend is hosted on Vercel over HTTPS, so the embedded engine must
+#     also be HTTPS to avoid Mixed Content blocks. Caddy provides that TLS below.
 #
-#        export NOFIDA_DOMAIN="penpot.yourdomain.com"
-#        export NOFIDA_SHELL_ORIGIN="https://oopsie-star.github.io"
+#   Just run it — plan B defaults are baked in:
 #        bash scripts/setup-cloud-core.sh
 #
-#   3. After the script succeeds, update PROD_ENGINE_URL in
-#      src/components/editor/Canvas.tsx from
-#        http://178.105.237.128:9001
-#      to
-#        https://${NOFIDA_DOMAIN}
-#      then rebuild and redeploy the GitHub Pages frontend.
+#   Or override either value:
+#        NOFIDA_DOMAIN=penpot.yourdomain.com \
+#        NOFIDA_SHELL_ORIGIN=https://your-app.vercel.app \
+#        bash scripts/setup-cloud-core.sh
+#
+#   Canvas.tsx (PROD_ENGINE_URL) is already wired to https://178-105-237-128.sslip.io.
 #
 # Run as a user with sudo privileges.
 # NOTE: not executed by CI.
@@ -33,25 +34,18 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-# ── 0. Validate required inputs ──────────────────────────────────────────────
-if [[ -z "${NOFIDA_DOMAIN:-}" ]]; then
-  echo ""
-  echo "❌  NOFIDA_DOMAIN is not set."
-  echo ""
-  echo "    Let's Encrypt requires a real DNS hostname — it cannot issue"
-  echo "    certificates for bare IP addresses like 178.105.237.128."
-  echo ""
-  echo "    1. Register a domain (or create a subdomain on one you own)."
-  echo "    2. Add an A record:  penpot.yourdomain.com → 178.105.237.128"
-  echo "    3. Wait for DNS to propagate (check with: dig +short penpot.yourdomain.com)"
-  echo "    4. Re-run:  NOFIDA_DOMAIN=penpot.yourdomain.com bash scripts/setup-cloud-core.sh"
-  echo ""
-  exit 1
-fi
+# ── 0. Resolve target domain + embedding origin ──────────────────────────────
+# Plan B: sslip.io wildcard DNS gives us a real hostname without registering a
+# domain. "178-105-237-128.sslip.io" resolves to 178.105.237.128 automatically,
+# so Let's Encrypt can issue a certificate for it.
+NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-178-105-237-128.sslip.io}"
 
-# Default shell origin = the GitHub Pages base for this project.
-# Override with: export NOFIDA_SHELL_ORIGIN=https://yourdomain.com
-NOFIDA_SHELL_ORIGIN="${NOFIDA_SHELL_ORIGIN:-https://oopsie-star.github.io}"
+# Frontend is on Vercel. Allow the Vercel domain pool (preview + production,
+# all *.vercel.app) to embed the engine via CSP frame-ancestors. This is a
+# deliberately scoped wildcard for the testing phase — it is NOT "no filtering":
+# only Vercel-hosted origins can frame the engine. Tighten it to your exact
+# production domain (e.g. https://nofida.vercel.app) once that is stable.
+NOFIDA_SHELL_ORIGIN="${NOFIDA_SHELL_ORIGIN:-https://*.vercel.app}"
 
 echo ""
 echo "🚀 [Nofida DevOps] Starting remote machine core orchestration..."
@@ -170,14 +164,14 @@ echo "   TLS proxy     : Caddy serving  https://${NOFIDA_DOMAIN}  (cert auto-man
 echo "   Frame policy  : frame-ancestors scoped to ${NOFIDA_SHELL_ORIGIN}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  NEXT STEP — update Canvas.tsx on your dev machine:"
+echo "  VERIFY:"
+echo "    1. Open  https://${NOFIDA_DOMAIN}  in a browser — it should load"
+echo "       Penpot over a valid (green-lock) TLS certificate."
+echo "    2. Canvas.tsx PROD_ENGINE_URL is already set to https://${NOFIDA_DOMAIN}."
+echo "    3. Deploy the frontend on Vercel; it will be served from *.vercel.app,"
+echo "       which the frame-ancestors policy above already permits."
 echo ""
-echo "  In src/components/editor/Canvas.tsx, change:"
-echo "    const PROD_ENGINE_URL = 'http://178.105.237.128:9001';"
-echo "  to:"
-echo "    const PROD_ENGINE_URL = 'https://${NOFIDA_DOMAIN}';"
-echo ""
-echo "  Then rebuild and redeploy the GitHub Pages frontend:"
-echo "    npm run build && git add . && git commit -m 'infra: switch to HTTPS engine endpoint' && git push"
+echo "  If the cert does not issue, confirm ports 80/443 are reachable and that"
+echo "  ${NOFIDA_DOMAIN} resolves:  dig +short ${NOFIDA_DOMAIN}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
