@@ -8,7 +8,7 @@
 #   - Caddy reverse-proxy with automatic Let's Encrypt TLS
 #
 # The Caddy layer terminates HTTPS, strips Penpot's X-Frame-Options / CSP
-# headers, and re-injects a scoped frame-ancestors so the GitHub Pages shell
+# headers, and re-injects a scoped frame-ancestors so the Vercel-hosted shell
 # can embed the canvas without hitting Mixed Content blocks in the browser.
 #
 # PLAN B — sslip.io + Vercel (no registered domain required yet):
@@ -108,18 +108,40 @@ echo "📥 Pulling stable Penpot infrastructure definitions..."
 sudo curl -fsSL -o docker-compose.yaml \
   https://raw.githubusercontent.com/penpot/penpot/main/docker/images/docker-compose.yaml
 
-# Patch PENPOT_FLAGS to relax CORS — append to whatever value is already there.
-echo "🛠️  Patching PENPOT_FLAGS for cross-domain embedding..."
-if grep -q 'PENPOT_FLAGS=' docker-compose.yaml; then
-  sudo sed -i -E \
-    's/(PENPOT_FLAGS=.*)/\1 disable-web-errors disable-cors-restrictions/' \
-    docker-compose.yaml
-  echo "   ↳ PENPOT_FLAGS extended."
-else
-  echo "⚠️  PENPOT_FLAGS line not found — verify flags against your Penpot version."
-fi
+# Generate a docker-compose.override.yaml instead of sed-patching the upstream
+# file. Compose v2 normalises `environment` to a map before merging overrides,
+# so this applies cleanly whether the base file uses list- or map-style env —
+# no brittle string matching against an upstream format that changes over time.
+#
+# ── THE BLACK-SCREEN FIX ──────────────────────────────────────────────────
+# PENPOT_PUBLIC_URI must equal the public HTTPS origin Caddy serves. Left at the
+# default http://localhost:9001, the SPA boots (white flash) then tries to reach
+# localhost:9001/api and /ws from the browser — which fails, leaving a black
+# screen. Pinned to https://<domain>, Penpot derives wss:// for websockets
+# automatically (the ws scheme follows the http scheme), so there is NO separate
+# "secure websockets" variable to set — Penpot has none; it infers it from here.
+echo "🛠️  Writing docker-compose.override.yaml (public URI + auth flags)..."
+sudo tee docker-compose.override.yaml > /dev/null <<OVERRIDE
+# Nofida reverse-proxy hardening — auto-merged with docker-compose.yaml by
+# 'docker compose'. Overriding per service + key is format-agnostic.
+services:
+  penpot-backend:
+    environment:
+      PENPOT_PUBLIC_URI: https://${NOFIDA_DOMAIN}
+      # Verified flags only: self-registration + password login without SMTP.
+      # (iframe embedding is handled at the Caddy header layer, not via flags.)
+      PENPOT_FLAGS: enable-registration enable-login-with-password disable-email-verification
 
-echo "⚡ Starting Penpot containers..."
+  penpot-frontend:
+    environment:
+      # Keep the UI's flags in sync with the backend so the login/register
+      # surface matches what the backend actually permits.
+      PENPOT_PUBLIC_URI: https://${NOFIDA_DOMAIN}
+      PENPOT_FLAGS: enable-registration enable-login-with-password disable-email-verification
+OVERRIDE
+echo "   ↳ PENPOT_PUBLIC_URI pinned to https://${NOFIDA_DOMAIN}"
+
+echo "⚡ Starting Penpot containers (base + override)..."
 sudo docker compose up -d
 
 # ── 6. Caddyfile — TLS termination + iframe-safe proxy ───────────────────────
@@ -138,8 +160,8 @@ ${NOFIDA_DOMAIN} {
     header -Content-Security-Policy
 
     # Re-inject a scoped frame-ancestors policy: only the Nofida shell origin
-    # is allowed to embed this server. Replace with your real shell URL if it
-    # differs from the default GitHub Pages origin.
+    # is allowed to embed this server. Defaults to the Vercel domain pool;
+    # override NOFIDA_SHELL_ORIGIN to pin your exact production domain.
     header Content-Security-Policy "frame-ancestors ${NOFIDA_SHELL_ORIGIN};"
 
     # Standard security headers (keep these regardless of embedding).
