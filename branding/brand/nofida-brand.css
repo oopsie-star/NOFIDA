@@ -101,7 +101,31 @@ nav a svg[class*="logo"],
   background-color: #0b1020 !important;
 }
 
-/* ── 6. Font stack ────────────────────────────────────────────────────────*/
+/* ── 6. Dashboard empty-project action cards ──────────────────────────────
+   Root cause: the Nofida navy palette sets --color-background-tertiary to
+   #0f172a while the page sits on #0b1020 — a contrast ratio of ≈1.05:1.
+   The 3 action cards (Create / Import / Add library) ARE in the DOM when a
+   project is empty, but their container is invisible.
+
+   Fix: raise the card background to a clearly distinct surface (#131e35),
+   give the border a faint blue tint, enforce a minimum height, and restore
+   legible text in the hover state (native Penpot maps --color-card-title to
+   --color-background-secondary which resolves to #060c18 on a #2563eb blue
+   card — near-black on mid-blue, illegible).
+
+   DO NOT hide or replace these elements; this block only corrects contrast. */
+.main_ui_dashboard_placeholder__empty-project-card {
+  --color-card-background: #131e35;                   /* raised surface      */
+  border-color: rgba(37, 99, 235, 0.22) !important;   /* faint blue outline  */
+  min-height: 100px;
+}
+
+.main_ui_dashboard_placeholder__empty-project-card:hover {
+  --color-card-title:    var(--color-foreground-primary);    /* white on blue  */
+  --color-card-subtitle: rgba(248, 250, 252, 0.80);          /* 80% white      */
+}
+
+/* ── 7. Font stack ────────────────────────────────────────────────────────*/
 :root {
   --font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
