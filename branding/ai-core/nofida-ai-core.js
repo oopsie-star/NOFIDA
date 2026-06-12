@@ -17,10 +17,10 @@
 
   var BRIDGE_URL = "/nofida/ai-core/ai-bridge.js";
   var BRAND = {
-    bg: "#0b1020", surface: "#0f172a", border: "#1f2937",
-    primary: "#2563eb", accent: "#bfff00", accentInk: "#0b1020",
-    text: "#f8fafc", muted: "#94a3b8",
-    font: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    bg: "#08111f", surface: "#101a2e", border: "#19263f",
+    primary: "#2f8f7c", accent: "#8fd9bb", accentInk: "#08111f",
+    text: "#f3efe8", muted: "#94a0b8",
+    font: 'Manrope, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
   };
 
   // Load the bridge (self-registers window.NofidaAIBridge), then build the UI.
