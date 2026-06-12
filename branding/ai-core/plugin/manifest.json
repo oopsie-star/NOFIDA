@@ -1,0 +1,8 @@
+{
+  "name": "Nofida AI",
+  "description": "Generates layers on the canvas from Nofida AI prompts.",
+  "version": 2,
+  "icon": "/nofida/brand/favicon.svg",
+  "code": "code.js",
+  "permissions": ["content:read", "content:write"]
+}

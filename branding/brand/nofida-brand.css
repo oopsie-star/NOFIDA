@@ -1,0 +1,107 @@
+/* ==========================================================================
+   Nofida brand override for Penpot 2.16.0
+   Verified against actual main.css from the pinned image.
+   Injected into <head> BEFORE app JS via branding/Dockerfile.
+   ========================================================================== */
+
+/* ── 1. Dark-theme base color token override ──────────────────────────────
+   Penpot's dark (default) theme uses these :root tokens.
+   We re-map them to our navy palette so every component that references
+   --color-background-* / --color-accent-* / --color-foreground-* picks up
+   the Nofida colours automatically via the existing cascade.             */
+:root {
+  /* Backgrounds */
+  --color-background-primary:    #0b1020;  /* was #18181a — deep navy bg    */
+  --color-background-secondary:  #060c18;  /* was #000    — darkest surface */
+  --color-background-tertiary:   #0f172a;  /* was #212426 — panel surface   */
+  --color-background-quaternary: #1f2937;  /* was #2e3434 — raised surface  */
+
+  /* Foreground */
+  --color-foreground-primary:   #f8fafc;   /* near-white text               */
+  --color-foreground-secondary: #94a3b8;   /* was #8f9da3 muted text        */
+
+  /* Accent — replace Penpot purple with Nofida blue + neon */
+  --color-accent-primary:       #2563eb;   /* was #6911d4 Penpot purple     */
+  --color-accent-secondary:     #1d4ed8;   /* was #1345aa                   */
+  --color-accent-tertiary:      #bfff00;   /* was #00d1b8 neon green        */
+  --color-accent-primary-muted: rgba(37, 99, 235, 0.18);  /* blue/10       */
+
+  /* Short aliases referenced in the first :root block */
+  --db-primary-60:   rgba(11, 16, 32, 0.6);
+  --df-secondary:    #94a3b8;
+  --da-tertiary-10:  rgba(191, 255, 0, 0.1);
+  --da-tertiary-70:  rgba(191, 255, 0, 0.7);
+}
+
+/* ── 2. Kill ALL Penpot release-notes / what's-new modals ────────────────
+   Targets every version (v2.0 through v2.16 and future ones) via the
+   shared class prefix. The rule is in <head> before JS executes so there
+   is zero flash-of-modal.                                                 */
+[class*="main_ui_releases_v2_"],
+[class*="main_ui_release_notes_"],
+[class*="release-notes"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* ── 3. Logo swap ──────────────────────────────────────────────────────────
+   Hide the Penpot SVG logo and replace with the Nofida wordmark.
+   Selectors captured from Penpot 2.16 DOM; add more if needed.           */
+.main_ui_main__app-logo,
+.main_ui_dashboard__home-logo,
+.main_ui_workspace__main-toolbar .main_ui_workspace__logo-section > a,
+a[href="/"].main_ui_main__logo-link {
+  background-image: url("/nofida/brand/logo.svg") !important;
+  background-repeat: no-repeat !important;
+  background-position: left center !important;
+  background-size: contain !important;
+  min-width: 110px;
+  min-height: 32px;
+  display: inline-flex !important;
+}
+.main_ui_main__app-logo svg,
+.main_ui_dashboard__home-logo svg,
+.main_ui_workspace__logo-section > a > svg {
+  visibility: hidden !important;
+}
+
+/* Fallback broad-target for any <a> wrapping the Penpot SVG */
+header a svg[class*="penpot"],
+nav a svg[class*="logo"],
+.logo-wrapper svg {
+  visibility: hidden !important;
+}
+
+/* ── 4. Component-level overrides (semantic color vars) ───────────────────
+   These vars are set by the .light/.default block and reference the base
+   tokens above. The base token override in :root handles most of these
+   automatically; add specific overrides here only if something still bleeds
+   through.                                                                 */
+
+/* Workspace canvas outer background (the grey grid border) */
+:root {
+  --canvas-background-color: #0b1020;
+  --panel-background-color:  #0f172a;
+  --app-background:          #0b1020;
+  --loader-background:       #0b1020;
+  --menu-background-color:   #0f172a;
+
+  /* Accent button colour */
+  --button-primary-background-color-rest:  #2563eb;
+  --button-primary-border-color-rest:      #2563eb;
+  --button-primary-background-color-hover: #1d4ed8;
+  --button-primary-border-color-hover:     #1d4ed8;
+}
+
+/* ── 5. Auth / login page ─────────────────────────────────────────────────*/
+.main_ui_auth__auth-page-container,
+.main_ui_auth_login__login-section,
+.main_ui_auth__auth-page-right {
+  background-color: #0b1020 !important;
+}
+
+/* ── 6. Font stack ────────────────────────────────────────────────────────*/
+:root {
+  --font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}

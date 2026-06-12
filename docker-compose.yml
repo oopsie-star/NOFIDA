@@ -1,54 +1,118 @@
-version: '3.8'
+# =============================================================================
+# Nofida — self-contained, version-pinned Penpot stack (branded, single-origin)
+# =============================================================================
+# One file for both local dev and production. The ONLY difference between them
+# is PENPOT_PUBLIC_URI (and TLS, which Caddy terminates in front on the server):
+#
+#   Local : docker compose up -d --build            → http://localhost:9001
+#   Prod  : PENPOT_PUBLIC_URI=https://app.sys.bachopus.com docker compose up -d --build
+#           (Caddy reverse-proxies 443 → this frontend on :9001 — see
+#            scripts/setup-cloud-core.sh)
+#
+# There is NO iframe and NO Vercel layer: the branded Penpot frontend is the
+# whole app and is served on one origin, so session cookies are first-party.
+#
+# Service names (penpot-backend, penpot-exporter, penpot-postgres,
+# penpot-valkey) are FIXED — the frontend image's nginx resolves them by name.
+# =============================================================================
+
+x-penpot-version: &penpot-version "2.16.0"
+
+# Flags shared by frontend + backend so the login/register UI matches backend
+# behaviour. `enable-plugins` powers the Nofida AI companion plugin.
+# `disable-secure-session-cookies` keeps local http working; harmless behind
+# Caddy's HTTPS in prod. Drop it in prod if you want the Secure cookie flag.
+x-penpot-flags: &penpot-flags >-
+  enable-registration
+  enable-login-with-password
+  disable-email-verification
+  disable-secure-session-cookies
+  enable-plugins
 
 services:
-  nofida-penpot-frontend:
-    image: penpotapp/frontend:latest
+  penpot-frontend:
+    # Branded override image (Penpot frontend + Nofida CSS/logo + AI Core JS).
+    build:
+      context: ./branding
+      args:
+        PENPOT_VERSION: *penpot-version
+    image: nofida/frontend:2.16.0
+    restart: always
     ports:
-      - "9001:80"
-    volumes:
-      - penpot_assets:/opt/data
+      # Bind to loopback only. Docker's published ports bypass ufw, so exposing
+      # 0.0.0.0 would make Penpot publicly reachable on :9001 around the
+      # firewall. localhost works for local dev AND for the server's Caddy,
+      # which reverse-proxies 443 → 127.0.0.1:9001.
+      - "127.0.0.1:9001:8080"
     depends_on:
-      - nofida-penpot-backend
-    networks:
-      - nofida-network
+      - penpot-backend
+      - penpot-exporter
+    environment:
+      PENPOT_FLAGS: *penpot-flags
+      PENPOT_PUBLIC_URI: ${PENPOT_PUBLIC_URI:-http://localhost:9001}
+      PENPOT_HTTP_SERVER_MAX_BODY_SIZE: 367001600
+      PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE: 367001600
+    networks: [nofida-network]
 
-  nofida-penpot-backend:
-    image: penpotapp/backend:latest
-    volumes:
-      - penpot_assets:/opt/data
+  penpot-backend:
+    image: penpotapp/backend:2.16.0
+    restart: always
     depends_on:
-      - nofida-penpot-postgres
-      - nofida-penpot-redis
-    networks:
-      - nofida-network
-    environment:
-      - PENPOT_DATABASE_URI=postgresql://penpot:penpot@nofida-penpot-postgres/penpot
-      - PENPOT_REDIS_URI=redis://nofida-penpot-redis:6379/0
-      - PENPOT_ASSETS_STORAGE_BACKEND=assets-fs
-      - PENPOT_STORAGE_FS_DIRECTORY=/opt/data
-      - PENPOT_FLAGS=enable-all-flags
-
-  nofida-penpot-postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_DB=penpot
-      - POSTGRES_USER=penpot
-      - POSTGRES_PASSWORD=penpot
+      - penpot-postgres
+      - penpot-valkey
     volumes:
-      - penpot_postgres_data:/var/lib/postgresql/data
-    networks:
-      - nofida-network
+      - penpot_assets:/opt/data/assets
+    environment:
+      PENPOT_FLAGS: *penpot-flags
+      PENPOT_PUBLIC_URI: ${PENPOT_PUBLIC_URI:-http://localhost:9001}
 
-  nofida-penpot-redis:
-    image: redis:7-alpine
+      # Signs session tokens. MUST be set to a long random value in prod.
+      # Generate once: `openssl rand -hex 32` and put it in a .env file.
+      PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-CHANGE-ME-please-set-a-32-byte-random-secret}
+
+      PENPOT_DATABASE_URI: postgresql://penpot-postgres/penpot
+      PENPOT_DATABASE_USERNAME: penpot
+      PENPOT_DATABASE_PASSWORD: penpot
+      PENPOT_REDIS_URI: redis://penpot-valkey/0
+
+      PENPOT_OBJECTS_STORAGE_BACKEND: fs
+      PENPOT_OBJECTS_STORAGE_FS_DIRECTORY: /opt/data/assets
+    networks: [nofida-network]
+
+  penpot-exporter:
+    image: penpotapp/exporter:2.16.0
+    restart: always
+    depends_on:
+      - penpot-valkey
+    environment:
+      # Internal address of the frontend (exporter renders through it).
+      PENPOT_PUBLIC_URI: http://penpot-frontend:8080
+      PENPOT_REDIS_URI: redis://penpot-valkey/0
+    networks: [nofida-network]
+
+  penpot-postgres:
+    image: postgres:15
+    restart: always
+    stop_signal: SIGINT
+    environment:
+      POSTGRES_INITDB_ARGS: --data-checksums
+      POSTGRES_DB: penpot
+      POSTGRES_USER: penpot
+      POSTGRES_PASSWORD: penpot
     volumes:
-      - penpot_redis_data:/data
-    networks:
-      - nofida-network
+      - penpot_postgres_v15:/var/lib/postgresql/data
+    networks: [nofida-network]
+
+  penpot-valkey:
+    image: valkey/valkey:8.1
+    restart: always
+    volumes:
+      - penpot_valkey_data:/data
+    networks: [nofida-network]
 
 volumes:
-  penpot_postgres_data:
-  penpot_redis_data:
+  penpot_postgres_v15:
+  penpot_valkey_data:
   penpot_assets:
 
 networks:
