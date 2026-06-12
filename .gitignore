@@ -38,3 +38,5 @@ coverage/
 .playwright-mcp/
 test-results/
 screenshot-*.png
+repomix-output.xml
+.tmp-live-nofida-core/

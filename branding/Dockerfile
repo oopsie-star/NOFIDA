@@ -17,9 +17,10 @@ FROM penpotapp/frontend:${PENPOT_VERSION}
 
 ARG WEBROOT=/var/www/app
 
-# ── Brand + AI Core assets, served same-origin under /nofida/* ──────────────
-COPY brand/   ${WEBROOT}/nofida/brand/
-COPY ai-core/ ${WEBROOT}/nofida/ai-core/
+# ── Brand + AI Core + internal library catalog, served under /nofida/* ──────
+COPY brand/     ${WEBROOT}/nofida/brand/
+COPY ai-core/   ${WEBROOT}/nofida/ai-core/
+COPY libraries/ ${WEBROOT}/nofida/libraries/
 
 # ── nginx override: serve /nofida/* as plain static files ───────────────────
 # Without this, Penpot's catch-all `location ~ ^/[^/]+/(.*){return 301 /404}`

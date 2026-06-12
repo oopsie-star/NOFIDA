@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "libraries": [
+    {
+      "id": "nofida-brand-kit",
+      "name": "Nofida Brand Kit",
+      "description": "Core brand components — colors, typography, icons.",
+      "file": "files/nofida-brand-kit.penpot",
+      "version": "1.0.0",
+      "tags": ["brand", "official"]
+    }
+  ]
+}

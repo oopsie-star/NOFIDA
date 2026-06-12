@@ -5,7 +5,7 @@
 # is PENPOT_PUBLIC_URI (and TLS, which Caddy terminates in front on the server):
 #
 #   Local : docker compose up -d --build            → http://localhost:9001
-#   Prod  : PENPOT_PUBLIC_URI=https://app.sys.bachopus.com docker compose up -d --build
+#   Prod  : PENPOT_PUBLIC_URI=https://engine.sys.bachopus.com docker compose up -d --build
 #           (Caddy reverse-proxies 443 → this frontend on :9001 — see
 #            scripts/setup-cloud-core.sh)
 #
@@ -85,9 +85,9 @@ services:
     depends_on:
       - penpot-valkey
     environment:
-      # Internal address of the frontend (exporter renders through it).
       PENPOT_PUBLIC_URI: http://penpot-frontend:8080
       PENPOT_REDIS_URI: redis://penpot-valkey/0
+      PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-CHANGE-ME-please-set-a-32-byte-random-secret}
     networks: [nofida-network]
 
   penpot-postgres:

@@ -17,7 +17,7 @@ Browser ──HTTPS──> Caddy (TLS) ──> penpot-frontend (branded)  :9001
                                       └─ Valkey   (penpot-valkey)
 ```
 
-Everything is one origin (`https://app.sys.bachopus.com` in production). Pinned to
+Everything is one origin (`https://engine.sys.bachopus.com` in production). Pinned to
 Penpot **2.16.0**.
 
 ## Repository layout
@@ -46,7 +46,7 @@ docker compose logs -f penpot-frontend
 
 ## Production deploy (Hetzner)
 
-Prerequisite: an A record `app.sys.bachopus.com → <server IP>` must resolve.
+Prerequisite: an A record `engine.sys.bachopus.com → <server IP>` must resolve.
 
 ```bash
 # on the server, from a checkout of this repo:
@@ -55,8 +55,7 @@ bash scripts/setup-cloud-core.sh
 
 The script installs Docker + Caddy, generates a persistent `PENPOT_SECRET_KEY`
 into `.env`, builds/starts the branded stack, and configures Caddy for automatic
-TLS on `app.sys.bachopus.com` (with an optional 301 redirect from the retired
-`engine.sys.bachopus.com`). No iframe headers are set.
+TLS on `engine.sys.bachopus.com`. No iframe headers are set.
 
 ## Branding
 

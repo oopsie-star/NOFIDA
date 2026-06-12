@@ -18,18 +18,17 @@
 #   the Vercel shell, which is now retired.
 #
 # DOMAIN:
-#   - App (this box): https://app.sys.bachopus.com   ← NOFIDA_DOMAIN
-#   - Optional 301 redirect from the old engine host so stale links resolve.
+#   - App (this box): https://engine.sys.bachopus.com   ← NOFIDA_DOMAIN
 #
-#   PREREQUISITE: an A record  app.sys.bachopus.com → <this server IP>  must
+#   PREREQUISITE: an A record  engine.sys.bachopus.com → <this server IP>  must
 #   already resolve (Caddy needs it for the Let's Encrypt cert).
-#   Verify:  dig +short app.sys.bachopus.com
+#   Verify:  dig +short engine.sys.bachopus.com
 #
 # RUN IT (from the repo checkout on the server):
 #        bash scripts/setup-cloud-core.sh
 #   Override domain / redirect host if needed:
-#        NOFIDA_DOMAIN=app.example.com \
-#        NOFIDA_REDIRECT_FROM=engine.example.com \
+#        NOFIDA_DOMAIN=my.domain.com \
+#        NOFIDA_REDIRECT_FROM=old.domain.com \
 #        bash scripts/setup-cloud-core.sh
 #
 # Run as a user with sudo privileges.
@@ -42,11 +41,11 @@ REPO_ROOT="$(dirname "${SCRIPT_DIR}")"
 
 # ── 0. Configuration ─────────────────────────────────────────────────────────
 # Public origin Nofida is served on. Frontend, /api and /ws all share it.
-NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-app.sys.bachopus.com}"
+NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-engine.sys.bachopus.com}"
 
-# Optional: old engine host to 301-redirect to the new app domain. Leave empty
+# Optional: secondary host to 301-redirect to the main domain. Leave empty
 # to skip. (DNS for it must point at this box for the redirect to be served.)
-NOFIDA_REDIRECT_FROM="${NOFIDA_REDIRECT_FROM:-engine.sys.bachopus.com}"
+NOFIDA_REDIRECT_FROM="${NOFIDA_REDIRECT_FROM:-}"
 
 PENPOT_PUBLIC_URI="https://${NOFIDA_DOMAIN}"
 
