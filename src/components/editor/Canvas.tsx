@@ -76,47 +76,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ manifest }, ref) 
     sendManifestToEngine('NOFIDA_INIT_PROJECT', manifest);
   };
 
-  const triggerTestAiTokenUpdate = () => {
-    sendManifestToEngine('NOFIDA_UPDATE_TOKENS', {
-      ...manifest.tokens,
-      colors: { ...manifest.tokens.colors, accent: '#FF007A' }
-    });
-  };
-
-  // Flush the current reactive manifest (tokens + structure) out through the
-  // decoupled bridge singleton, then keep the original diagnostic mutation.
-  const handleTestSyncPush = () => {
-    const payloadToSync = {
-      action: 'SYNC_WORKSPACE_TOKENS',
-      tokens: manifest.tokens,
-      structure: manifest.structure
-    };
-
-    const success = globalBridge.emit('NOFIDA_ENGINE_SYNC', payloadToSync);
-
-    triggerTestAiTokenUpdate();
-
-    if (success) {
-      window.alert('📡 Token synchronization packet dispatched! Check your devtools console logs.');
-    }
-  };
-
   return (
     <div className="w-full h-full bg-[#F5F5F0] relative overflow-hidden flex items-center justify-center">
-
-      {/* Infrastructure Diagnostic Console Overlay */}
-      <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur px-3 py-2 rounded-md shadow-sm border border-gray-200 flex flex-col gap-2 pointer-events-auto">
-        <div className="flex gap-4 text-xs font-mono text-gray-600">
-          <span>Engine: <b className="text-emerald-600">Cloud Core</b></span>
-          <span>Bridge: <b className="text-blue-600">Active</b></span>
-        </div>
-        <button
-          onClick={handleTestSyncPush}
-          className="bg-[#1A1A1A] hover:bg-black text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded transition-colors active:scale-95"
-        >
-          ⚡ Test Outbound AI Sync (Manifest)
-        </button>
-      </div>
 
       {isEngineLoading && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#F5F5F0] text-[#1A1A1A]">
