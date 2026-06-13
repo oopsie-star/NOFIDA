@@ -156,13 +156,128 @@
           killReleaseModals(node);
         });
       });
+      // Re-check action cards after every DOM batch (SPA route changes etc.)
+      scheduleRestoreCards();
     });
     mo.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // ── Dashboard action-card restorer ─────────────────────────────────────────
+  // Penpot only renders the 3-card placeholder (Create / Import / Add library)
+  // when has-other? = false (completely fresh workspace). The moment a user
+  // creates any non-default project the ClojureScript SPA switches to a single
+  // "+" create button. The real cards are absent from the DOM — not just hidden.
+  //
+  // This function detects those single-button containers, hides the "+" button
+  // (keeping it in the DOM so React still holds a valid ref), and injects a
+  // 3-card container using Penpot's own compiled CSS class names so the styling
+  // is always consistent with the active theme. Clicks are wired to the real
+  // native mechanisms:
+  //   Card 1 — programmatic click on the hidden native "+" button
+  //   Card 2 — hidden <input type="file"> → DragEvent on the grid div
+  //             (Penpot's React on-drop handler processes the FileList)
+  //   Card 3 — open PenpotHub (same URL Penpot uses natively)
+  function restoreActionCards() {
+    var CSS = {
+      ph:        "main_ui_dashboard_placeholder__grid-empty-placeholder",
+      createBtn: "main_ui_dashboard_placeholder__create-new",
+      grid:      "main_ui_dashboard_grid__dashboard-grid",
+      container: "main_ui_dashboard_placeholder__empty-project-container",
+      card:      "main_ui_dashboard_placeholder__empty-project-card",
+      cardTitle: "main_ui_dashboard_placeholder__empty-project-card-title",
+      cardSub:   "main_ui_dashboard_placeholder__empty-project-card-subtitle"
+    };
+
+    document.querySelectorAll("." + CSS.ph).forEach(function (ph) {
+      var btn = ph.querySelector("." + CSS.createBtn);
+      if (!btn) return; // native + button not present — nothing to restore
+
+      // If our container is already injected, nothing to do
+      if (ph.querySelector("." + CSS.container)) return;
+
+      // Find the parent grid div so we can dispatch a drop event for import
+      var gridEl = ph.closest("." + CSS.grid);
+
+      // Keep native button in DOM (React holds a ref), but remove it from view
+      btn.setAttribute("aria-hidden", "true");
+      btn.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;";
+
+      // Hidden file input — on change, forward files to Penpot's drop handler
+      var fi = document.createElement("input");
+      fi.type = "file";
+      fi.accept = ".penpot";
+      fi.multiple = true;
+      fi.style.cssText = "display:none";
+      fi.addEventListener("change", function () {
+        if (!fi.files || !fi.files.length || !gridEl) return;
+        try {
+          var dt = new DataTransfer();
+          Array.from(fi.files).forEach(function (f) { dt.items.add(f); });
+          gridEl.dispatchEvent(
+            new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt })
+          );
+        } catch (err) { /* DataTransfer not supported — graceful no-op */ }
+        fi.value = "";
+      });
+
+      function makeCard(title, subtitle, onClick) {
+        var card = document.createElement("div");
+        card.className = CSS.card;
+        card.setAttribute("role", "button");
+        card.setAttribute("tabindex", "0");
+        card.innerHTML =
+          '<div class="' + CSS.cardTitle + '">' + title + "</div>" +
+          '<div class="' + CSS.cardSub   + '">' + subtitle + "</div>";
+        card.addEventListener("click", onClick);
+        card.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
+        });
+        return card;
+      }
+
+      var container = document.createElement("div");
+      container.className = CSS.container;
+
+      container.appendChild(makeCard(
+        "Создать новый файл",
+        "Начать создавать удивительные вещи",
+        function () { btn.click(); }
+      ));
+      container.appendChild(fi); // display:none — excluded from grid flow
+      container.appendChild(makeCard(
+        "Импортировать файл",
+        "Импорт .penpot файл",
+        function () { fi.click(); }
+      ));
+      container.appendChild(makeCard(
+        "Добавить библиотеку или шаблон",
+        "Рассмотрите варианты для добавления",
+        function () {
+          window.open(
+            "https://penpot.app/penpothub/libraries-templates",
+            "_blank",
+            "noopener,noreferrer"
+          );
+        }
+      ));
+
+      ph.appendChild(container);
+    });
+  }
+
+  var restoreCardsRaf = null;
+  function scheduleRestoreCards() {
+    if (restoreCardsRaf) return;
+    restoreCardsRaf = window.requestAnimationFrame(function () {
+      restoreCardsRaf = null;
+      restoreActionCards();
+    });
   }
 
   function start() {
     killReleaseModals();
     watchForModals();
+    restoreActionCards(); // initial pass (may be no-op if SPA not yet rendered)
     loadBridge().then(function (bridge) {
       window.NofidaAICore = buildUI(bridge);
     });
