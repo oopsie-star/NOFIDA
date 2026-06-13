@@ -3,22 +3,35 @@ set -eu
 
 WEBROOT="${1:-/var/www/app}"
 INDEX="${WEBROOT}/index.html"
+BRAND_CSS="${WEBROOT}/nofida/brand/nofida-brand.css"
+AI_CORE="${WEBROOT}/nofida/ai-core/nofida-ai-core.js"
 
 if [ ! -f "${INDEX}" ]; then
   echo "index.html not found in ${WEBROOT}" >&2
   exit 1
 fi
 
+ASSET_TAG="${NOFIDA_ASSET_TAG:-$(date -u +%Y%m%d%H%M%S)}"
+BASE_VERSION_TAG="$(perl -ne 'if (/globalThis\.penpotVersionTag = "([^"]+)"/) { print $1; exit }' "${INDEX}")"
+BASE_VERSION_TAG="${BASE_VERSION_TAG%%-nofida-*}"
+PENPOT_VERSION_TAG="${BASE_VERSION_TAG:-2.16.0}-${ASSET_TAG}"
+NOFIDA_LOGO_HREF="/nofida/brand/logo.svg?v=${ASSET_TAG}"
+NOFIDA_ICON_HREF="/nofida/brand/icon.svg?v=${ASSET_TAG}"
+
 # Remove the broken ui.css include if the pinned image does not ship that file.
 [ -f "${WEBROOT}/css/ui.css" ] || sed -i '/css\/ui\.css/d' "${INDEX}"
 
+for templated_file in "${BRAND_CSS}" "${AI_CORE}"; do
+  [ -f "${templated_file}" ] && sed -i "s/__NOFIDA_ASSET_TAG__/${ASSET_TAG}/g" "${templated_file}"
+done
+
 # Static head/body hooks that survive every React/ClojureScript render.
 grep -q 'nofida-brand.css' "${INDEX}" || \
-  sed -i '/<\/head>/i\    <link rel="stylesheet" href="/nofida/brand/nofida-brand.css">' "${INDEX}"
+  sed -i "/<\/head>/i\\    <link rel=\"stylesheet\" href=\"/nofida/brand/nofida-brand.css?v=${ASSET_TAG}\">" "${INDEX}"
 grep -q 'id="nofida-shell-root"' "${INDEX}" || \
   sed -i '/<\/body>/i\    <section id="nofida-shell-root"></section>' "${INDEX}"
 grep -q 'nofida-ai-core.js' "${INDEX}" || \
-  sed -i '/<\/body>/i\    <script src="/nofida/ai-core/nofida-ai-core.js" defer></script>' "${INDEX}"
+  sed -i "/<\/body>/i\\    <script src=\"/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}\" defer></script>" "${INDEX}"
 
 sed -i \
   -e 's#<title>[^<]*</title>#<title>Nofida</title>#' \
@@ -28,8 +41,26 @@ sed -i \
   -e 's#<meta name="twitter:title" content="[^"]*">#<meta name="twitter:title" content="Nofida | White-label design workspace">#' \
   -e 's#<meta name="twitter:description" content="[^"]*">#<meta name="twitter:description" content="Nofida is the white-label design workspace for teams building digital products.">#' \
   -e 's|<meta name="theme-color"[^>]*>|<meta name="theme-color" content="#0b1020">|' \
-  -e 's#<link rel="icon" href="[^"]*" */>#<link rel="icon" type="image/svg+xml" href="/nofida/brand/favicon.svg" />#' \
   "${INDEX}"
+
+perl -0pi -e "s#/nofida/brand/nofida-brand\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-brand.css?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-ai-core\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}#g; s#/nofida/brand/favicon\\.svg(?:\\?v=[^\"]*)?#/nofida/brand/favicon.svg?v=${ASSET_TAG}#g; s#<link rel=\"icon\"[^>]*>#<link rel=\"icon\" type=\"image/svg+xml\" href=\"/nofida/brand/favicon.svg?v=${ASSET_TAG}\" />#g" "${INDEX}"
+perl -0pi -e "s/\\?version=[^\"' <>]+/?version=${PENPOT_VERSION_TAG}/g; s/globalThis\\.penpotVersionTag = \"[^\"]+\";/globalThis.penpotVersionTag = \"${PENPOT_VERSION_TAG}\";/g" "${INDEX}"
+
+replace_symbol() {
+  symbol_id="$1"
+  view_box="$2"
+  asset_href="$3"
+  width="$4"
+  height="$5"
+
+  perl -0pi -e "s{<symbol\\b[^>]*id=\"${symbol_id}\"[^>]*>.*?</symbol>}{<symbol id=\"${symbol_id}\" viewBox=\"${view_box}\"><image href=\"${asset_href}\" width=\"${width}\" height=\"${height}\" preserveAspectRatio=\"xMidYMid meet\"/></symbol>}gs" "${INDEX}"
+}
+
+replace_symbol "asset-penpot-logo" "0 0 1400 360" "${NOFIDA_LOGO_HREF}" "1400" "360"
+replace_symbol "icon-penpot-logo" "0 0 1400 360" "${NOFIDA_LOGO_HREF}" "1400" "360"
+replace_symbol "asset-penpot-logo-icon" "0 0 320 320" "${NOFIDA_ICON_HREF}" "320" "320"
+replace_symbol "icon-penpot-logo-icon" "0 0 320 320" "${NOFIDA_ICON_HREF}" "320" "320"
+replace_symbol "icon-penpot-logo-icon-loader" "0 0 320 320" "${NOFIDA_ICON_HREF}" "320" "320"
 
 # Deep white-label pass across compiled bundles/templates. Replace only the
 # standalone capitalized word "Penpot" so ClojureScript identifiers like

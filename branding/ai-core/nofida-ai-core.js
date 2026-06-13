@@ -11,8 +11,10 @@
 
   if (window.NofidaAICore) return;
 
-  var BRIDGE_URL = "/nofida/ai-core/ai-bridge.js";
-  var LIBRARIES_URL = "/nofida/libraries/catalog.json";
+  var ASSET_TAG = "__NOFIDA_ASSET_TAG__";
+  var ASSET_QUERY = ASSET_TAG ? "?v=" + ASSET_TAG : "";
+  var BRIDGE_URL = "/nofida/ai-core/ai-bridge.js" + ASSET_QUERY;
+  var LIBRARIES_URL = "/nofida/libraries/catalog.json" + ASSET_QUERY;
   var HOST_ID = "nofida-shell-root";
   var DASHBOARD_SELECTOR = ".main_ui_dashboard__dashboard-content";
   var GRID_SELECTOR = ".main_ui_dashboard_grid__dashboard-grid";
@@ -327,11 +329,29 @@
     state.els.dashboard.style.setProperty("--cards-width", Math.max(rect.width, 280) + "px");
   }
 
+  function ensureLibrariesExpanded() {
+    if (!isDashboardRoute()) return;
+
+    var button = Array.prototype.find.call(document.querySelectorAll("button"), function (node) {
+      var text = (node.textContent || "").trim();
+      if (!/^(show|показать)$/i.test(text)) return false;
+      var region = node.closest("section, article, div");
+      var regionText = region ? region.textContent || "" : "";
+      return /libraries|templates|библиотеки|шаблоны/i.test(regionText);
+    });
+
+    if (button && !button.dataset.nofidaExpandedOnce) {
+      button.dataset.nofidaExpandedOnce = "true";
+      button.click();
+    }
+  }
+
   function updateRouteState() {
     var assistantVisible = isAssistantRoute();
     state.els.fab.hidden = !assistantVisible;
     if (!assistantVisible) toggleAssistant(false);
     updateDashboardPosition();
+    ensureLibrariesExpanded();
   }
 
   function wireEvents() {

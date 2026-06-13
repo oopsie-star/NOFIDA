@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">NOFIDA icon</title>
+  <desc id="desc">NOFIDA emerald monogram on a midnight navy tile.</desc>
+  <defs>
+    <linearGradient id="tile" x1="80" y1="54" x2="290" y2="306" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#13243A"/>
+      <stop offset="0.46" stop-color="#0B1727"/>
+      <stop offset="1" stop-color="#06111F"/>
+    </linearGradient>
+    <linearGradient id="tileStroke" x1="80" y1="54" x2="290" y2="306" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#223B59"/>
+      <stop offset="1" stop-color="#020A13"/>
+    </linearGradient>
+    <radialGradient id="tileGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(160 92) rotate(64) scale(210 215)">
+      <stop offset="0" stop-color="#244766" stop-opacity="0.5"/>
+      <stop offset="0.55" stop-color="#10243A" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="emerald" x1="128" y1="88" x2="252" y2="264" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#51F7B1"/>
+      <stop offset="0.45" stop-color="#1DDB8C"/>
+      <stop offset="1" stop-color="#049760"/>
+    </linearGradient>
+    <linearGradient id="emeraldDark" x1="126" y1="150" x2="225" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D98D"/>
+      <stop offset="1" stop-color="#08704C"/>
+    </linearGradient>
+    <filter id="softShadow" x="40" y="34" width="300" height="300" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#020A13" flood-opacity="0.32"/>
+    </filter>
+    <filter id="markShadow" x="70" y="70" width="230" height="230" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <rect x="70" y="55" width="250" height="250" rx="58" fill="url(#tile)"/>
+    <rect x="70" y="55" width="250" height="250" rx="58" fill="url(#tileGlow)"/>
+    <rect x="75" y="60" width="240" height="240" rx="52" stroke="url(#tileStroke)" stroke-width="10" opacity="0.82"/>
+  </g>
+
+  <g filter="url(#markShadow)">
+    <path d="M126 233.5V121.5C126 116 132.8 113.4 136.5 117.4L184 168.4V265H137.5C131.1 265 126 259.9 126 253.5V233.5Z" fill="url(#emeraldDark)"/>
+    <path d="M118 106H166.4C174.1 106 181.5 109.1 186.9 114.7L263.7 194.7C275.4 207 285.9 220.5 295 234.9L303.7 248.6C308.4 256.1 303 266 294.1 266H260.4C241.3 266 223 258.2 209.7 244.5L118 106Z" fill="url(#emerald)"/>
+    <path d="M236 106H284V233.4C284 239 277.1 241.5 273.5 237.3L236 193.2V106Z" fill="url(#emerald)"/>
+    <path d="M126 148L218 248" stroke="#0A1826" stroke-opacity="0.28" stroke-width="12"/>
+  </g>
+</svg>
