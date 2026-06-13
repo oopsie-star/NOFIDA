@@ -1,0 +1,8 @@
+{
+  "name": "nofida",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "bash scripts/deploy.sh"
+  }
+}
