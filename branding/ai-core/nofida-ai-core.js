@@ -16,6 +16,55 @@
   if (window.NofidaAICore) return; // idempotent — never double-mount
 
   var BRIDGE_URL = "/nofida/ai-core/ai-bridge.js";
+
+  // ── Brand color lock ────────────────────────────────────────────────────────
+  // element.style.setProperty() writes INLINE STYLES which have the highest
+  // author-stylesheet priority. No CSS selector can override inline styles.
+  // This is the only way to beat Penpot's `body.default { --color-*: ... }`
+  // runtime injection (which has higher specificity than our :root rule).
+  var BRAND_VARS = {
+    "--color-background-primary":    "#0b1020",
+    "--color-background-secondary":  "#060c18",
+    "--color-background-tertiary":   "#0f172a",
+    "--color-background-quaternary": "#1f2937",
+    "--color-foreground-primary":    "#f8fafc",
+    "--color-foreground-secondary":  "#94a3b8",
+    "--color-accent-primary":        "#2563eb",
+    "--color-accent-secondary":      "#1d4ed8",
+    "--color-accent-tertiary":       "#bfff00",
+    "--color-accent-primary-muted":  "rgba(37, 99, 235, 0.18)"
+  };
+
+  function applyBrandColors() {
+    // Set on BOTH html (:root) and body so inheritance works at every level.
+    [document.documentElement, document.body].forEach(function (el) {
+      if (!el) return;
+      Object.keys(BRAND_VARS).forEach(function (k) {
+        el.style.setProperty(k, BRAND_VARS[k]);
+      });
+    });
+  }
+
+  // Apply immediately (before Penpot's theme class lands on body).
+  applyBrandColors();
+
+  // Re-apply whenever Penpot adds its theme class to body or html.
+  // This fires ONCE when ClojureScript does document.body.className = "default".
+  var themeWatcher = new MutationObserver(function () { applyBrandColors(); });
+  themeWatcher.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  // body may not exist yet if script runs before DOMContentLoaded; guard it.
+  if (document.body) {
+    themeWatcher.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  }
+
+  // Belt-and-suspenders: refresh every 500 ms for the first 8 s.
+  // Handles any dynamically injected <style> sheets that load late.
+  var brandTick = 0;
+  var brandTimer = setInterval(function () {
+    applyBrandColors();
+    if (++brandTick >= 16) clearInterval(brandTimer); // 16 × 500ms = 8s
+  }, 500);
+
   var BRAND = {
     bg: "#0b1020", surface: "#0f172a", border: "#1f2937",
     primary: "#2563eb", accent: "#bfff00", accentInk: "#0b1020",
@@ -265,19 +314,26 @@
     });
   }
 
-  var restoreCardsRaf = null;
+  // setTimeout(300) instead of RAF: RAF fires in the same rendering tick as
+  // the mutation, before React finishes reconciling. 300ms gives React time
+  // to complete its reconciliation pass so our injection sticks.
+  var restoreCardsTimer = null;
   function scheduleRestoreCards() {
-    if (restoreCardsRaf) return;
-    restoreCardsRaf = window.requestAnimationFrame(function () {
-      restoreCardsRaf = null;
-      restoreActionCards();
-    });
+    if (restoreCardsTimer) clearTimeout(restoreCardsTimer);
+    restoreCardsTimer = setTimeout(restoreActionCards, 300);
   }
 
   function start() {
+    applyBrandColors(); // second call — body now guaranteed to exist
+    if (document.body) {
+      // body might not have been available for themeWatcher setup above
+      try { themeWatcher.observe(document.body, { attributes: true, attributeFilter: ["class"] }); } catch (_) {}
+    }
     killReleaseModals();
     watchForModals();
-    restoreActionCards(); // initial pass (may be no-op if SPA not yet rendered)
+    // Initial card pass + a 1.5 s delayed pass to catch slow SPA hydration.
+    restoreActionCards();
+    setTimeout(restoreActionCards, 1500);
     loadBridge().then(function (bridge) {
       window.NofidaAICore = buildUI(bridge);
     });

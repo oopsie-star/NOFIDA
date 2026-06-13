@@ -32,7 +32,7 @@ RUN set -e; \
     F="${WEBROOT}/index.html"; \
     test -f "$F"; \
     grep -q 'nofida-brand.css' "$F" || \
-      sed -i 's#</head>#  <link rel="stylesheet" href="/nofida/brand/nofida-brand.css">\n</head>#' "$F"; \
+      sed -i 's#</body>#  <link rel="stylesheet" href="/nofida/brand/nofida-brand.css">\n</body>#' "$F"; \
     grep -q 'nofida-ai-core.js' "$F" || \
       sed -i 's#</body>#  <script src="/nofida/ai-core/nofida-ai-core.js" defer></script>\n</body>#' "$F"; \
     sed -i 's#<title>[^<]*</title>#<title>Nofida</title>#' "$F"; \

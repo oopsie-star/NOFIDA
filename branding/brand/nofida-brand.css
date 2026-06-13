@@ -102,27 +102,32 @@ nav a svg[class*="logo"],
 }
 
 /* ── 6. Dashboard empty-project action cards ──────────────────────────────
-   Root cause: the Nofida navy palette sets --color-background-tertiary to
-   #0f172a while the page sits on #0b1020 — a contrast ratio of ≈1.05:1.
-   The 3 action cards (Create / Import / Add library) ARE in the DOM when a
-   project is empty, but their container is invisible.
+   Two issues fixed here:
 
-   Fix: raise the card background to a clearly distinct surface (#131e35),
-   give the border a faint blue tint, enforce a minimum height, and restore
-   legible text in the hover state (native Penpot maps --color-card-title to
-   --color-background-secondary which resolves to #060c18 on a #2563eb blue
-   card — near-black on mid-blue, illegible).
+   a) Contrast: --color-background-tertiary (#0f172a) is virtually invisible
+      against the page background (#0b1020). Card bg raised to #131e35.
 
-   DO NOT hide or replace these elements; this block only corrects contrast. */
+   b) Button visibility: when our JS restores the 3-card container, we hide
+      the native single "+" button with a :has() rule. React controls the DOM
+      but NOT the CSS cascade — so this rule survives any re-render.        */
 .main_ui_dashboard_placeholder__empty-project-card {
-  --color-card-background: #131e35;                   /* raised surface      */
-  border-color: rgba(37, 99, 235, 0.22) !important;   /* faint blue outline  */
+  --color-card-background: #131e35;
+  border-color: rgba(37, 99, 235, 0.22) !important;
   min-height: 100px;
 }
 
 .main_ui_dashboard_placeholder__empty-project-card:hover {
-  --color-card-title:    var(--color-foreground-primary);    /* white on blue  */
-  --color-card-subtitle: rgba(248, 250, 252, 0.80);          /* 80% white      */
+  --color-card-title:    var(--color-foreground-primary);
+  --color-card-subtitle: rgba(248, 250, 252, 0.80);
+}
+
+/* Hide the native "+" button whenever our 3-card container is present.
+   :has() is supported in Chrome 105+, Firefox 121+, Safari 15.4+.
+   React owns the DOM — React does NOT own the CSS cascade.              */
+.main_ui_dashboard_placeholder__grid-empty-placeholder:has(
+  .main_ui_dashboard_placeholder__empty-project-container
+) > .main_ui_dashboard_placeholder__create-new {
+  display: none !important;
 }
 
 /* ── 7. Font stack ────────────────────────────────────────────────────────*/
