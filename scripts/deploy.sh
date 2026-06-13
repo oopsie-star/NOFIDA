@@ -15,6 +15,7 @@ set -euo pipefail
 HOST="root@engine.sys.bachopus.com"
 PROJECT_DIR="/root/NOFIDA"
 SSH_KEY="${NOFIDA_SSH_KEY:-$HOME/.ssh/id_rsa}"
+COMPOSE_PROJECT="nofida-core"
 
 echo "▶  Connecting to $HOST …"
 
@@ -30,8 +31,11 @@ cd /root/NOFIDA
 echo "── git pull ──────────────────────────────────────────"
 git pull --ff-only origin main
 
-echo "── docker compose up --build (frontend + backend + exporter + mcp) ──"
-docker compose up -d --build --remove-orphans \
+echo "── docker compose cleanup (stale default project) ─────"
+docker compose -p nofida down --remove-orphans 2>/dev/null || true
+
+echo "── docker compose up --build (${COMPOSE_PROJECT}) ─────"
+docker compose -p "${COMPOSE_PROJECT}" up -d --build --remove-orphans \
   penpot-frontend \
   penpot-backend \
   penpot-exporter \
