@@ -16,6 +16,7 @@ HOST="root@engine.sys.bachopus.com"
 PROJECT_DIR="/root/NOFIDA"
 SSH_KEY="${NOFIDA_SSH_KEY:-$HOME/.ssh/id_rsa}"
 COMPOSE_PROJECT="nofida-core"
+PUBLIC_URI="https://engine.sys.bachopus.com"
 
 echo "▶  Connecting to $HOST …"
 
@@ -26,10 +27,18 @@ ssh \
   "$HOST" \
   bash -s << REMOTE
 set -euo pipefail
-cd /root/NOFIDA
+cd "${PROJECT_DIR}"
 
 echo "── git pull ──────────────────────────────────────────"
 git pull --ff-only origin main
+
+echo "── ensure .env public uri ───────────────────────────"
+touch .env
+if grep -q '^PENPOT_PUBLIC_URI=' .env; then
+  sed -i "s#^PENPOT_PUBLIC_URI=.*#PENPOT_PUBLIC_URI=${PUBLIC_URI}#" .env
+else
+  echo "PENPOT_PUBLIC_URI=${PUBLIC_URI}" >> .env
+fi
 
 echo "── docker compose cleanup (stale default project) ─────"
 docker compose -p nofida down --remove-orphans 2>/dev/null || true
