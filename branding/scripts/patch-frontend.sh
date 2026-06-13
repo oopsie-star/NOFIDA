@@ -25,6 +25,15 @@ for templated_file in "${BRAND_CSS}" "${AI_CORE}"; do
   [ -f "${templated_file}" ] && sed -i "s/__NOFIDA_ASSET_TAG__/${ASSET_TAG}/g" "${templated_file}"
 done
 
+if [ -n "${BASE_VERSION_TAG}" ]; then
+  find "${WEBROOT}" \
+    ! -path "${WEBROOT}/nofida/*" \
+    -type f \
+    \( -name '*.js' -o -name '*.html' -o -name '*.map' \) | while IFS= read -r file; do
+    perl -0pi -e "s/\\Q${BASE_VERSION_TAG}\\E/${PENPOT_VERSION_TAG}/g" "${file}"
+  done
+fi
+
 # Static head/body hooks that survive every React/ClojureScript render.
 grep -q 'nofida-brand.css' "${INDEX}" || \
   sed -i "/<\/head>/i\\    <link rel=\"stylesheet\" href=\"/nofida/brand/nofida-brand.css?v=${ASSET_TAG}\">" "${INDEX}"
