@@ -310,23 +310,9 @@
   }
 
   function updateDashboardPosition() {
-    if (!isDashboardRoute()) {
+    if (state.els.dashboard) {
       state.els.dashboard.hidden = true;
-      return;
     }
-
-    var anchor = document.querySelector(GRID_SELECTOR) ||
-      document.querySelector(DASHBOARD_SELECTOR);
-    if (!anchor) {
-      state.els.dashboard.hidden = true;
-      return;
-    }
-
-    var rect = anchor.getBoundingClientRect();
-    state.els.dashboard.hidden = false;
-    state.els.dashboard.style.setProperty("--cards-left", window.scrollX + rect.left + "px");
-    state.els.dashboard.style.setProperty("--cards-top", window.scrollY + Math.max(rect.top, 148) + "px");
-    state.els.dashboard.style.setProperty("--cards-width", Math.max(rect.width, 280) + "px");
   }
 
   function ensureLibrariesExpanded() {

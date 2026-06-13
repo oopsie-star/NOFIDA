@@ -130,7 +130,7 @@ a[href="/"].main_ui_main__logo-link::before {
   display: block !important;
   width: 156px !important;
   height: 36px !important;
-  background-image: url("/nofida/brand/logo.svg?v=__NOFIDA_ASSET_TAG__") !important;
+  background-image: url("/nofida/brand/logo.png?v=__NOFIDA_ASSET_TAG__") !important;
   background-repeat: no-repeat !important;
   background-position: left center !important;
   background-size: contain !important;
@@ -155,7 +155,7 @@ a[href="/"].main_ui_main__logo-link::before {
   min-width: 34px !important;
   height: 34px !important;
   min-height: 34px !important;
-  background-image: url("/nofida/brand/icon.svg?v=__NOFIDA_ASSET_TAG__") !important;
+  background-image: url("/nofida/brand/icon.png?v=__NOFIDA_ASSET_TAG__") !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
   background-size: 100% 100% !important;
