@@ -33,7 +33,8 @@ git pull origin main
 echo "── docker compose build penpot-frontend ──────────────"
 docker compose build penpot-frontend
 
-echo "── docker compose up (frontend only) ─────────────────"
+echo "── docker compose restart (frontend only) ────────────────"
+docker compose stop penpot-frontend 2>/dev/null || true
 docker compose up -d --no-deps penpot-frontend
 
 echo ""
