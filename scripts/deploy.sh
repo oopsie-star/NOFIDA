@@ -13,7 +13,7 @@
 set -euo pipefail
 
 HOST="root@engine.sys.bachopus.com"
-PROJECT_DIR="/opt/nofida-core"
+PROJECT_DIR="/root/NOFIDA"
 SSH_KEY="${NOFIDA_SSH_KEY:-$HOME/.ssh/id_rsa}"
 
 echo "▶  Connecting to $HOST …"
@@ -25,7 +25,7 @@ ssh \
   "$HOST" \
   bash -s << REMOTE
 set -euo pipefail
-cd "${PROJECT_DIR}"
+cd /root/NOFIDA
 
 echo "── git pull ──────────────────────────────────────────"
 git pull origin main
