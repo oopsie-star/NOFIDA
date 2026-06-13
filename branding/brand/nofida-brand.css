@@ -121,8 +121,21 @@ a[href="/"].main_ui_main__logo-link {
   background-size: contain !important;
 }
 
+.main_ui_dashboard_sidebar__penpot-icon {
+  display: inline-flex !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  background-image: url("/nofida/brand/logo.svg") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: contain !important;
+}
+
 .main_ui_main__app-logo svg,
 .main_ui_dashboard__home-logo svg,
+.main_ui_dashboard_sidebar__penpot-icon svg,
 .main_ui_workspace__logo-section > a > svg,
 header a svg[class*="penpot"],
 nav a svg[class*="logo"],
