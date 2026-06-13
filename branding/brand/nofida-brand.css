@@ -113,24 +113,53 @@ body.default li[data-testid="release-notes"],
 .main_ui_workspace__main-toolbar .main_ui_workspace__logo-section > a,
 a[href="/"].main_ui_main__logo-link {
   display: inline-flex !important;
-  min-width: 128px;
-  min-height: 32px;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 156px !important;
+  width: 156px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  background: transparent !important;
+}
+
+.main_ui_main__app-logo::before,
+.main_ui_dashboard__home-logo::before,
+.main_ui_workspace__main-toolbar .main_ui_workspace__logo-section > a::before,
+a[href="/"].main_ui_main__logo-link::before {
+  content: "" !important;
+  display: block !important;
+  width: 156px !important;
+  height: 36px !important;
   background-image: url("/nofida/brand/logo.svg?v=__NOFIDA_ASSET_TAG__") !important;
   background-repeat: no-repeat !important;
   background-position: left center !important;
   background-size: contain !important;
+  filter: drop-shadow(0 8px 18px rgba(2, 6, 23, 0.32)) !important;
+}
+
+.main_ui_dashboard_sidebar__team-name {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
 }
 
 .main_ui_dashboard_sidebar__penpot-icon {
+  display: none !important;
+}
+
+.main_ui_dashboard_sidebar__team-name::before {
+  content: "" !important;
   display: inline-flex !important;
-  width: 28px !important;
-  min-width: 28px !important;
-  height: 28px !important;
-  min-height: 28px !important;
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
   background-image: url("/nofida/brand/icon.svg?v=__NOFIDA_ASSET_TAG__") !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
-  background-size: contain !important;
+  background-size: 100% 100% !important;
+  filter: drop-shadow(0 8px 18px rgba(2, 6, 23, 0.28)) !important;
 }
 
 .main_ui_main__app-logo svg,

@@ -5,6 +5,7 @@ WEBROOT="${1:-/var/www/app}"
 INDEX="${WEBROOT}/index.html"
 BRAND_CSS="${WEBROOT}/nofida/brand/nofida-brand.css"
 AI_CORE="${WEBROOT}/nofida/ai-core/nofida-ai-core.js"
+MANIFEST_FILE="${WEBROOT}/nofida/brand/site.webmanifest"
 
 if [ ! -f "${INDEX}" ]; then
   echo "index.html not found in ${WEBROOT}" >&2
@@ -21,7 +22,7 @@ NOFIDA_ICON_HREF="/nofida/brand/icon.svg?v=${ASSET_TAG}"
 # Remove the broken ui.css include if the pinned image does not ship that file.
 [ -f "${WEBROOT}/css/ui.css" ] || sed -i '/css\/ui\.css/d' "${INDEX}"
 
-for templated_file in "${BRAND_CSS}" "${AI_CORE}"; do
+for templated_file in "${BRAND_CSS}" "${AI_CORE}" "${MANIFEST_FILE}"; do
   [ -f "${templated_file}" ] && sed -i "s/__NOFIDA_ASSET_TAG__/${ASSET_TAG}/g" "${templated_file}"
 done
 
@@ -53,6 +54,9 @@ sed -i \
   "${INDEX}"
 
 perl -0pi -e "s#/nofida/brand/nofida-brand\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-brand.css?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-ai-core\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}#g; s#/nofida/brand/favicon\\.svg(?:\\?v=[^\"]*)?#/nofida/brand/favicon.svg?v=${ASSET_TAG}#g; s#<link rel=\"icon\"[^>]*>#<link rel=\"icon\" type=\"image/svg+xml\" href=\"/nofida/brand/favicon.svg?v=${ASSET_TAG}\" />#g" "${INDEX}"
+perl -0pi -e 's#<link rel="icon"[^>]*>\s*##g; s#<link rel="shortcut icon"[^>]*>\s*##g; s#<link rel="apple-touch-icon"[^>]*>\s*##g; s#<link rel="manifest"[^>]*>\s*##g' "${INDEX}"
+grep -q 'nofida/brand/favicon.svg' "${INDEX}" || \
+  sed -i "/<\/head>/i\\    <link rel=\"icon\" type=\"image/svg+xml\" sizes=\"any\" href=\"/nofida/brand/favicon.svg?v=${ASSET_TAG}\" />\\n    <link rel=\"shortcut icon\" type=\"image/png\" href=\"/nofida/brand/favicon-32.png?v=${ASSET_TAG}\" />\\n    <link rel=\"apple-touch-icon\" href=\"/nofida/brand/apple-touch-icon.png?v=${ASSET_TAG}\" />\\n    <link rel=\"manifest\" href=\"/nofida/brand/site.webmanifest?v=${ASSET_TAG}\" />" "${INDEX}"
 perl -0pi -e "s/\\?version=[^\"' <>]+/?version=${PENPOT_VERSION_TAG}/g; s/globalThis\\.penpotVersionTag = \"[^\"]+\";/globalThis.penpotVersionTag = \"${PENPOT_VERSION_TAG}\";/g" "${INDEX}"
 
 replace_symbol() {

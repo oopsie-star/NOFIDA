@@ -1,0 +1,29 @@
+{
+  "name": "Nofida",
+  "short_name": "Nofida",
+  "description": "Nofida is the white-label design workspace for teams building digital products.",
+  "start_url": "/#/dashboard/recent",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    {
+      "src": "/nofida/brand/favicon.svg?v=__NOFIDA_ASSET_TAG__",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/nofida/brand/favicon-192.png?v=__NOFIDA_ASSET_TAG__",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/nofida/brand/favicon-512.png?v=__NOFIDA_ASSET_TAG__",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

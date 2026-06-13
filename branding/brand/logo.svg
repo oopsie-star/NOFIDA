@@ -1,55 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="360" viewBox="0 0 1400 360" fill="none" role="img" aria-labelledby="title desc">
   <title id="title">NOFIDA logo</title>
-  <desc id="desc">Premium NOFIDA logo with a midnight navy icon and emerald N monogram.</desc>
+  <desc id="desc">High-contrast NOFIDA logo for dark product surfaces.</desc>
   <defs>
-    <linearGradient id="tile" x1="80" y1="54" x2="290" y2="306" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#13243A"/>
-      <stop offset="0.46" stop-color="#0B1727"/>
-      <stop offset="1" stop-color="#06111F"/>
+    <linearGradient id="tile" x1="68" y1="44" x2="316" y2="312" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#224A78"/>
+      <stop offset="0.52" stop-color="#132A4D"/>
+      <stop offset="1" stop-color="#0A152B"/>
     </linearGradient>
-    <linearGradient id="tileStroke" x1="80" y1="54" x2="290" y2="306" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#223B59"/>
-      <stop offset="1" stop-color="#020A13"/>
+    <linearGradient id="tileStroke" x1="82" y1="56" x2="302" y2="304" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A5E4FF"/>
+      <stop offset="0.45" stop-color="#5FA8FF"/>
+      <stop offset="1" stop-color="#163764"/>
     </linearGradient>
-    <radialGradient id="tileGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(160 92) rotate(64) scale(210 215)">
-      <stop offset="0" stop-color="#244766" stop-opacity="0.5"/>
-      <stop offset="0.55" stop-color="#10243A" stop-opacity="0.14"/>
-      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="emerald" x1="128" y1="88" x2="252" y2="264" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#51F7B1"/>
-      <stop offset="0.45" stop-color="#1DDB8C"/>
-      <stop offset="1" stop-color="#049760"/>
+    <linearGradient id="emerald" x1="118" y1="86" x2="270" y2="272" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D5FF5F"/>
+      <stop offset="0.42" stop-color="#81F7B9"/>
+      <stop offset="1" stop-color="#27D58A"/>
     </linearGradient>
-    <linearGradient id="emeraldDark" x1="126" y1="150" x2="225" y2="300" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#22D98D"/>
-      <stop offset="1" stop-color="#08704C"/>
+    <linearGradient id="emeraldDark" x1="120" y1="152" x2="224" y2="304" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#66F3B3"/>
+      <stop offset="1" stop-color="#0D9F6B"/>
     </linearGradient>
-    <filter id="softShadow" x="40" y="34" width="300" height="300" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#020A13" flood-opacity="0.32"/>
+    <linearGradient id="word" x1="366" y1="84" x2="1260" y2="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FCFF"/>
+      <stop offset="0.52" stop-color="#D7ECFF"/>
+      <stop offset="1" stop-color="#8AC7FF"/>
+    </linearGradient>
+    <filter id="tileShadow" x="30" y="28" width="330" height="324" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#020A13" flood-opacity="0.34"/>
     </filter>
-    <filter id="markShadow" x="70" y="70" width="230" height="230" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000000" flood-opacity="0.20"/>
+    <filter id="wordShadow" x="350" y="54" width="970" height="240" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#020A13" flood-opacity="0.2"/>
     </filter>
-    <linearGradient id="word" x1="370" y1="72" x2="1280" y2="260" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#071629"/>
-      <stop offset="0.55" stop-color="#0B1727"/>
-      <stop offset="1" stop-color="#13243A"/>
-    </linearGradient>
   </defs>
 
-  <g filter="url(#softShadow)">
-    <rect x="70" y="55" width="250" height="250" rx="58" fill="url(#tile)"/>
-    <rect x="70" y="55" width="250" height="250" rx="58" fill="url(#tileGlow)"/>
-    <rect x="75" y="60" width="240" height="240" rx="52" stroke="url(#tileStroke)" stroke-width="10" opacity="0.82"/>
+  <g filter="url(#tileShadow)">
+    <rect x="58" y="48" width="274" height="274" rx="72" fill="url(#tile)"/>
+    <rect x="68" y="58" width="254" height="254" rx="62" stroke="url(#tileStroke)" stroke-width="14" opacity="0.94"/>
   </g>
 
-  <g filter="url(#markShadow)">
-    <path d="M126 233.5V121.5C126 116 132.8 113.4 136.5 117.4L184 168.4V265H137.5C131.1 265 126 259.9 126 253.5V233.5Z" fill="url(#emeraldDark)"/>
-    <path d="M118 106H166.4C174.1 106 181.5 109.1 186.9 114.7L263.7 194.7C275.4 207 285.9 220.5 295 234.9L303.7 248.6C308.4 256.1 303 266 294.1 266H260.4C241.3 266 223 258.2 209.7 244.5L118 106Z" fill="url(#emerald)"/>
-    <path d="M236 106H284V233.4C284 239 277.1 241.5 273.5 237.3L236 193.2V106Z" fill="url(#emerald)"/>
-    <path d="M126 148L218 248" stroke="#0A1826" stroke-opacity="0.28" stroke-width="12"/>
+  <g>
+    <path d="M118 236V126.4C118 119.6 126.5 116.2 131.3 121.2L178 171.2V278H144C129.6 278 118 266.4 118 252V236Z" fill="url(#emeraldDark)"/>
+    <path d="M110 108H160C171.5 108 182.5 112.7 190.5 121L274.6 208.8C286.8 221.5 297.8 235.5 307.3 250.5L317.7 266.9C322.8 274.9 317 285 307.6 285H270.9C248.8 285 227.7 276 212.4 260.1L110 108Z" fill="url(#emerald)"/>
+    <path d="M238 108H288V237.5C288 244.4 279.3 247.6 274.7 242.4L238 200.9V108Z" fill="url(#emerald)"/>
+    <path d="M120 149L221 260" stroke="#0B152B" stroke-opacity="0.24" stroke-width="12"/>
   </g>
 
-  <text x="385" y="235" fill="url(#word)" font-family="Montserrat, Inter, Avenir Next, Arial Black, Arial, sans-serif" font-size="150" font-weight="900" letter-spacing="22">NOFIDA</text>
+  <g filter="url(#wordShadow)">
+    <text x="382" y="232" fill="url(#word)" font-family="Montserrat, Inter, Avenir Next, Arial Black, Arial, sans-serif" font-size="150" font-weight="900" letter-spacing="22">NOFIDA</text>
+  </g>
 </svg>
