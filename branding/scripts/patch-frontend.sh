@@ -35,7 +35,10 @@ sed -i \
 # Deep white-label pass across compiled bundles/templates. Replace only the
 # standalone capitalized word "Penpot" so ClojureScript identifiers like
 # PenpotContext remain intact.
-find "${WEBROOT}" -type f \( -name '*.js' -o -name '*.html' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) | while IFS= read -r file; do
+find "${WEBROOT}" \
+  ! -path "${WEBROOT}/nofida/*" \
+  -type f \
+  \( -name '*.js' -o -name '*.html' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) | while IFS= read -r file; do
   sed -E -i \
     -e 's/Ваш Penpot/Ваше пространство/g' \
     -e 's/Ваш Nofida/Ваше пространство/g' \
