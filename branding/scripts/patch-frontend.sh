@@ -38,7 +38,7 @@ sed -i \
 find "${WEBROOT}" \
   ! -path "${WEBROOT}/nofida/*" \
   -type f \
-  \( -name '*.js' -o -name '*.html' -o -name '*.css' -o -name '*.svg' -o -name '*.json' \) | while IFS= read -r file; do
+  \( -name 'translation*.js' -o -name '*.html' -o -name '*.json' \) | while IFS= read -r file; do
   sed -E -i \
     -e 's/Ваш Penpot/Ваше пространство/g' \
     -e 's/Ваш Nofida/Ваше пространство/g' \
