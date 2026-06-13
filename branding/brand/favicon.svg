@@ -1,7 +1,48 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Nofida favicon — N monogram, navy ground + neon mark. Placeholder. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#0b1020"/>
-  <rect x="1" y="1" width="30" height="30" rx="7" fill="none" stroke="#1f2937"/>
-  <path d="M9 23V9l14 14V9" stroke="#bfff00" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">NOFIDA favicon</title>
+  <desc id="desc">Rounded midnight navy app icon with emerald N monogram.</desc>
+  <defs>
+    <linearGradient id="tile" x1="88" y1="58" x2="424" y2="454" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#13243A"/>
+      <stop offset="0.48" stop-color="#0B1727"/>
+      <stop offset="1" stop-color="#06111F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(202 112) rotate(63) scale(340 340)">
+      <stop offset="0" stop-color="#244766" stop-opacity="0.52"/>
+      <stop offset="0.58" stop-color="#10243A" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="stroke" x1="86" y1="55" x2="430" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#233C5D"/>
+      <stop offset="1" stop-color="#020A13"/>
+    </linearGradient>
+    <linearGradient id="emerald" x1="160" y1="108" x2="346" y2="382" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#55F9B5"/>
+      <stop offset="0.45" stop-color="#1DDB8C"/>
+      <stop offset="1" stop-color="#049760"/>
+    </linearGradient>
+    <linearGradient id="emeraldDark" x1="151" y1="194" x2="270" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24DF91"/>
+      <stop offset="1" stop-color="#08704C"/>
+    </linearGradient>
+    <filter id="tileShadow" x="20" y="16" width="472" height="486" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="20" stdDeviation="26" flood-color="#020A13" flood-opacity="0.36"/>
+    </filter>
+    <filter id="markShadow" x="110" y="94" width="300" height="330" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#tileShadow)">
+    <rect x="52" y="42" width="408" height="428" rx="106" fill="url(#tile)"/>
+    <rect x="52" y="42" width="408" height="428" rx="106" fill="url(#glow)"/>
+    <rect x="61" y="51" width="390" height="410" rx="96" stroke="url(#stroke)" stroke-width="18" opacity="0.86"/>
+  </g>
+
+  <g filter="url(#markShadow)">
+    <path d="M151 333.5V169.6C151 160.9 161.8 156.7 167.8 163L237 236.6V373H169.5C159.3 373 151 364.7 151 354.5V333.5Z" fill="url(#emeraldDark)"/>
+    <path d="M136 136H203.5C215.5 136 227 140.8 235.3 149.5L348.1 267.7C365.9 286.4 381.7 306.9 395.1 329L408.3 350.8C415.5 362.7 407 378 393.1 378H344C314 378 285.2 365.8 264.4 344.2L136 136Z" fill="url(#emerald)"/>
+    <path d="M307 136H377V323.4C377 332.2 366.1 336.3 360.2 329.6L307 268.9V136Z" fill="url(#emerald)"/>
+    <path d="M151 203L284 348" stroke="#081524" stroke-opacity="0.25" stroke-width="19"/>
+  </g>
 </svg>

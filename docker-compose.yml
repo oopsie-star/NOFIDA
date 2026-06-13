@@ -20,6 +20,9 @@ x-penpot-version: &penpot-version "2.16.0"
 
 # Flags shared by frontend + backend so the login/register UI matches backend
 # behaviour. `enable-plugins` powers the Nofida AI companion plugin.
+# `enable-mcp` + `enable-access-tokens` expose the native MCP Server section in
+# Account → Integrations and the stream URL / key flow documented by Penpot.
+# `disable-onboarding` removes the onboarding survey modal from self-hosted UX.
 # `disable-secure-session-cookies` keeps local http working; harmless behind
 # Caddy's HTTPS in prod. Drop it in prod if you want the Secure cookie flag.
 x-penpot-flags: &penpot-flags >-
@@ -28,6 +31,9 @@ x-penpot-flags: &penpot-flags >-
   disable-email-verification
   disable-secure-session-cookies
   enable-plugins
+  enable-access-tokens
+  enable-mcp
+  disable-onboarding
 
 services:
   penpot-frontend:
@@ -47,6 +53,7 @@ services:
     depends_on:
       - penpot-backend
       - penpot-exporter
+      - penpot-mcp
     environment:
       PENPOT_FLAGS: *penpot-flags
       PENPOT_PUBLIC_URI: ${PENPOT_PUBLIC_URI:-http://localhost:9001}
@@ -88,6 +95,11 @@ services:
       PENPOT_PUBLIC_URI: http://penpot-frontend:8080
       PENPOT_REDIS_URI: redis://penpot-valkey/0
       PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-CHANGE-ME-please-set-a-32-byte-random-secret}
+    networks: [nofida-network]
+
+  penpot-mcp:
+    image: penpotapp/mcp:2.16.0
+    restart: always
     networks: [nofida-network]
 
   penpot-postgres:

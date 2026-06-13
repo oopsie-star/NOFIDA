@@ -28,14 +28,14 @@ set -euo pipefail
 cd /root/NOFIDA
 
 echo "── git pull ──────────────────────────────────────────"
-git pull origin main
+git pull --ff-only origin main
 
-echo "── docker compose build penpot-frontend ──────────────"
-docker compose build penpot-frontend
-
-echo "── docker compose restart (frontend only) ────────────────"
-docker compose stop penpot-frontend 2>/dev/null || true
-docker compose up -d --no-deps penpot-frontend
+echo "── docker compose up --build (frontend + backend + exporter + mcp) ──"
+docker compose up -d --build --remove-orphans \
+  penpot-frontend \
+  penpot-backend \
+  penpot-exporter \
+  penpot-mcp
 
 echo ""
 echo "✓  Deploy complete — https://engine.sys.bachopus.com"

@@ -1,347 +1,417 @@
 /* ==========================================================================
- * Nofida AI Core — injected overlay
+ * Nofida shell overlay
  * --------------------------------------------------------------------------
- * Injected into Penpot's index.html (see branding/Dockerfile). Mounts a
- * floating action button + collapsible panel OVER the Penpot canvas, fully
- * isolated in a Shadow DOM so neither Penpot's styles nor nofida-brand.css
- * leak in or out.
- *
- * Scope of v1: the UI shell + the `window.NofidaAICore` namespace, wired to
- * the swappable AI bridge (ai-bridge.js). The live chat / model calls and the
- * real layer-generation transport are added later — see ai-bridge.js.
+ * Mounted into a static sibling host (`#nofida-shell-root`) that lives
+ * outside Penpot's React containers (`#app`, `#modal`). No timers and no
+ * MutationObserver are used: route/layout updates are driven by hashchange,
+ * resize, and ResizeObserver on the application root.
  * ========================================================================== */
 (function () {
   "use strict";
 
-  if (window.NofidaAICore) return; // idempotent — never double-mount
+  if (window.NofidaAICore) return;
 
   var BRIDGE_URL = "/nofida/ai-core/ai-bridge.js";
-
-  // ── Brand color lock ────────────────────────────────────────────────────────
-  // element.style.setProperty() writes INLINE STYLES which have the highest
-  // author-stylesheet priority. No CSS selector can override inline styles.
-  // This is the only way to beat Penpot's `body.default { --color-*: ... }`
-  // runtime injection (which has higher specificity than our :root rule).
-  var BRAND_VARS = {
-    "--color-background-primary":    "#0b1020",
-    "--color-background-secondary":  "#060c18",
-    "--color-background-tertiary":   "#0f172a",
-    "--color-background-quaternary": "#1f2937",
-    "--color-foreground-primary":    "#f8fafc",
-    "--color-foreground-secondary":  "#94a3b8",
-    "--color-accent-primary":        "#2563eb",
-    "--color-accent-secondary":      "#1d4ed8",
-    "--color-accent-tertiary":       "#bfff00",
-    "--color-accent-primary-muted":  "rgba(37, 99, 235, 0.18)"
-  };
-
-  function applyBrandColors() {
-    // Set on BOTH html (:root) and body so inheritance works at every level.
-    [document.documentElement, document.body].forEach(function (el) {
-      if (!el) return;
-      Object.keys(BRAND_VARS).forEach(function (k) {
-        el.style.setProperty(k, BRAND_VARS[k]);
-      });
-    });
-  }
-
-  // Apply immediately (before Penpot's theme class lands on body).
-  applyBrandColors();
-
-  // Re-apply whenever Penpot adds its theme class to body or html.
-  // This fires ONCE when ClojureScript does document.body.className = "default".
-  var themeWatcher = new MutationObserver(function () { applyBrandColors(); });
-  themeWatcher.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-  // body may not exist yet if script runs before DOMContentLoaded; guard it.
-  if (document.body) {
-    themeWatcher.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-  }
-
-  // Belt-and-suspenders: refresh every 500 ms for the first 8 s.
-  // Handles any dynamically injected <style> sheets that load late.
-  var brandTick = 0;
-  var brandTimer = setInterval(function () {
-    applyBrandColors();
-    if (++brandTick >= 16) clearInterval(brandTimer); // 16 × 500ms = 8s
-  }, 500);
-
+  var LIBRARIES_URL = "/nofida/libraries/catalog.json";
+  var HOST_ID = "nofida-shell-root";
+  var DASHBOARD_SELECTOR = ".main_ui_dashboard__dashboard-content";
+  var GRID_SELECTOR = ".main_ui_dashboard_grid__dashboard-grid";
   var BRAND = {
-    bg: "#0b1020", surface: "#0f172a", border: "#1f2937",
-    primary: "#2563eb", accent: "#bfff00", accentInk: "#0b1020",
-    text: "#f8fafc", muted: "#94a3b8",
-    font: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    bg: "#0b1020",
+    surface: "#131e35",
+    surfaceStrong: "#10192f",
+    border: "rgba(37, 99, 235, 0.24)",
+    primary: "#2563eb",
+    primaryHover: "#1d4ed8",
+    accent: "#bfff00",
+    accentInk: "#0b1020",
+    text: "#f8fafc",
+    muted: "#94a3b8",
+    font: 'Montserrat, Inter, "Segoe UI", system-ui, sans-serif'
   };
 
-  // Load the bridge (self-registers window.NofidaAIBridge), then build the UI.
+  var state = {
+    bridge: null,
+    catalog: null,
+    host: null,
+    root: null,
+    els: {}
+  };
+
+  function onReady(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn, { once: true });
+    } else {
+      fn();
+    }
+  }
+
+  function isDashboardRoute() {
+    return /^#\/dashboard/.test(window.location.hash || "");
+  }
+
+  function isAssistantRoute() {
+    return /^#\/dashboard/.test(window.location.hash || "") ||
+      /^#\/workspace/.test(window.location.hash || "");
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function ensureHost() {
+    var host = document.getElementById(HOST_ID);
+    if (!host) {
+      host = document.createElement("section");
+      host.id = HOST_ID;
+      document.body.appendChild(host);
+    }
+    host.style.position = "absolute";
+    host.style.left = "0";
+    host.style.top = "0";
+    host.style.width = "100%";
+    host.style.height = "0";
+    host.style.pointerEvents = "none";
+    host.style.zIndex = "2147483000";
+    return host;
+  }
+
   function loadBridge() {
     return new Promise(function (resolve) {
-      if (window.NofidaAIBridge) return resolve(window.NofidaAIBridge);
-      var s = document.createElement("script");
-      s.src = BRIDGE_URL;
-      s.onload = function () { resolve(window.NofidaAIBridge); };
-      s.onerror = function () { resolve(null); }; // UI still works without it
-      document.head.appendChild(s);
+      if (window.NofidaAIBridge) {
+        resolve(window.NofidaAIBridge);
+        return;
+      }
+      var script = document.createElement("script");
+      script.src = BRIDGE_URL;
+      script.onload = function () { resolve(window.NofidaAIBridge || null); };
+      script.onerror = function () { resolve(null); };
+      document.head.appendChild(script);
     });
   }
 
-  function buildUI(bridge) {
-    var host = document.createElement("div");
-    host.id = "nofida-ai-core-root";
-    host.style.cssText = "position:fixed;inset:auto;z-index:2147483000;"; // top-most
-    document.body.appendChild(host);
-    var root = host.attachShadow({ mode: "open" });
+  function renderCatalog(items) {
+    return items.map(function (item) {
+      var href = item.internal_url || item.hub_url || "#";
+      var source = item.internal_url ? "Внутренний ресурс" : "Источник";
+      return [
+        '<article class="library-item">',
+        '  <div class="library-copy">',
+        '    <span class="library-status">' + escapeHtml(item.status || "catalog") + "</span>",
+        '    <h3>' + escapeHtml(item.name) + "</h3>",
+        '    <p>' + escapeHtml((item.type || "library") + " · " + (item.author || "Nofida")) + "</p>",
+        "  </div>",
+        '  <button class="library-link" type="button" data-href="' + escapeHtml(href) + '">' + source + "</button>",
+        "</article>"
+      ].join("");
+    }).join("");
+  }
 
-    root.innerHTML = [
+  function openExternal(href) {
+    if (!href || href === "#") return;
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
+  function buildUI() {
+    state.host = ensureHost();
+    state.root = state.host.attachShadow({ mode: "open" });
+    state.root.innerHTML = [
       "<style>",
       ":host{all:initial}",
       "*{box-sizing:border-box;font-family:" + BRAND.font + "}",
-      ".fab{position:fixed;right:20px;bottom:20px;width:52px;height:52px;border:0;",
-      "  border-radius:16px;cursor:pointer;display:grid;place-items:center;",
-      "  background:" + BRAND.accent + ";color:" + BRAND.accentInk + ";",
-      "  box-shadow:0 10px 30px rgba(191,255,0,.25);transition:transform .15s ease}",
+      ".layer{pointer-events:none}",
+      ".dashboard-shell{position:absolute;left:var(--cards-left,320px);top:var(--cards-top,160px);",
+      "  width:min(var(--cards-width,calc(100vw - 352px)),1120px);pointer-events:auto}",
+      ".dashboard-shell[hidden]{display:none}",
+      ".action-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}",
+      ".action-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;",
+      "  border:1px solid " + BRAND.border + ";border-radius:18px;padding:18px 20px;text-align:left;",
+      "  background:linear-gradient(180deg,rgba(19,30,53,.98),rgba(11,16,32,.98));color:" + BRAND.text + ";",
+      "  box-shadow:0 18px 48px rgba(2,6,23,.34);cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}",
+      ".action-card:hover{transform:translateY(-2px);border-color:rgba(191,255,0,.45);box-shadow:0 24px 56px rgba(2,6,23,.42)}",
+      ".action-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:" + BRAND.accent + ";font-weight:700}",
+      ".action-title{font-size:18px;font-weight:800;line-height:1.15;margin:0}",
+      ".action-copy{font-size:13px;line-height:1.45;color:" + BRAND.muted + ";margin:0}",
+      ".action-foot{font-size:12px;color:" + BRAND.text + ";opacity:.88}",
+      ".fab{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border:0;border-radius:18px;",
+      "  cursor:pointer;display:grid;place-items:center;background:" + BRAND.accent + ";color:" + BRAND.accentInk + ";",
+      "  box-shadow:0 16px 44px rgba(191,255,0,.28);pointer-events:auto;transition:transform .15s ease}",
       ".fab:hover{transform:translateY(-2px)}",
+      ".fab[hidden]{display:none}",
       ".fab svg{width:24px;height:24px}",
-      ".panel{position:fixed;right:0;top:0;height:100vh;width:360px;max-width:92vw;",
+      ".panel,.library-drawer{position:fixed;right:0;top:0;height:100vh;width:380px;max-width:92vw;",
       "  transform:translateX(105%);transition:transform .22s cubic-bezier(.16,1,.3,1);",
-      "  background:" + BRAND.surface + ";color:" + BRAND.text + ";",
-      "  border-left:1px solid " + BRAND.border + ";display:flex;flex-direction:column;",
-      "  box-shadow:-18px 0 60px rgba(0,0,0,.45)}",
-      ".panel.open{transform:translateX(0)}",
-      ".hdr{display:flex;align-items:center;gap:10px;padding:14px 16px;",
-      "  border-bottom:1px solid " + BRAND.border + "}",
-      ".hdr .dot{width:8px;height:8px;border-radius:99px;background:" + BRAND.accent + "}",
-      ".hdr h2{margin:0;font-size:14px;font-weight:800;letter-spacing:.02em}",
-      ".hdr small{color:" + BRAND.muted + ";font-size:11px;margin-left:auto}",
-      ".x{margin-left:8px;background:transparent;border:0;color:" + BRAND.muted + ";",
-      "  cursor:pointer;font-size:18px;line-height:1}",
+      "  background:" + BRAND.surfaceStrong + ";color:" + BRAND.text + ";border-left:1px solid " + BRAND.border + ";",
+      "  box-shadow:-18px 0 60px rgba(0,0,0,.45);display:flex;flex-direction:column;pointer-events:auto}",
+      ".panel.open,.library-drawer.open{transform:translateX(0)}",
+      ".panel-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid " + BRAND.border + "}",
+      ".panel-head h2{margin:0;font-size:14px;font-weight:800;letter-spacing:.03em}",
+      ".panel-head small{margin-left:auto;color:" + BRAND.muted + ";font-size:11px}",
+      ".dot{width:8px;height:8px;border-radius:999px;background:" + BRAND.accent + "}",
+      ".close{margin-left:8px;background:transparent;border:0;color:" + BRAND.muted + ";cursor:pointer;font-size:20px;line-height:1}",
       ".log{flex:1;overflow:auto;padding:14px 16px;font-size:13px;color:" + BRAND.muted + "}",
-      ".log .msg{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:" + BRAND.bg + ";",
-      "  border:1px solid " + BRAND.border + ";color:" + BRAND.text + "}",
+      ".msg{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:" + BRAND.bg + ";border:1px solid " + BRAND.border + ";color:" + BRAND.text + "}",
       ".compose{display:flex;gap:8px;padding:12px 14px;border-top:1px solid " + BRAND.border + "}",
-      ".compose input{flex:1;min-width:0;background:" + BRAND.bg + ";color:" + BRAND.text + ";",
-      "  border:1px solid " + BRAND.border + ";border-radius:10px;padding:9px 11px;font-size:13px;outline:none}",
+      ".compose input{flex:1;min-width:0;background:" + BRAND.bg + ";color:" + BRAND.text + ";border:1px solid " + BRAND.border + ";border-radius:12px;padding:10px 12px;font-size:13px;outline:none}",
       ".compose input:focus{border-color:" + BRAND.primary + "}",
-      ".compose button{border:0;border-radius:10px;padding:0 14px;font-weight:800;cursor:pointer;",
-      "  background:" + BRAND.accent + ";color:" + BRAND.accentInk + "}",
+      ".compose button,.library-link{border:0;border-radius:12px;padding:0 14px;font-weight:800;cursor:pointer;background:" + BRAND.primary + ";color:" + BRAND.text + "}",
+      ".compose button:hover,.library-link:hover{background:" + BRAND.primaryHover + "}",
+      ".library-drawer{padding-bottom:12px}",
+      ".library-body{padding:14px 16px 18px;overflow:auto}",
+      ".library-note{margin:0 0 14px;color:" + BRAND.muted + ";font-size:13px;line-height:1.45}",
+      ".library-list{display:flex;flex-direction:column;gap:12px}",
+      ".library-item{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;padding:14px;border:1px solid " + BRAND.border + ";border-radius:16px;background:rgba(11,16,32,.92)}",
+      ".library-item h3{margin:0 0 6px;font-size:15px;line-height:1.25}",
+      ".library-item p{margin:0;color:" + BRAND.muted + ";font-size:12px;line-height:1.4}",
+      ".library-status{display:inline-flex;align-items:center;padding:5px 8px;margin-bottom:8px;border-radius:999px;background:rgba(37,99,235,.18);color:#bfdbfe;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
+      ".library-link{align-self:center;min-height:38px}",
+      ".library-empty{padding:16px;border:1px dashed " + BRAND.border + ";border-radius:14px;color:" + BRAND.muted + ";font-size:13px}",
+      "@media (max-width: 980px){.dashboard-shell{left:16px !important;width:min(calc(100vw - 32px),1120px)}.action-row{grid-template-columns:1fr}}",
       "</style>",
-      '<button class="fab" title="Nofida AI" aria-label="Nofida AI">',
-      '  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
-      '    <path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/><path d="M19 14l.8 2 .2.8 2 .8-2 .2-.2.8-.8 2-.8-2-.2-.8-2-.8 2-.2.2-.8z"/>',
-      "  </svg>",
-      "</button>",
-      '<aside class="panel" role="dialog" aria-label="Nofida AI assistant">',
-      '  <div class="hdr"><span class="dot"></span><h2>Nofida AI</h2><small id="t">bridge: …</small><button class="x" title="Close">×</button></div>',
-      '  <div class="log" id="log"><p class="msg">Опишите экран или компонент — я подготовлю слои на холсте. (v1: каркас, генерация подключается через AI bridge.)</p></div>',
-      '  <form class="compose" id="form"><input id="in" placeholder="Например: экран входа с формой" autocomplete="off"/><button type="submit">Send</button></form>',
-      "</aside>"
+      '<div class="layer">',
+      '  <section class="dashboard-shell" id="dashboard-shell" hidden>',
+      '    <div class="action-row">',
+      '      <button class="action-card" type="button" data-action="create">',
+      '        <span class="action-kicker">Nofida</span>',
+      '        <p class="action-title">Создать файл</p>',
+      '        <p class="action-copy">Быстрый вход в новый проект без зависимости от React-плейсхолдера.</p>',
+      '        <span class="action-foot">Нативный create flow Penpot</span>',
+      "      </button>",
+      '      <button class="action-card" type="button" data-action="import">',
+      '        <span class="action-kicker">Import</span>',
+      '        <p class="action-title">Импортировать .penpot</p>',
+      '        <p class="action-copy">Загрузка идет напрямую через нативный drop flow рабочего дашборда.</p>',
+      '        <span class="action-foot">Готово для локальных файлов</span>',
+      "      </button>",
+      '      <button class="action-card" type="button" data-action="libraries">',
+      '        <span class="action-kicker">Libraries</span>',
+      '        <p class="action-title">Каталог Nofida</p>',
+      '        <p class="action-copy">Локальный curated catalog из <code>/nofida/libraries/catalog.json</code>.</p>',
+      '        <span class="action-foot">Готово для внутреннего хранилища</span>',
+      "      </button>",
+      "    </div>",
+      "  </section>",
+      '  <button class="fab" id="fab" type="button" title="Nofida AI" aria-label="Nofida AI">',
+      '    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
+      '      <path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/><path d="M19 14l.8 2 .2.8 2 .8-2 .2-.2.8-.8 2-.8-2-.2-.8-2-.8 2-.2.2-.8z"/>',
+      "    </svg>",
+      "  </button>",
+      '  <aside class="panel" id="assistant-panel" role="dialog" aria-label="Nofida AI assistant">',
+      '    <div class="panel-head"><span class="dot"></span><h2>Nofida AI</h2><small id="transport">bridge: ...</small><button class="close" type="button" data-close="assistant">×</button></div>',
+      '    <div class="log" id="log"><p class="msg">Опишите экран, компонент или задачу. Shell уже изолирован в Shadow DOM и не зависит от гидратации Penpot.</p></div>',
+      '    <form class="compose" id="compose"><input id="prompt" placeholder="Например: onboarding screen with clean tokenized layout" autocomplete="off" /><button type="submit">Send</button></form>',
+      "  </aside>",
+      '  <aside class="library-drawer" id="library-drawer" role="dialog" aria-label="Nofida libraries">',
+      '    <div class="panel-head"><span class="dot"></span><h2>Nofida Libraries</h2><small>local catalog</small><button class="close" type="button" data-close="libraries">×</button></div>',
+      '    <div class="library-body">',
+      '      <p class="library-note">Каталог читается из локального JSON слоя. Когда vendored-файлы появятся в <code>branding/libraries/files</code>, эта панель уже сможет вести на внутренние URL.</p>',
+      '      <div class="library-list" id="library-list"><div class="library-empty">Загрузка каталога…</div></div>',
+      "    </div>",
+      "  </aside>",
+      '  <input id="import-file" type="file" accept=".penpot" multiple hidden />',
+      "</div>"
     ].join("");
 
-    var panel = root.querySelector(".panel");
-    var logEl = root.querySelector("#log");
-    var transportLabel = root.querySelector("#t");
-    if (bridge) transportLabel.textContent = "bridge: " + bridge.transport;
+    state.els.dashboard = state.root.getElementById("dashboard-shell");
+    state.els.fab = state.root.getElementById("fab");
+    state.els.panel = state.root.getElementById("assistant-panel");
+    state.els.transport = state.root.getElementById("transport");
+    state.els.log = state.root.getElementById("log");
+    state.els.form = state.root.getElementById("compose");
+    state.els.input = state.root.getElementById("prompt");
+    state.els.drawer = state.root.getElementById("library-drawer");
+    state.els.libraryList = state.root.getElementById("library-list");
+    state.els.importFile = state.root.getElementById("import-file");
+  }
 
-    function append(text) {
-      var p = document.createElement("p");
-      p.className = "msg";
-      p.textContent = text;
-      logEl.appendChild(p);
-      logEl.scrollTop = logEl.scrollHeight;
+  function appendLog(text) {
+    var p = document.createElement("p");
+    p.className = "msg";
+    p.textContent = text;
+    state.els.log.appendChild(p);
+    state.els.log.scrollTop = state.els.log.scrollHeight;
+  }
+
+  function toggleAssistant(forceOpen) {
+    var shouldOpen = typeof forceOpen === "boolean" ? forceOpen :
+      !state.els.panel.classList.contains("open");
+    state.els.panel.classList.toggle("open", shouldOpen);
+  }
+
+  function toggleLibraries(forceOpen) {
+    var shouldOpen = typeof forceOpen === "boolean" ? forceOpen :
+      !state.els.drawer.classList.contains("open");
+    state.els.drawer.classList.toggle("open", shouldOpen);
+    if (shouldOpen) loadLibraries();
+  }
+
+  function loadLibraries() {
+    if (state.catalog) {
+      state.els.libraryList.innerHTML = renderCatalog(state.catalog);
+      return;
+    }
+    state.els.libraryList.innerHTML = '<div class="library-empty">Загрузка каталога…</div>';
+    fetch(LIBRARIES_URL, { credentials: "same-origin" })
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (data) {
+        var items = data && Array.isArray(data.libraries) ? data.libraries.slice(0, 12) : [];
+        state.catalog = items;
+        state.els.libraryList.innerHTML = items.length ?
+          renderCatalog(items) :
+          '<div class="library-empty">Каталог пока пуст. Добавьте vendored-библиотеки в branding/libraries/files.</div>';
+      })
+      .catch(function () {
+        state.els.libraryList.innerHTML = '<div class="library-empty">Не удалось загрузить local catalog.</div>';
+      });
+  }
+
+  function findCreateButton() {
+    return document.querySelector(".main_ui_dashboard_projects__btn-primary") ||
+      document.querySelector(".main_ui_dashboard_placeholder__create-new") ||
+      Array.prototype.find.call(document.querySelectorAll("button"), function (button) {
+        return /новый проект|new project|new file|новый файл/i.test(button.textContent || "");
+      }) ||
+      null;
+  }
+
+  function handleCreate() {
+    var button = findCreateButton();
+    if (button) button.click();
+  }
+
+  function getImportTarget() {
+    return document.querySelector(GRID_SELECTOR) ||
+      document.querySelector(DASHBOARD_SELECTOR);
+  }
+
+  function handleImportFiles(fileList) {
+    var target = getImportTarget();
+    if (!target || !fileList || !fileList.length) return;
+    try {
+      var transfer = new DataTransfer();
+      Array.prototype.forEach.call(fileList, function (file) {
+        transfer.items.add(file);
+      });
+      target.dispatchEvent(new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer
+      }));
+    } catch (_) {
+      appendLog("⚠ Браузер не дал переслать import через DataTransfer.");
+    }
+  }
+
+  function updateDashboardPosition() {
+    if (!isDashboardRoute()) {
+      state.els.dashboard.hidden = true;
+      return;
     }
 
-    var api = {
-      version: "0.1.0",
-      bridge: bridge,
-      open: function () { panel.classList.add("open"); },
-      close: function () { panel.classList.remove("open"); },
-      toggle: function () { panel.classList.toggle("open"); },
-      log: append
-    };
+    var anchor = document.querySelector(GRID_SELECTOR) ||
+      document.querySelector(DASHBOARD_SELECTOR);
+    if (!anchor) {
+      state.els.dashboard.hidden = true;
+      return;
+    }
 
-    root.querySelector(".fab").addEventListener("click", api.toggle);
-    root.querySelector(".x").addEventListener("click", api.close);
-    root.querySelector("#form").addEventListener("submit", function (e) {
-      e.preventDefault();
-      var input = root.querySelector("#in");
-      var prompt = input.value.trim();
+    var rect = anchor.getBoundingClientRect();
+    state.els.dashboard.hidden = false;
+    state.els.dashboard.style.setProperty("--cards-left", window.scrollX + rect.left + "px");
+    state.els.dashboard.style.setProperty("--cards-top", window.scrollY + Math.max(rect.top, 148) + "px");
+    state.els.dashboard.style.setProperty("--cards-width", Math.max(rect.width, 280) + "px");
+  }
+
+  function updateRouteState() {
+    var assistantVisible = isAssistantRoute();
+    state.els.fab.hidden = !assistantVisible;
+    if (!assistantVisible) toggleAssistant(false);
+    updateDashboardPosition();
+  }
+
+  function wireEvents() {
+    state.els.fab.addEventListener("click", function () { toggleAssistant(); });
+    state.root.querySelectorAll("[data-close]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (button.getAttribute("data-close") === "libraries") toggleLibraries(false);
+        if (button.getAttribute("data-close") === "assistant") toggleAssistant(false);
+      });
+    });
+
+    state.root.querySelectorAll("[data-action]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var action = button.getAttribute("data-action");
+        if (action === "create") handleCreate();
+        if (action === "import") state.els.importFile.click();
+        if (action === "libraries") toggleLibraries(true);
+      });
+    });
+
+    state.els.importFile.addEventListener("change", function () {
+      handleImportFiles(state.els.importFile.files);
+      state.els.importFile.value = "";
+    });
+
+    state.els.form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var prompt = state.els.input.value.trim();
       if (!prompt) return;
-      append("→ " + prompt);
-      input.value = "";
-      // Hand the prompt to the bridge. v1 transport is a stub that logs;
-      // a later transport materializes real layers via the Penpot plugin API.
-      if (bridge) {
-        bridge.generateLayers({ prompt: prompt }).then(function (res) {
-          append("✓ " + (res && res.message ? res.message : "bridge stub acknowledged"));
-        });
-      } else {
-        append("⚠ AI bridge not loaded");
+      appendLog("→ " + prompt);
+      state.els.input.value = "";
+      if (!state.bridge || !state.bridge.generateLayers) {
+        appendLog("⚠ AI bridge not loaded");
+        return;
+      }
+      state.bridge.generateLayers({ prompt: prompt }).then(function (result) {
+        appendLog("✓ " + ((result && result.message) || "bridge acknowledged"));
+      });
+    });
+
+    state.root.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.classList.contains("library-link")) {
+        openExternal(target.getAttribute("data-href"));
       }
     });
 
-    return api;
-  }
+    window.addEventListener("hashchange", updateRouteState);
+    window.addEventListener("resize", updateRouteState);
 
-  // ── Release-notes modal killer ─────────────────────────────────────────────
-  // nofida-brand.css already hides these via [class*="main_ui_releases_v2_"]
-  // but the overlay div still intercepts pointer events if only display:none'd.
-  // We surgically remove the DOM nodes too. The MutationObserver handles the
-  // case where React renders the modal after our script has already run.
-  function killReleaseModals(root) {
-    root = root || document.body;
-    root.querySelectorAll('[class*="main_ui_releases_v2_"],[class*="release-notes"]')
-        .forEach(function (el) { el.parentNode && el.parentNode.removeChild(el); });
-  }
-
-  function watchForModals() {
-    var mo = new MutationObserver(function (mutations) {
-      mutations.forEach(function (m) {
-        m.addedNodes.forEach(function (node) {
-          if (node.nodeType !== 1) return;
-          var cls = (node.className || "").toString();
-          if (cls.indexOf("releases_v2") !== -1 || cls.indexOf("release-notes") !== -1) {
-            node.parentNode && node.parentNode.removeChild(node);
-          }
-          // Also sweep children (React sometimes mounts several levels at once)
-          killReleaseModals(node);
-        });
-      });
-      // Re-check action cards after every DOM batch (SPA route changes etc.)
-      scheduleRestoreCards();
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
-  }
-
-  // ── Dashboard action-card restorer ─────────────────────────────────────────
-  // Penpot only renders the 3-card placeholder (Create / Import / Add library)
-  // when has-other? = false (completely fresh workspace). The moment a user
-  // creates any non-default project the ClojureScript SPA switches to a single
-  // "+" create button. The real cards are absent from the DOM — not just hidden.
-  //
-  // This function detects those single-button containers, hides the "+" button
-  // (keeping it in the DOM so React still holds a valid ref), and injects a
-  // 3-card container using Penpot's own compiled CSS class names so the styling
-  // is always consistent with the active theme. Clicks are wired to the real
-  // native mechanisms:
-  //   Card 1 — programmatic click on the hidden native "+" button
-  //   Card 2 — hidden <input type="file"> → DragEvent on the grid div
-  //             (Penpot's React on-drop handler processes the FileList)
-  //   Card 3 — open PenpotHub (same URL Penpot uses natively)
-  function restoreActionCards() {
-    var CSS = {
-      ph:        "main_ui_dashboard_placeholder__grid-empty-placeholder",
-      createBtn: "main_ui_dashboard_placeholder__create-new",
-      grid:      "main_ui_dashboard_grid__dashboard-grid",
-      container: "main_ui_dashboard_placeholder__empty-project-container",
-      card:      "main_ui_dashboard_placeholder__empty-project-card",
-      cardTitle: "main_ui_dashboard_placeholder__empty-project-card-title",
-      cardSub:   "main_ui_dashboard_placeholder__empty-project-card-subtitle"
-    };
-
-    document.querySelectorAll("." + CSS.ph).forEach(function (ph) {
-      var btn = ph.querySelector("." + CSS.createBtn);
-      if (!btn) return; // native + button not present — nothing to restore
-
-      // If our container is already injected, nothing to do
-      if (ph.querySelector("." + CSS.container)) return;
-
-      // Find the parent grid div so we can dispatch a drop event for import
-      var gridEl = ph.closest("." + CSS.grid);
-
-      // Keep native button in DOM (React holds a ref), but remove it from view
-      btn.setAttribute("aria-hidden", "true");
-      btn.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;";
-
-      // Hidden file input — on change, forward files to Penpot's drop handler
-      var fi = document.createElement("input");
-      fi.type = "file";
-      fi.accept = ".penpot";
-      fi.multiple = true;
-      fi.style.cssText = "display:none";
-      fi.addEventListener("change", function () {
-        if (!fi.files || !fi.files.length || !gridEl) return;
-        try {
-          var dt = new DataTransfer();
-          Array.from(fi.files).forEach(function (f) { dt.items.add(f); });
-          gridEl.dispatchEvent(
-            new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt })
-          );
-        } catch (err) { /* DataTransfer not supported — graceful no-op */ }
-        fi.value = "";
-      });
-
-      function makeCard(title, subtitle, onClick) {
-        var card = document.createElement("div");
-        card.className = CSS.card;
-        card.setAttribute("role", "button");
-        card.setAttribute("tabindex", "0");
-        card.innerHTML =
-          '<div class="' + CSS.cardTitle + '">' + title + "</div>" +
-          '<div class="' + CSS.cardSub   + '">' + subtitle + "</div>";
-        card.addEventListener("click", onClick);
-        card.addEventListener("keydown", function (e) {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
-        });
-        return card;
-      }
-
-      var container = document.createElement("div");
-      container.className = CSS.container;
-
-      container.appendChild(makeCard(
-        "Создать новый файл",
-        "Начать создавать удивительные вещи",
-        function () { btn.click(); }
-      ));
-      container.appendChild(fi); // display:none — excluded from grid flow
-      container.appendChild(makeCard(
-        "Импортировать файл",
-        "Импорт .penpot файл",
-        function () { fi.click(); }
-      ));
-      container.appendChild(makeCard(
-        "Добавить библиотеку или шаблон",
-        "Рассмотрите варианты для добавления",
-        function () {
-          window.open(
-            "https://penpot.app/penpothub/libraries-templates",
-            "_blank",
-            "noopener,noreferrer"
-          );
-        }
-      ));
-
-      ph.appendChild(container);
-    });
-  }
-
-  // setTimeout(300) instead of RAF: RAF fires in the same rendering tick as
-  // the mutation, before React finishes reconciling. 300ms gives React time
-  // to complete its reconciliation pass so our injection sticks.
-  var restoreCardsTimer = null;
-  function scheduleRestoreCards() {
-    if (restoreCardsTimer) clearTimeout(restoreCardsTimer);
-    restoreCardsTimer = setTimeout(restoreActionCards, 300);
+    var appRoot = document.getElementById("app");
+    if (appRoot && "ResizeObserver" in window) {
+      var observer = new ResizeObserver(updateRouteState);
+      observer.observe(appRoot);
+    }
   }
 
   function start() {
-    applyBrandColors(); // second call — body now guaranteed to exist
-    if (document.body) {
-      // body might not have been available for themeWatcher setup above
-      try { themeWatcher.observe(document.body, { attributes: true, attributeFilter: ["class"] }); } catch (_) {}
-    }
-    killReleaseModals();
-    watchForModals();
-    // Initial card pass + a 1.5 s delayed pass to catch slow SPA hydration.
-    restoreActionCards();
-    setTimeout(restoreActionCards, 1500);
+    buildUI();
+    wireEvents();
+    updateRouteState();
     loadBridge().then(function (bridge) {
-      window.NofidaAICore = buildUI(bridge);
+      state.bridge = bridge;
+      if (bridge && bridge.transport) {
+        state.els.transport.textContent = "bridge: " + bridge.transport;
+      } else {
+        state.els.transport.textContent = "bridge: offline";
+      }
     });
+
+    window.NofidaAICore = {
+      open: function () { toggleAssistant(true); },
+      close: function () { toggleAssistant(false); },
+      toggle: function () { toggleAssistant(); },
+      openLibraries: function () { toggleLibraries(true); },
+      refreshCards: updateDashboardPosition,
+      log: appendLog
+    };
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start);
-  } else {
-    start();
-  }
+  onReady(start);
 })();

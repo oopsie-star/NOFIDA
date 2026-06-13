@@ -1,42 +1,105 @@
 /* ==========================================================================
-   Nofida brand override for Penpot 2.16.0
-   Verified against actual main.css from the pinned image.
-   Injected into <head> BEFORE app JS via branding/Dockerfile.
+   Nofida hard-lock theme override for Penpot 2.16.0
+   --------------------------------------------------------------------------
+   Penpot applies the dark theme variables on `.default`, which lands on the
+   <body>. A :root-only override loses because body-level variables override
+   inherited html variables. We therefore lock the brand tokens on:
+     html body.default, body.default, body.default .default, #app, #modal
+   and mark each variable !important so React/ClojureScript re-renders cannot
+   restore the stock palette through later .default rules.
    ========================================================================== */
 
-/* ── 1. Dark-theme base color token override ──────────────────────────────
-   Penpot's dark (default) theme uses these :root tokens.
-   We re-map them to our navy palette so every component that references
-   --color-background-* / --color-accent-* / --color-foreground-* picks up
-   the Nofida colours automatically via the existing cascade.             */
-:root {
-  /* Backgrounds */
-  --color-background-primary:    #0b1020;  /* was #18181a — deep navy bg    */
-  --color-background-secondary:  #060c18;  /* was #000    — darkest surface */
-  --color-background-tertiary:   #0f172a;  /* was #212426 — panel surface   */
-  --color-background-quaternary: #1f2937;  /* was #2e3434 — raised surface  */
-
-  /* Foreground */
-  --color-foreground-primary:   #f8fafc;   /* near-white text               */
-  --color-foreground-secondary: #94a3b8;   /* was #8f9da3 muted text        */
-
-  /* Accent — replace Penpot purple with Nofida blue + neon */
-  --color-accent-primary:       #2563eb;   /* was #6911d4 Penpot purple     */
-  --color-accent-secondary:     #1d4ed8;   /* was #1345aa                   */
-  --color-accent-tertiary:      #bfff00;   /* was #00d1b8 neon green        */
-  --color-accent-primary-muted: rgba(37, 99, 235, 0.18);  /* blue/10       */
-
-  /* Short aliases referenced in the first :root block */
-  --db-primary-60:   rgba(11, 16, 32, 0.6);
-  --df-secondary:    #94a3b8;
-  --da-tertiary-10:  rgba(191, 255, 0, 0.1);
-  --da-tertiary-70:  rgba(191, 255, 0, 0.7);
+html,
+body.default {
+  background-color: #0b1020 !important;
 }
 
-/* ── 2. Kill ALL Penpot release-notes / what's-new modals ────────────────
-   Targets every version (v2.0 through v2.16 and future ones) via the
-   shared class prefix. The rule is in <head> before JS executes so there
-   is zero flash-of-modal.                                                 */
+html body.default,
+body.default,
+body.default .default,
+body.default #app,
+body.default #modal {
+  --color-background-default: #0b1020 !important;
+  --color-background-primary: #0b1020 !important;
+  --color-background-secondary: #060c18 !important;
+  --color-background-tertiary: #131e35 !important;
+  --color-background-quaternary: #1f2937 !important;
+
+  --color-foreground-primary: #f8fafc !important;
+  --color-foreground-secondary: #94a3b8 !important;
+  --color-foreground-error: #ff6b8f !important;
+
+  --color-accent-primary: #2563eb !important;
+  --color-accent-primary-muted: rgba(37, 99, 235, 0.18) !important;
+  --color-accent-secondary: #1d4ed8 !important;
+  --color-accent-tertiary: #bfff00 !important;
+  --color-accent-quaternary: #7dd3fc !important;
+  --color-accent-overlay: rgba(37, 99, 235, 0.48) !important;
+  --color-accent-select: rgba(37, 99, 235, 0.12) !important;
+  --color-accent-background-select: rgba(37, 99, 235, 0.32) !important;
+  --color-accent-action: #60a5fa !important;
+  --color-accent-action-hover: #93c5fd !important;
+  --color-accent-off: #e2e8f0 !important;
+  --color-accent-success: #22c55e !important;
+  --color-accent-warning: #f59e0b !important;
+  --color-accent-error: #f43f5e !important;
+  --color-accent-info: #38bdf8 !important;
+  --color-accent-default: #1f2937 !important;
+
+  --color-background-success: #072d1e !important;
+  --color-background-warning: #3d2501 !important;
+  --color-background-error: #4a1123 !important;
+  --color-background-info: #0f2c4d !important;
+  --color-background-disabled: #1f2937 !important;
+  --color-icon-default: #94a3b8 !important;
+  --color-shadow-dark: rgba(2, 6, 23, 0.72) !important;
+  --color-shadow-light: rgba(2, 6, 23, 0.36) !important;
+  --color-overlay-default: rgba(6, 12, 24, 0.72) !important;
+  --color-overlay-onboarding: rgba(6, 12, 24, 0.92) !important;
+  --color-token-background: #0f1730 !important;
+  --color-token-border: #1d4ed8 !important;
+  --color-token-accent: #60a5fa !important;
+  --color-token-foreground: #dbeafe !important;
+
+  --canvas-background-color: #0b1020 !important;
+  --panel-background-color: #131e35 !important;
+  --app-background: #0b1020 !important;
+  --loader-background: #0b1020 !important;
+  --menu-background-color: #131e35 !important;
+  --modal-background-color: #10192f !important;
+  --modal-border-color: rgba(37, 99, 235, 0.24) !important;
+  --sidebar-element-background-color-hover: #131e35 !important;
+  --sidebar-element-background-color-selected: rgba(37, 99, 235, 0.16) !important;
+  --sidebar-element-foreground-color-hover: #f8fafc !important;
+  --sidebar-element-foreground-color-selected: #bfff00 !important;
+  --search-bar-background-color: #131e35 !important;
+  --input-background-color: #131e35 !important;
+  --input-background-color-active: #131e35 !important;
+  --input-background-color-disabled: #10192f !important;
+  --low-emphasis-background: #10192f !important;
+
+  --button-primary-background-color-rest: #2563eb !important;
+  --button-primary-border-color-rest: #2563eb !important;
+  --button-primary-background-color-hover: #1d4ed8 !important;
+  --button-primary-border-color-hover: #1d4ed8 !important;
+  --button-primary-foreground-color-rest: #f8fafc !important;
+  --button-primary-foreground-color-hover: #f8fafc !important;
+
+  --font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+
+body.default,
+body.default #app,
+body.default #modal,
+body.default .main_ui_dashboard__dashboard-content,
+body.default .main_ui_auth__auth-page-container,
+body.default .main_ui_auth_login__login-section,
+body.default .main_ui_auth__auth-page-right {
+  background-color: #0b1020 !important;
+  color: #f8fafc !important;
+}
+
+body.default li[data-testid="release-notes"],
 [class*="main_ui_releases_v2_"],
 [class*="main_ui_release_notes_"],
 [class*="release-notes"] {
@@ -45,92 +108,24 @@
   pointer-events: none !important;
 }
 
-/* ── 3. Logo swap ──────────────────────────────────────────────────────────
-   Hide the Penpot SVG logo and replace with the Nofida wordmark.
-   Selectors captured from Penpot 2.16 DOM; add more if needed.           */
 .main_ui_main__app-logo,
 .main_ui_dashboard__home-logo,
 .main_ui_workspace__main-toolbar .main_ui_workspace__logo-section > a,
 a[href="/"].main_ui_main__logo-link {
+  display: inline-flex !important;
+  min-width: 128px;
+  min-height: 32px;
   background-image: url("/nofida/brand/logo.svg") !important;
   background-repeat: no-repeat !important;
   background-position: left center !important;
   background-size: contain !important;
-  min-width: 110px;
-  min-height: 32px;
-  display: inline-flex !important;
-}
-.main_ui_main__app-logo svg,
-.main_ui_dashboard__home-logo svg,
-.main_ui_workspace__logo-section > a > svg {
-  visibility: hidden !important;
 }
 
-/* Fallback broad-target for any <a> wrapping the Penpot SVG */
+.main_ui_main__app-logo svg,
+.main_ui_dashboard__home-logo svg,
+.main_ui_workspace__logo-section > a > svg,
 header a svg[class*="penpot"],
 nav a svg[class*="logo"],
 .logo-wrapper svg {
   visibility: hidden !important;
-}
-
-/* ── 4. Component-level overrides (semantic color vars) ───────────────────
-   These vars are set by the .light/.default block and reference the base
-   tokens above. The base token override in :root handles most of these
-   automatically; add specific overrides here only if something still bleeds
-   through.                                                                 */
-
-/* Workspace canvas outer background (the grey grid border) */
-:root {
-  --canvas-background-color: #0b1020;
-  --panel-background-color:  #0f172a;
-  --app-background:          #0b1020;
-  --loader-background:       #0b1020;
-  --menu-background-color:   #0f172a;
-
-  /* Accent button colour */
-  --button-primary-background-color-rest:  #2563eb;
-  --button-primary-border-color-rest:      #2563eb;
-  --button-primary-background-color-hover: #1d4ed8;
-  --button-primary-border-color-hover:     #1d4ed8;
-}
-
-/* ── 5. Auth / login page ─────────────────────────────────────────────────*/
-.main_ui_auth__auth-page-container,
-.main_ui_auth_login__login-section,
-.main_ui_auth__auth-page-right {
-  background-color: #0b1020 !important;
-}
-
-/* ── 6. Dashboard empty-project action cards ──────────────────────────────
-   Two issues fixed here:
-
-   a) Contrast: --color-background-tertiary (#0f172a) is virtually invisible
-      against the page background (#0b1020). Card bg raised to #131e35.
-
-   b) Button visibility: when our JS restores the 3-card container, we hide
-      the native single "+" button with a :has() rule. React controls the DOM
-      but NOT the CSS cascade — so this rule survives any re-render.        */
-.main_ui_dashboard_placeholder__empty-project-card {
-  --color-card-background: #131e35;
-  border-color: rgba(37, 99, 235, 0.22) !important;
-  min-height: 100px;
-}
-
-.main_ui_dashboard_placeholder__empty-project-card:hover {
-  --color-card-title:    var(--color-foreground-primary);
-  --color-card-subtitle: rgba(248, 250, 252, 0.80);
-}
-
-/* Hide the native "+" button whenever our 3-card container is present.
-   :has() is supported in Chrome 105+, Firefox 121+, Safari 15.4+.
-   React owns the DOM — React does NOT own the CSS cascade.              */
-.main_ui_dashboard_placeholder__grid-empty-placeholder:has(
-  .main_ui_dashboard_placeholder__empty-project-container
-) > .main_ui_dashboard_placeholder__create-new {
-  display: none !important;
-}
-
-/* ── 7. Font stack ────────────────────────────────────────────────────────*/
-:root {
-  --font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
