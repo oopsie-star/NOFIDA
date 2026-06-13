@@ -21,7 +21,7 @@ ARG WEBROOT=/var/www/app
 COPY brand/     ${WEBROOT}/nofida/brand/
 COPY ai-core/   ${WEBROOT}/nofida/ai-core/
 COPY libraries/ ${WEBROOT}/nofida/libraries/
-COPY scripts/patch-frontend.sh /usr/local/bin/patch-frontend.sh
+COPY --chmod=755 scripts/patch-frontend.sh /usr/local/bin/patch-frontend.sh
 
 # ── nginx override: serve /nofida/* as plain static files ───────────────────
 # Without this, Penpot's catch-all `location ~ ^/[^/]+/(.*){return 301 /404}`
@@ -31,7 +31,6 @@ COPY nginx/nofida.conf /etc/nginx/overrides/location.d/nofida.conf
 # ── Build-time white-label patching ─────────────────────────────────────────
 # We patch index.html + compiled assets ONCE at image build time instead of
 # fighting the SPA after hydration with timers or DOM observers.
-RUN chmod +x /usr/local/bin/patch-frontend.sh && \
-    /usr/local/bin/patch-frontend.sh "${WEBROOT}"
+RUN /usr/local/bin/patch-frontend.sh "${WEBROOT}"
 
 # ── nginx + original entrypoint (config.js templating) inherited unchanged ──
