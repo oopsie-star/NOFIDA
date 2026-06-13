@@ -3,7 +3,6 @@ set -eu
 
 WEBROOT="${1:-/var/www/app}"
 INDEX="${WEBROOT}/index.html"
-MAIN_JS="${WEBROOT}/js/main.js"
 
 if [ ! -f "${INDEX}" ]; then
   echo "index.html not found in ${WEBROOT}" >&2
@@ -47,32 +46,3 @@ find "${WEBROOT}" \
     -e 's/(^|[^[:alnum:]_])Penpot([^[:alnum:]_]|$)/\1Nofida\2/g' \
     "${file}"
 done
-
-# Hard-disable release notes at bundle level so the modal component can never
-# mount, even if Penpot decides to toggle its internal state again later.
-if [ -f "${MAIN_JS}" ]; then
-  awk '
-    BEGIN {
-      start = "$app$main$ui$releases$release_notes_modal$$=function"
-      finish = "$app$main$ui$workspace_legacy_redirect_STAR_$$="
-      replacement = "$app$main$ui$releases$release_notes_modal$$=function(){return null},"
-      skipping = 0
-    }
-    {
-      if (!skipping && index($0, start)) {
-        skipping = 1
-      }
-
-      if (skipping) {
-        marker = index($0, finish)
-        if (marker > 0) {
-          print replacement substr($0, marker)
-          skipping = 0
-        }
-        next
-      }
-
-      print
-    }
-  ' "${MAIN_JS}" > "${MAIN_JS}.tmp" && mv "${MAIN_JS}.tmp" "${MAIN_JS}"
-fi
