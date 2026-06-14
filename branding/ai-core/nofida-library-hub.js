@@ -88,35 +88,82 @@
   };
 
   /* ============================================================
-   * MINIMAL TRANSIT-JSON DECODER
-   * Penpot's API responses use transit+json.  We only need the
-   * common subset: maps, UUIDs, keywords, arrays.
+   * TRANSIT-JSON DECODER  (with key-caching support)
+   * Penpot uses transit+json with key caching for repeated keys:
+   *   first map:    ["^ ","~:id","~u...","~:name","Foo",...]
+   *   second map:   ["^ ","^0","~u...","^5","Bar",...]
+   *     where "^0" = cached "id", "^5" = cached "name"
+   * Cache indices use base-44: 0-9 → '0'-'9', 10-35 → 'A'-'Z', 36-43 → 'a'-'g'.
    * ========================================================== */
-  function decodeTransit(v) {
-    if (typeof v === "string") {
-      if (v.startsWith("~u "))  return v.slice(3);   // UUID  → plain string
-      if (v.startsWith("~:"))   return v.slice(2);   // keyword → string
+  function makeTransitDecoder() {
+    var cache = [];
+
+    function cacheIdx(ref) {
+      /* ref is the 1+ chars after "^" */
+      if (ref.length === 0) return -1;
+      var c = ref.charCodeAt(0);
+      var base;
+      if (c >= 48 && c <= 57)  base = c - 48;        /* '0'-'9' → 0-9  */
+      else if (c >= 65 && c <= 90) base = c - 65 + 10; /* 'A'-'Z' → 10-35 */
+      else if (c >= 97 && c <= 109) base = c - 97 + 36; /* 'a'-'n' → 36-50 */
+      else return -1;
+      if (ref.length === 1) return base;
+      /* multi-char: rare but handle 2-char indices */
+      var c2 = ref.charCodeAt(1);
+      var base2;
+      if (c2 >= 48 && c2 <= 57)  base2 = c2 - 48;
+      else if (c2 >= 65 && c2 <= 90) base2 = c2 - 65 + 10;
+      else if (c2 >= 97 && c2 <= 109) base2 = c2 - 97 + 36;
+      else return -1;
+      return base * 44 + base2;
+    }
+
+    function decode(v) {
+      if (typeof v === "string") {
+        /* cache ref: "^X" where X is one or two base-44 chars */
+        if (v.length >= 2 && v[0] === "^") {
+          var idx = cacheIdx(v.slice(1));
+          if (idx >= 0 && idx < cache.length) return cache[idx];
+          return v; /* unknown ref — return as-is */
+        }
+        /* UUID — strip "~u" prefix (Penpot uses no-space variant) */
+        if (v.startsWith("~u") && v.length > 2 && /[0-9a-f-]/i.test(v[2])) return v.slice(2);
+        if (v.startsWith("~u ")) return v.slice(3);
+        /* keyword — strip "~:" and add to cache */
+        if (v.startsWith("~:")) {
+          var kw = v.slice(2);
+          cache.push(kw);
+          return kw;
+        }
+        return v;
+      }
+      if (Array.isArray(v)) {
+        if (v.length > 0 && v[0] === "^ ") {
+          /* transit map: ["^ ", k1, v1, k2, v2, …] */
+          var obj = {};
+          for (var i = 1; i < v.length - 1; i += 2) {
+            obj[String(decode(v[i]))] = decode(v[i + 1]);
+          }
+          return obj;
+        }
+        return v.map(decode);
+      }
+      if (v !== null && typeof v === "object") {
+        var r = {};
+        Object.keys(v).forEach(function (k) {
+          r[String(decode(k))] = decode(v[k]);
+        });
+        return r;
+      }
       return v;
     }
-    if (Array.isArray(v)) {
-      if (v.length > 0 && v[0] === "^ ") {
-        /* transit map: ["^ ", k1, v1, k2, v2 …] */
-        var obj = {};
-        for (var i = 1; i < v.length - 1; i += 2) {
-          obj[String(decodeTransit(v[i]))] = decodeTransit(v[i + 1]);
-        }
-        return obj;
-      }
-      return v.map(decodeTransit);
-    }
-    if (v !== null && typeof v === "object") {
-      var r = {};
-      Object.keys(v).forEach(function (k) {
-        r[String(decodeTransit(k))] = decodeTransit(v[k]);
-      });
-      return r;
-    }
-    return v;
+
+    return decode;
+  }
+
+  /* Decode a single transit+json response (fresh cache per response) */
+  function decodeTransit(v) {
+    return makeTransitDecoder()(v);
   }
 
   /* ============================================================
@@ -139,13 +186,56 @@
     return m ? m[1] : null;
   }
 
+  /* Async version: tries URL first, then Penpot profile API, then DOM links */
+  function resolveTeamId() {
+    var fromUrl = getTeamId();
+    if (fromUrl) {
+      S.teamId = fromUrl;
+      return Promise.resolve(fromUrl);
+    }
+    if (S.teamId) return Promise.resolve(S.teamId);
+
+    /* Try DOM links like /dashboard/team/<uuid>/ */
+    var links = document.querySelectorAll("a[href]");
+    for (var li = 0; li < links.length; li++) {
+      var hm = (links[li].getAttribute("href") || "").match(
+        /dashboard\/team\/([0-9a-f-]{36})/
+      );
+      if (hm) { S.teamId = hm[1]; return Promise.resolve(hm[1]); }
+    }
+
+    /* Fall back to Penpot profile API → default-team-id */
+    return fetch("/api/rpc/command/get-profile", {
+      credentials: "include",
+      headers: { Accept: "application/transit+json" }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (raw) {
+        if (!raw) return null;
+        var decoded = decodeTransit(raw);
+        /* transit key is "default-team-id" */
+        var tid = decoded["default-team-id"] || decoded["defaultTeamId"];
+        if (tid) {
+          S.teamId = tid;
+          /* Also push the team into the URL hash so future calls use URL path */
+          if (!getTeamId() && /^#\/dashboard/.test(window.location.hash || "")) {
+            history.replaceState(null, "",
+              window.location.pathname +
+              "#/dashboard/team/" + tid + "/projects");
+          }
+        }
+        return tid || null;
+      })
+      .catch(function () { return null; });
+  }
+
   function loadTeamProjects(teamId) {
     return apiGet("/api/rpc/command/get-all-projects?team_id=" + teamId)
       .then(function (v) { return Array.isArray(v) ? v : []; });
   }
 
   function loadProjectFiles(projectId) {
-    return apiGet("/api/rpc/command/get-project-files?project_id=" + projectId)
+    return apiGet("/api/rpc/command/get-project-files?project-id=" + projectId)
       .then(function (v) { return Array.isArray(v) ? v : []; });
   }
 
@@ -174,7 +264,11 @@
           Accept: "application/transit+json"
         },
         body: JSON.stringify(
-          ["^ ", "~:team-id", "~u " + teamId, "~:name", HUB_PROJECT]
+          /* Penpot encodes UUIDs as "~u<uuid>" WITHOUT a space.
+             Standard transit uses "~u <uuid>" (with space) but
+             Penpot's server-side decoder strips exactly 2 chars ("~u"),
+             so a leading space makes the UUID 37 chars → "too large".  */
+          ["^ ", "~:team-id", "~u" + teamId, "~:name", HUB_PROJECT]
         )
       })
         .then(function (r) { return r.json().then(decodeTransit); })
@@ -215,8 +309,20 @@
   function detectInstalledItems(teamId, catalog) {
     var cache = readCache(teamId, catalog);
 
+    /* If we already have a hubProjectId, include it directly even if
+       get-all-projects has a propagation delay and doesn't list it yet. */
+    var extraProjects = S.hubProjectId ? [{ id: S.hubProjectId, name: HUB_PROJECT }] : [];
+
     return loadTeamProjects(teamId).then(function (projects) {
-      var fileRequests = projects.map(function (proj) {
+      /* Merge hub project into the list (dedup by id) */
+      var merged = projects.slice();
+      extraProjects.forEach(function (ep) {
+        if (!merged.some(function (p) { return p.id === ep.id; })) {
+          merged.push(ep);
+        }
+      });
+
+      var fileRequests = merged.map(function (proj) {
         return loadProjectFiles(proj.id)
           .then(function (files) { return { proj: proj, files: files }; })
           .catch(function () { return { proj: proj, files: [] }; });
@@ -240,7 +346,7 @@
 
       var installed = {};
       catalog.forEach(function (item) {
-        /* 1. Validate / promote cached entry */
+        /* 1. Validate / promote cached entry against live API */
         if (cache[item.id] && liveIds[cache[item.id].fileId]) {
           installed[item.id] = cache[item.id];
           return;
@@ -281,6 +387,59 @@
     return item.internal_url && !item.import_skip_reason && item.status === "available";
   }
 
+  /* Read the SSE (Server-Sent Events) response from import-binfile and
+     return the first file-id found in any progress or end event.
+     Events look like:
+       event: progress
+       data: {"~:section":"~:file","~:file-id":"~u<uuid>"}   */
+  function readSSEFileId(response) {
+    /* Prefer streaming reader if available */
+    if (response.body && response.body.getReader) {
+      var reader  = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buf     = "";
+      var fileId  = null;
+
+      function pump() {
+        return reader.read().then(function (chunk) {
+          if (chunk.done) return fileId;
+          buf += decoder.decode(chunk.value, { stream: true });
+          /* Each SSE data line is:  data: {...}\n */
+          var lines = buf.split("\n");
+          buf = lines.pop(); /* keep partial last line */
+          lines.forEach(function (line) {
+            if (!line.startsWith("data:")) return;
+            var json = line.slice(5).trim();
+            if (!json) return;
+            try {
+              var obj = decodeTransit(JSON.parse(json));
+              /* The file-id is either "file-id" or buried in a section */
+              if (obj["file-id"]) fileId = obj["file-id"];
+            } catch (_) { /* ignore parse errors */ }
+          });
+          if (fileId) { reader.cancel(); return fileId; }
+          return pump();
+        });
+      }
+      return pump();
+    }
+
+    /* Fallback: read entire body as text and scan for file-id */
+    return response.text().then(function (text) {
+      var fileId = null;
+      text.split("\n").forEach(function (line) {
+        if (!line.startsWith("data:")) return;
+        var json = line.slice(5).trim();
+        if (!json) return;
+        try {
+          var obj = decodeTransit(JSON.parse(json));
+          if (obj["file-id"]) fileId = obj["file-id"];
+        } catch (_) { /* ignore */ }
+      });
+      return fileId;
+    });
+  }
+
   function importItem(item, teamId) {
     if (S.importing[item.id]) return Promise.reject(new Error("Already importing"));
     if (!canImport(item))     return Promise.reject(new Error("Item not importable"));
@@ -299,9 +458,7 @@
           return r.blob();
         }).then(function (blob) {
           var fd = new FormData();
-          fd.append("name",       item.title || item.id);
-          /* Penpot 2.16 RPC handler accepts both kebab and underscore for
-             multipart fields — include both to be safe.                    */
+          fd.append("name",        item.title || item.id);
           fd.append("project-id",  projectId);
           fd.append("project_id",  projectId);
           fd.append("file", blob, item.id + ".penpot");
@@ -317,12 +474,12 @@
               throw new Error("Import API " + r.status + ": " + t.slice(0, 200));
             });
           }
-          return r.json().then(decodeTransit);
-        }).then(function (result) {
-          /* result may be a single object or an array of objects */
-          var fileObj = Array.isArray(result) ? result[0] : result;
-          var fileId  = fileObj && (fileObj.id || fileObj["id"]);
-          if (!fileId) throw new Error("No file ID in import response");
+          /* import-binfile returns SSE (text/event-stream), not JSON.
+             We read the full stream as text and extract the file-id from
+             the last progress or end event that contains one.             */
+          return readSSEFileId(r);
+        }).then(function (fileId) {
+          if (!fileId) throw new Error("No file-id in import SSE stream");
 
           var entry = { fileId: fileId, projectId: projectId };
           S.installed[item.id] = entry;
@@ -650,13 +807,14 @@
       var item   = S.catalog && S.catalog.find(function (i) { return i.id === itemId; });
       if (!item) return;
 
-      var tid = S.teamId || getTeamId();
-      if (!tid && (act === "add")) {
-        showMsg("Не удалось определить текущую команду. Перейдите на дашборд.");
-        return;
-      }
       if (act === "add") {
-        importItem(item, tid);
+        resolveTeamId().then(function (tid) {
+          if (!tid) {
+            showMsg("Не удалось определить текущую команду. Перейдите на дашборд и попробуйте снова.");
+            return;
+          }
+          importItem(item, tid);
+        });
       } else if (act === "open") {
         openFile(item);
       }
@@ -667,10 +825,13 @@
 
   function showHub() {
     var overlay = buildOverlay();
-    state_teamId_refresh();
     overlay.removeAttribute("hidden");
     document.body.style.overflow = "hidden";
-    loadCatalogAndInstalled();
+    /* Resolve team ID async — needed when user lands on /#/dashboard without UUID */
+    resolveTeamId().then(function (tid) {
+      if (tid && !S.teamId) S.teamId = tid;
+      loadCatalogAndInstalled();
+    });
   }
 
   function hideHub() {
@@ -697,8 +858,6 @@
    * CATALOG LOAD + INSTALLED DETECT
    * ========================================================== */
   function loadCatalogAndInstalled() {
-    var tid = S.teamId || getTeamId();
-
     var catalogP = S.catalog
       ? Promise.resolve(S.catalog)
       : fetch(CATALOG_URL, { credentials: "same-origin" })
@@ -711,11 +870,13 @@
     catalogP.then(function (catalog) {
       updateStatusBar();
       refreshGrid();
-
-      if (!tid) return;
-      return detectInstalledItems(tid, catalog).then(function () {
-        refreshGrid();
-        updateStatusBar();
+      /* Resolve team ID now (async, handles new users without team UUID in URL) */
+      return resolveTeamId().then(function (tid) {
+        if (!tid) return;
+        return detectInstalledItems(tid, catalog).then(function () {
+          refreshGrid();
+          updateStatusBar();
+        });
       });
     }).catch(function (err) {
       console.warn("[NofidaHub] catalog load error:", err.message);
@@ -915,7 +1076,9 @@
    * ========================================================== */
   function onHashChange() {
     var hash = window.location.hash || "";
-    state_teamId_refresh();
+    /* Sync URL-based team ID (may still be null for fresh users) */
+    var fromUrl = getTeamId();
+    if (fromUrl) S.teamId = fromUrl;
 
     if (hash === HUB_HASH || hash.indexOf(HUB_HASH + "/") === 0) {
       showHub();
@@ -933,8 +1096,10 @@
     if (isDashboard()) {
       S.sidebarInjected = false;
       S.galleryPatched  = false;
-      /* Small delay so Penpot's React can commit the new DOM nodes */
-      setTimeout(runChecks, 600);
+      /* Resolve team ID then inject; delay for Penpot React to commit new DOM */
+      setTimeout(function () {
+        resolveTeamId().then(function () { runChecks(); });
+      }, 600);
     }
   }
 
@@ -957,7 +1122,8 @@
    * INIT
    * ========================================================== */
   function init() {
-    state_teamId_refresh();
+    /* Eagerly resolve team ID (async, covers new users without UUID in URL) */
+    resolveTeamId();
 
     buildOverlay();          /* pre-build hidden overlay */
     startObserver();         /* watch DOM for sidebar/gallery */
@@ -969,14 +1135,16 @@
     if (h === HUB_HASH || h.indexOf(HUB_HASH + "/") === 0) {
       showHub();
     } else if (isDashboard()) {
-      runChecks();
+      /* Re-run sidebar injection after team ID resolves */
+      resolveTeamId().then(function () { runChecks(); });
     }
 
     /* Expose global API for other scripts / console */
     window.NofidaLibraryHub = {
       open:    function () {
-        state_teamId_refresh();
-        window.location.hash = "/nofida/libraries";
+        resolveTeamId().then(function () {
+          window.location.hash = "/nofida/libraries";
+        });
       },
       close:   hideHub,
       reload:  function () {
