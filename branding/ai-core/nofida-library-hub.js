@@ -240,22 +240,23 @@
   }
 
   /* Find or lazily create the per-team "NOFIDA Hub" project.
-     Result is a project id string (UUID). */
+     Result is a project id string (UUID).
+     If multiple "NOFIDA Hub" projects exist (e.g. from failed previous runs),
+     we always use the OLDEST one (lowest created-at timestamp). */
   function ensureHubProject(teamId) {
     if (S.hubProjectId) return Promise.resolve(S.hubProjectId);
     return loadTeamProjects(teamId).then(function (projects) {
-      var existing = null;
-      for (var i = 0; i < projects.length; i++) {
-        if (projects[i].name === HUB_PROJECT) {
-          existing = projects[i];
-          break;
-        }
+      /* Collect ALL hub projects and sort by creation time ascending */
+      var hubProjects = projects.filter(function (p) { return p.name === HUB_PROJECT; });
+      hubProjects.sort(function (a, b) {
+        /* created-at is a millisecond timestamp; sort oldest first */
+        return ((a["created-at"] || 0) - (b["created-at"] || 0));
+      });
+      if (hubProjects.length > 0) {
+        S.hubProjectId = hubProjects[0].id;
+        return hubProjects[0].id;
       }
-      if (existing) {
-        S.hubProjectId = existing.id;
-        return existing.id;
-      }
-      /* Create project via transit+json POST */
+      /* No hub project yet — create one */
       return fetch("/api/rpc/command/create-project", {
         method: "POST",
         credentials: "include",
@@ -511,6 +512,24 @@
   /* ============================================================
    * CARD / GRID RENDERING
    * ========================================================== */
+  /* Human-readable type labels */
+  var TYPE_LABELS = {
+    "design-system": "Дизайн-система",
+    "icon-set":      "Иконки",
+    "ui-kit":        "UI кит",
+    "library":       "Библиотека",
+    "template":      "Шаблон",
+    "ux":            "UX"
+  };
+
+  /* Is this item a reusable shared library (not just a template file)? */
+  function isLibraryType(item) {
+    return item.type === "design-system" ||
+           item.type === "icon-set" ||
+           item.type === "ui-kit" ||
+           item.type === "library";
+  }
+
   function itemAction(item) {
     if (S.importing[item.id])         return "importing";
     if (S.installed[item.id])         return "open";
@@ -529,21 +548,34 @@
 
   function renderCard(item) {
     var action   = itemAction(item);
-    var typeStr  = e(item.type || "library");
+    var typeStr  = e(TYPE_LABELS[item.type] || item.type || "библиотека");
     var titleStr = e(item.title || item.id);
     var author   = item.author ? "Автор: " + e(item.author) : "";
     var sizeStr  = item.size_bytes
       ? (item.size_bytes / 1048576).toFixed(1) + " МБ"
       : "";
+    var isLib = isLibraryType(item);
 
     /* status badge */
     var badge = "";
     if (S.installed[item.id]) {
-      badge = '<span class="nhb-badge nhb-ok">Уже добавлено</span>';
+      badge = isLib
+        ? '<span class="nhb-badge nhb-ok">Библиотека добавлена</span>'
+        : '<span class="nhb-badge nhb-ok">Шаблон добавлен</span>';
     } else if (action === "review") {
-      badge = '<span class="nhb-badge nhb-warn">Лицензия</span>';
-    } else if (action === "skip" || action === "unavailable") {
+      badge = '<span class="nhb-badge nhb-warn">Лицензия на проверке</span>';
+    } else if (action === "skip") {
+      badge = '<span class="nhb-badge nhb-dim">' +
+        e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason) + '</span>';
+    } else if (action === "unavailable") {
       badge = '<span class="nhb-badge nhb-dim">Недоступно</span>';
+    }
+
+    /* project location info (shown after install) */
+    var locationHint = "";
+    if (S.installed[item.id]) {
+      locationHint = '<div class="nhb-location">📁 Проект: <strong>' +
+        e(HUB_PROJECT) + '</strong></div>';
     }
 
     /* action button */
@@ -552,15 +584,15 @@
     var btnDis   = "";
     switch (action) {
       case "add":
-        btnLabel = "Добавить в моё пространство";
+        btnLabel = isLib ? "Добавить библиотеку" : "Добавить шаблон";
         btnMod   = "nhb-btn-add";
         break;
       case "open":
-        btnLabel = "Открыть";
+        btnLabel = isLib ? "Открыть файл библиотеки" : "Открыть шаблон";
         btnMod   = "nhb-btn-open";
         break;
       case "importing":
-        btnLabel = "Добавление…";
+        btnLabel = "Добавляем…";
         btnMod   = "nhb-btn-dim nhb-spin";
         btnDis   = "disabled";
         break;
@@ -588,10 +620,11 @@
       '  </div>',
       '  <h3 class="nhb-card-title">' + titleStr + '</h3>',
       '  <div class="nhb-meta">',
-      author   ? '<span>' + author   + '</span>' : '',
-      sizeStr  ? '<span>' + e(sizeStr)  + '</span>' : '',
-      item.license ? '<span>' + e(item.license) + '</span>' : '',
+      author   ? '<span>' + author + '</span>' : '',
+      sizeStr  ? '<span>' + e(sizeStr) + '</span>' : '',
+      item.license ? '<span>Лицензия: ' + e(item.license) + '</span>' : '',
       '  </div>',
+      locationHint,
       '  <button class="nhb-btn ' + btnMod + '"',
       '    data-act="' + action + '" data-id="' + e(item.id) + '"',
       '    type="button" ' + btnDis + '>',
@@ -737,6 +770,13 @@
       "cursor:not-allowed;opacity:.75}",
     ".nhb-spin{animation:nhb-pulse 1.1s ease-in-out infinite}",
     "@keyframes nhb-pulse{0%,100%{opacity:.65}50%{opacity:1}}",
+    /* location hint shown after install */
+    ".nhb-location{font-size:11px;color:" + BRAND.muted + ";padding:4px 0}",
+    ".nhb-location strong{color:" + BRAND.accent + "}",
+    /* open-hub-project link */
+    ".nhb-open-proj{background:0;border:0;color:" + BRAND.muted + ";font-size:12px;",
+      "cursor:pointer;padding:4px 8px;border-radius:8px;text-decoration:underline;font-family:inherit}",
+    ".nhb-open-proj:hover{color:" + BRAND.text + "}",
     "@media(max-width:640px){.nhb-inner{padding:16px}.nhb-grid{grid-template-columns:1fr}}"
   ].join("");
 
@@ -764,7 +804,12 @@
       '      <h1 class="nhb-h1">Библиотеки NOFIDA</h1>',
       '      <span class="nhb-sub">Глобальный каталог · для всех пользователей</span>',
       '    </div>',
-      '    <button class="nhb-close" id="nhb-close" title="Закрыть" aria-label="Закрыть">×</button>',
+      '    <div style="display:flex;align-items:center;gap:8px">',
+      '      <button class="nhb-open-proj" id="nhb-open-proj" type="button"',
+      '        title="Открыть проект Библиотеки NOFIDA в вашем дашборде">',
+      '        📁 Открыть мои добавленные</button>',
+      '      <button class="nhb-close" id="nhb-close" title="Закрыть" aria-label="Закрыть">×</button>',
+      '    </div>',
       '  </div>',
       '  <div class="nhb-ctrl">',
       '    <input class="nhb-search" id="nhb-search" type="search"',
@@ -781,6 +826,22 @@
 
     /* ── wire overlay-internal events ── */
     div.querySelector("#nhb-close").addEventListener("click", hideHub);
+
+    div.querySelector("#nhb-open-proj").addEventListener("click", function () {
+      hideHub();
+      /* Navigate to user's hub project on the dashboard */
+      resolveTeamId().then(function (tid) {
+        if (!tid) return;
+        /* If we already know the hub project id, navigate directly */
+        var projId = S.hubProjectId;
+        if (projId) {
+          window.location.href = "/#/dashboard/team/" + tid + "/projects/" + projId;
+        } else {
+          /* Fall back to team projects page */
+          window.location.href = "/#/dashboard/team/" + tid + "/projects";
+        }
+      });
+    });
 
     div.querySelector("#nhb-search").addEventListener("input", function (ev) {
       S.searchQuery = ev.target.value;
@@ -1059,9 +1120,58 @@
     return /^#\/dashboard/.test(window.location.hash || "");
   }
 
+  /* Thumbnail fallback: when a dashboard file-card thumbnail image 404s,
+     replace the broken img with a branded placeholder.  We attach onerror
+     once per img element (tracked via dataset.nhbPatched).               */
+  function patchThumbnailErrors() {
+    var imgs = document.querySelectorAll(
+      ".main_ui_dashboard_grid__grid-item-thumbnail-image:not([data-nhb-patched])"
+    );
+    imgs.forEach(function (img) {
+      img.setAttribute("data-nhb-patched", "1");
+      /* Apply immediately if already broken */
+      if (img.complete && img.naturalWidth === 0 && img.src) {
+        applyThumbFallback(img);
+        return;
+      }
+      img.addEventListener("error", function () { applyThumbFallback(img); }, { once: true });
+    });
+  }
+
+  function applyThumbFallback(img) {
+    var card = img.closest("[class*='grid-item']");
+    if (!card || card.dataset.nhbThumbFixed) return;
+    card.dataset.nhbThumbFixed = "1";
+
+    /* Hide the broken img */
+    img.style.display = "none";
+
+    /* Find the thumbnail container (parent of img) */
+    var thumbContainer = img.parentElement || card;
+
+    /* Inject branded fallback */
+    var fallback = document.createElement("div");
+    fallback.className = "nhb-thumb-fallback";
+    fallback.innerHTML =
+      '<span style="font-size:28px;line-height:1;display:block;margin-bottom:4px">📋</span>' +
+      '<span style="font-size:11px;font-weight:700;color:#bfff00;letter-spacing:.06em;' +
+      'text-transform:uppercase">NOFIDA Hub</span>';
+    fallback.style.cssText =
+      "position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;" +
+      "justify-content:center;background:linear-gradient(135deg,#0b1020 0%,#131e35 100%);" +
+      "border-radius:inherit;pointer-events:none";
+
+    /* Ensure container is positioned */
+    if (getComputedStyle(thumbContainer).position === "static") {
+      thumbContainer.style.position = "relative";
+    }
+    thumbContainer.appendChild(fallback);
+  }
+
   function runChecks() {
     tryInjectSidebar();
     tryPatchBottomGallery();
+    if (isDashboard()) patchThumbnailErrors();
   }
 
   function startObserver() {
