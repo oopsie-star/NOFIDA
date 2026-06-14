@@ -5,6 +5,7 @@ WEBROOT="${1:-/var/www/app}"
 INDEX="${WEBROOT}/index.html"
 BRAND_CSS="${WEBROOT}/nofida/brand/nofida-brand.css"
 AI_CORE="${WEBROOT}/nofida/ai-core/nofida-ai-core.js"
+LIB_HUB="${WEBROOT}/nofida/ai-core/nofida-library-hub.js"
 MANIFEST_FILE="${WEBROOT}/nofida/brand/site.webmanifest"
 
 if [ ! -f "${INDEX}" ]; then
@@ -22,7 +23,7 @@ NOFIDA_ICON_HREF="/nofida/brand/icon.png?v=${ASSET_TAG}"
 # Remove the broken ui.css include if the pinned image does not ship that file.
 [ -f "${WEBROOT}/css/ui.css" ] || sed -i '/css\/ui\.css/d' "${INDEX}"
 
-for templated_file in "${BRAND_CSS}" "${AI_CORE}" "${MANIFEST_FILE}"; do
+for templated_file in "${BRAND_CSS}" "${AI_CORE}" "${LIB_HUB}" "${MANIFEST_FILE}"; do
   [ -f "${templated_file}" ] && sed -i "s/__NOFIDA_ASSET_TAG__/${ASSET_TAG}/g" "${templated_file}"
 done
 
@@ -42,6 +43,8 @@ grep -q 'id="nofida-shell-root"' "${INDEX}" || \
   sed -i '/<\/body>/i\    <section id="nofida-shell-root"></section>' "${INDEX}"
 grep -q 'nofida-ai-core.js' "${INDEX}" || \
   sed -i "/<\/body>/i\\    <script src=\"/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}\" defer></script>" "${INDEX}"
+grep -q 'nofida-library-hub.js' "${INDEX}" || \
+  sed -i "/<\/body>/i\\    <script src=\"/nofida/ai-core/nofida-library-hub.js?v=${ASSET_TAG}\" defer></script>" "${INDEX}"
 
 sed -i \
   -e 's#<title>[^<]*</title>#<title>Nofida</title>#' \
@@ -53,7 +56,7 @@ sed -i \
   -e 's|<meta name="theme-color"[^>]*>|<meta name="theme-color" content="#0b1020">|' \
   "${INDEX}"
 
-perl -0pi -e "s#/nofida/brand/nofida-brand\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-brand.css?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-ai-core\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}#g" "${INDEX}"
+perl -0pi -e "s#/nofida/brand/nofida-brand\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-brand.css?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-ai-core\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-library-hub\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-library-hub.js?v=${ASSET_TAG}#g" "${INDEX}"
 perl -0pi -e 's#<link rel="icon"[^>]*>\s*##g; s#<link rel="shortcut icon"[^>]*>\s*##g; s#<link rel="apple-touch-icon"[^>]*>\s*##g; s#<link rel="manifest"[^>]*>\s*##g' "${INDEX}"
 grep -q 'nofida/brand/icon.png' "${INDEX}" || \
   sed -i "/<\/head>/i\\    <link rel=\"icon\" type=\"image/png\" href=\"/nofida/brand/icon.png?v=${ASSET_TAG}\" />\\n    <link rel=\"shortcut icon\" type=\"image/png\" href=\"/nofida/brand/favicon-32.png?v=${ASSET_TAG}\" />\\n    <link rel=\"apple-touch-icon\" href=\"/nofida/brand/apple-touch-icon.png?v=${ASSET_TAG}\" />\\n    <link rel=\"manifest\" href=\"/nofida/brand/site.webmanifest?v=${ASSET_TAG}\" />" "${INDEX}"

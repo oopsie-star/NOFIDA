@@ -171,3 +171,21 @@ nav a svg[class*="logo"],
 .logo-wrapper svg {
   visibility: hidden !important;
 }
+
+/* ── PATCH 014J: NOFIDA Hub sidebar + overlay helpers ────────────────────
+   Ensure the sidebar nav is tall enough to show the injected item and is
+   not clipping overflow (some Penpot builds set overflow:hidden on the
+   sidebar list, which would hide our appended element).                    */
+[class*="dashboard_sidebar"] nav,
+[class*="dashboard_sidebar"] ul,
+[class*="dashboard_sidebar__sidebar-nav"] {
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* Hub overlay sits above Penpot's own modal layer */
+#nhb-overlay {
+  z-index: 2147483500 !important;
+}
+
