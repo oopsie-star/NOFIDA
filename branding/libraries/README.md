@@ -135,7 +135,7 @@ bash scripts/sync-penpot-hub-libraries.sh \
 Current NOFIDA Hub behavior is split by file format:
 
 1. Modern `.penpot` archives can be added from the in-app `Библиотеки NOFIDA` flow.
-2. Legacy binary Penpot files are still hostable, but they surface as `Требуется конвертация` until they are migrated to the modern archive format.
+2. Verified legacy binary Penpot files can now be imported through the backend-native Hub adapter once they are explicitly marked `native_import_verified`.
 3. Larger modern archives that fit the verified host-side import window can still be vendored and added from the same-origin hub flow.
 4. Manually supplied modern files can carry `open_default_page` so `Открыть` avoids a broken `Cover` page when a better page exists, once the file is explicitly approved for use.
 5. Operator-supplied manual uploads should default to `license_status: needs_review` until explicitly approved.

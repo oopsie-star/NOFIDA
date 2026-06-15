@@ -66,7 +66,6 @@ LEGAL_REVIEW_IDS = {
     "google-maps-ui-kit",
     "ios-icon-template",
     "mastodon-app",
-    "material-design-3",
     "material-design-baselineal",
     "material-design-icons",
     "material-design-icons-light",
@@ -481,6 +480,10 @@ def build_base_record(
         "import_verification_status": previous.get("import_verification_status"),
         "import_verification_checked_at": previous.get("import_verification_checked_at"),
         "verified_file_name": previous.get("verified_file_name"),
+        "import_adapter": previous.get("import_adapter"),
+        "native_import_verified": previous.get("native_import_verified"),
+        "verified_at": previous.get("verified_at"),
+        "thumbnail_status": previous.get("thumbnail_status"),
         "user_import_status": previous.get("user_import_status"),
         "user_import_reason": previous.get("user_import_reason"),
         "risk_notes": item.get("risk_notes"),
@@ -601,6 +604,9 @@ def apply_user_import_state(record: dict, verified_import_max_bytes: int) -> Non
     quality_status = record.get("quality_status")
     verification_status = record.get("import_verification_status")
     verified_importable = record.get("verified_importable")
+    native_import_verified = bool(record.get("native_import_verified"))
+    import_adapter = record.get("import_adapter")
+    native_ready = native_import_verified and import_adapter == "native"
 
     license_status = record.get("license_status")
     if quality_status == "empty_or_broken":
@@ -625,36 +631,54 @@ def apply_user_import_state(record: dict, verified_import_max_bytes: int) -> Non
         reason = "no_download_url"
         state = "no_download_url"
     elif hard_failure:
-        size_hint = size_bytes or record.get("known_size_bytes") or 0
-        if size_hint and size_hint <= verified_import_max_bytes:
-            reason = "needs_manual_large_import"
-            state = "large_import_required"
+        if native_ready:
+            reason = None
+            state = "available"
         else:
-            reason = "too_large_hard_limit"
-            state = "too_large"
-    elif record.get("file"):
-        file_format = record.get("file_format")
-        if file_format == "modern_penpot_archive":
-            if size_bytes and size_bytes > verified_import_max_bytes:
+            size_hint = size_bytes or record.get("known_size_bytes") or 0
+            if size_hint and size_hint <= verified_import_max_bytes:
                 reason = "needs_manual_large_import"
                 state = "large_import_required"
-            elif verification_status == "verified" or verified_importable in {None, True}:
-                reason = None
-                state = "available"
             else:
-                reason = "manual_import_failed"
-                state = "import_failed"
-        elif file_format == "old_binary_format_v1":
-            reason = "needs_manual_conversion"
-            state = "conversion_required"
+                reason = "too_large_hard_limit"
+                state = "too_large"
+    elif record.get("file"):
+        if native_ready:
+            reason = None
+            state = "available"
         else:
-            reason = "invalid_manual_file" if manual_override else "download_failed"
-            state = "rejected" if manual_override else "download_failed"
+            file_format = record.get("file_format")
+            if file_format == "modern_penpot_archive":
+                if size_bytes and size_bytes > verified_import_max_bytes:
+                    reason = "needs_manual_large_import"
+                    state = "large_import_required"
+                elif verification_status == "verified" or verified_importable in {None, True}:
+                    reason = None
+                    state = "available"
+                else:
+                    reason = "manual_import_failed"
+                    state = "import_failed"
+            elif file_format == "old_binary_format_v1":
+                reason = "needs_manual_conversion"
+                state = "conversion_required"
+            else:
+                reason = "invalid_manual_file" if manual_override else "download_failed"
+                state = "rejected" if manual_override else "download_failed"
     elif record.get("status") == "download_pending":
         state = "download_pending"
 
     record["user_import_status"] = state
     record["user_import_reason"] = reason
+
+
+def catalog_import_format(record: dict) -> str | None:
+    file_format = record.get("file_format")
+    if record.get("import_adapter") == "native" and record.get("native_import_verified"):
+        if file_format == "old_binary_format_v1":
+            return "v1_legacy_supported"
+        if file_format == "modern_penpot_archive":
+            return "v3_zip"
+    return file_format
 
 
 def download_record(
@@ -813,6 +837,7 @@ def build_catalog(records: list[dict], checked_at: str, source_ref: str, max_siz
                 "status": catalog_status(record),
                 "import_skip_reason": record.get("user_import_reason"),
                 "file_format": record.get("file_format"),
+                "format": catalog_import_format(record),
                 "recovery_status": record.get("recovery_status"),
                 "recovered_at": record.get("recovered_at"),
                 "manual_upload": record.get("manual_upload"),
@@ -828,6 +853,11 @@ def build_catalog(records: list[dict], checked_at: str, source_ref: str, max_siz
                 "verified_importable": record.get("verified_importable"),
                 "import_verification_status": record.get("import_verification_status"),
                 "import_verification_checked_at": record.get("import_verification_checked_at"),
+                "verified_file_name": record.get("verified_file_name"),
+                "import_adapter": record.get("import_adapter"),
+                "native_import_verified": record.get("native_import_verified"),
+                "verified_at": record.get("verified_at"),
+                "thumbnail_status": record.get("thumbnail_status"),
                 "last_checked_at": record.get("last_checked_at"),
                 "vendored_at": record.get("vendored_at"),
             }

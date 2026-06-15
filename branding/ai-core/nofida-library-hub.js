@@ -1,5 +1,5 @@
 /* ============================================================================
- * NOFIDA Library Hub  —  PATCH 014J
+ * NOFIDA Library Hub  —  PATCH 015B
  * ---------------------------------------------------------------------------
  * Global internal catalog for every logged-in NOFIDA user.
  *
@@ -8,10 +8,10 @@
  *   2. Shows a full-screen overlay catalog at #/nofida/libraries.
  *   3. Replaces / enhances the bottom "Библиотеки и шаблоны" gallery block
  *      so external Penpot.app links are never the primary action.
- *   4. Per-user / per-team import: downloads the vendored .penpot file from
- *      the internal engine URL and imports it into the current user's team
- *      using Penpot's native RPC endpoint.  Duplicate detection runs against
- *      the live Penpot API (localStorage is only a speed-cache).
+ *   4. Per-user / per-team import: calls the backend-native NOFIDA adapter,
+ *      which resolves the vendored .penpot file server-side and mirrors the
+ *      native Penpot upload-session import flow. Duplicate detection runs
+ *      against the live Penpot API (localStorage is only a speed-cache).
  *
  * Constraints:
  *   - Works for any logged-in user, not only the service account.
@@ -28,6 +28,7 @@
   /* ── constants ─────────────────────────────────────────────────────────── */
   var ASSET_TAG    = "__NOFIDA_ASSET_TAG__";
   var CATALOG_URL  = "/nofida/libraries/catalog.json" + (ASSET_TAG ? "?v=" + ASSET_TAG : "");
+  var IMPORT_URL   = "/api/nofida/hub/import";
   /* The engine host serves the vendored .penpot files and the catalog.
      The internal_url field is a path like /nofida/libraries/files/foo.penpot
      which nginx serves from the same origin — so we use a relative URL.      */
@@ -398,59 +399,6 @@
       item.import_verification_status !== "import_failed";
   }
 
-  /* Read the SSE (Server-Sent Events) response from import-binfile and
-     return the first file-id found in any progress or end event.
-     Events look like:
-       event: progress
-       data: {"~:section":"~:file","~:file-id":"~u<uuid>"}   */
-  function readSSEFileId(response) {
-    /* Prefer streaming reader if available */
-    if (response.body && response.body.getReader) {
-      var reader  = response.body.getReader();
-      var decoder = new TextDecoder();
-      var buf     = "";
-      var fileId  = null;
-
-      function pump() {
-        return reader.read().then(function (chunk) {
-          if (chunk.done) return fileId;
-          buf += decoder.decode(chunk.value, { stream: true });
-          /* Each SSE data line is:  data: {...}\n */
-          var lines = buf.split("\n");
-          buf = lines.pop(); /* keep partial last line */
-          lines.forEach(function (line) {
-            if (!line.startsWith("data:")) return;
-            var json = line.slice(5).trim();
-            if (!json) return;
-            try {
-              var obj = decodeTransit(JSON.parse(json));
-              /* The file-id is either "file-id" or buried in a section */
-              if (obj["file-id"]) fileId = obj["file-id"];
-            } catch (_) { /* ignore parse errors */ }
-          });
-          if (fileId) { reader.cancel(); return fileId; }
-          return pump();
-        });
-      }
-      return pump();
-    }
-
-    /* Fallback: read entire body as text and scan for file-id */
-    return response.text().then(function (text) {
-      var fileId = null;
-      text.split("\n").forEach(function (line) {
-        if (!line.startsWith("data:")) return;
-        var json = line.slice(5).trim();
-        if (!json) return;
-        try {
-          var obj = decodeTransit(JSON.parse(json));
-          if (obj["file-id"]) fileId = obj["file-id"];
-        } catch (_) { /* ignore */ }
-      });
-      return fileId;
-    });
-  }
-
   function importItem(item, teamId) {
     if (S.importing[item.id]) return Promise.reject(new Error("Already importing"));
     if (!canImport(item))     return Promise.reject(new Error("Item not importable"));
@@ -458,41 +406,39 @@
     S.importing[item.id] = true;
     updateCardState(item.id);
 
-    return ensureHubProject(teamId)
-      .then(function (projectId) {
-        /* Fetch the vendored file from our own origin */
-        return fetch(item.internal_url, {
-          credentials: "same-origin",
-          cache: "force-cache"
-        }).then(function (r) {
-          if (!r.ok) throw new Error("Download failed: " + r.status);
-          return r.blob();
-        }).then(function (blob) {
-          var fd = new FormData();
-          fd.append("name",        item.title || item.id);
-          fd.append("project-id",  projectId);
-          fd.append("project_id",  projectId);
-          fd.append("file", blob, item.id + ".penpot");
-
-          return fetch("/api/rpc/command/import-binfile", {
-            method: "POST",
-            credentials: "include",
-            body: fd
+    return fetch(IMPORT_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        catalog_item_id: item.id,
+        team_id: teamId,
+        project_id: S.hubProjectId || null
+      })
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return null; })
+          .then(function (payload) {
+            if (!r.ok || !payload || payload.ok === false) {
+              var msg = payload && (payload.message || payload.code) || ("Import API " + r.status);
+              throw new Error(msg);
+            }
+            return payload;
           });
-        }).then(function (r) {
-          if (!r.ok) {
-            return r.text().then(function (t) {
-              throw new Error("Import API " + r.status + ": " + t.slice(0, 200));
-            });
+      })
+      .then(function (payload) {
+          if (!payload.file_id || !payload.project_id) {
+            throw new Error("Adapter response missing file_id or project_id");
           }
-          /* import-binfile returns SSE (text/event-stream), not JSON.
-             We read the full stream as text and extract the file-id from
-             the last progress or end event that contains one.             */
-          return readSSEFileId(r);
-        }).then(function (fileId) {
-          if (!fileId) throw new Error("No file-id in import SSE stream");
 
-          var entry = { fileId: fileId, projectId: projectId };
+          S.hubProjectId = payload.project_id;
+          var entry = {
+            fileId: payload.file_id,
+            projectId: payload.project_id,
+            openUrl: payload.open_url || null,
+            thumbnailStatus: payload.thumbnail_status || null,
+            sharedLibraryStatus: payload.shared_library_status || null
+          };
           S.installed[item.id] = entry;
           localStorage.setItem(
             storageKey(teamId, item.id),
@@ -502,7 +448,6 @@
           updateCardState(item.id);
           updateStatusBar();
           return entry;
-        });
       })
       .catch(function (err) {
         delete S.importing[item.id];

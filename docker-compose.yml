@@ -56,11 +56,26 @@ services:
       - penpot-backend
       - penpot-exporter
       - penpot-mcp
+      - nofida-hub-adapter
     environment:
       PENPOT_FLAGS: *penpot-flags
       PENPOT_PUBLIC_URI: ${PENPOT_PUBLIC_URI:-http://localhost:9001}
       PENPOT_HTTP_SERVER_MAX_BODY_SIZE: 367001600
       PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE: 367001600
+    networks: [nofida-network]
+
+  nofida-hub-adapter:
+    build:
+      context: ./services/nofida-hub-adapter
+    image: nofida/hub-adapter:015b
+    restart: always
+    volumes:
+      - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/srv/library-store:ro
+    environment:
+      PENPOT_BASE_URL: http://penpot-frontend:8080
+      NOFIDA_LIBRARY_STORE_ROOT: /srv/library-store
+      NOFIDA_HUB_IMPORT_CHUNK_SIZE: 26214400
+      NOFIDA_HUB_MAX_IMPORT_BYTES: 367001600
     networks: [nofida-network]
 
   penpot-backend:

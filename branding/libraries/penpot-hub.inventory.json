@@ -75,9 +75,9 @@
       "source_repo": null,
       "license": "CC-BY-4.0",
       "attribution_required": true,
-      "file_name": null,
-      "recommended_status": "needs_license_review",
-      "risk_notes": "TailwindCSS itself is MIT but the Penpot kit content license needs verification."
+      "file_name": "tailwind-kit.penpot",
+      "recommended_status": "ready_to_vendor",
+      "risk_notes": "Community kit distributed through penpot-files with CC BY 4.0 attribution."
     },
     {
       "id": "material-design-3",
