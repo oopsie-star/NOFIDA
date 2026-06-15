@@ -1,103 +1,143 @@
-# Nofida Internal Library Catalog
+# Nofida Internal Library Metadata
 
 Design libraries and templates for the Nofida platform. Sourced from [Penpot Hub](https://penpot.app/penpothub/libraries-templates) and the [penpot/penpot-files](https://github.com/penpot/penpot-files) repository.
 
-After a Docker build, everything under `libraries/` is served at:
+This directory now serves two roles:
+
+- repo-tracked source metadata for the sync job
+- local-dev fallback content when `NOFIDA_LIBRARY_STORE_ROOT` is not set
+
+In production, the frontend bind-mounts the host-backed store:
+
+```text
+/opt/nofida-core/library-store
 ```
+
+That store is exposed under the app origin at:
+
+```text
 https://engine.sys.bachopus.com/nofida/libraries/
 ```
 
----
-
-## Files in This Directory
+## Files In This Directory
 
 | File | Purpose |
 |---|---|
-| `penpot-hub.inventory.json` | Full inventory of all 115 Penpot Hub entries. Source of truth for what exists upstream. |
-| `catalog.json` | Curated NOFIDA internal catalog. License-reviewed entries only. |
-| `catalog.example.json` | Schema reference showing a complete vendored entry. |
-| `download-plan.md` | Which files to download first, exact commands, size limits, and blocked entries. |
-| `files/` | Vendored `.penpot` files (empty until Phase 1 download is executed). |
+| `penpot-hub.inventory.json` | Full upstream inventory source used by the monthly sync job. |
+| `catalog.json` | Repo-local fallback catalog for local dev and image-only runs. |
+| `catalog.example.json` | Minimal schema example for a vendored entry. |
+| `download-plan.md` | Earlier curation notes and download research. |
+| `files/` | Local-dev fallback vendored files directory. |
+| `quarantine/` | Local-dev fallback quarantine directory. |
+| `logs/` | Local-dev fallback log directory. |
 
----
+## Production Sync
 
-## catalog.json Schema
+The server-side sync entrypoint is:
 
-```json
-{
-  "id": "wireframes-kit",
-  "name": "Wireframes kit",
-  "type": "library",
-  "author": "Penpot",
-  "source": "Penpot Hub",
-  "hub_url": "https://penpot.app/penpothub/libraries-templates/wireframes-kit",
-  "source_repo": "https://github.com/penpot/penpot-files",
-  "license": "CC-BY-4.0",
-  "attribution_required": true,
-  "status": "ready_to_vendor",
-  "file": null,
-  "internal_url": null,
-  "import_mode": "manual-from-hub",
-  "risk_notes": "Official Penpot. CC BY 4.0. Download URL confirmed."
-}
+```bash
+bash scripts/sync-penpot-hub-libraries.sh
 ```
 
-**`status` values**:
-- `ready_to_vendor` — license confirmed, download URL confirmed; safe to add
-- `needs_license_review` — download exists but license uncertain or filename unconfirmed
-- `vendored` — file is in `files/` and deployed
-- `skip` — trademark risk, size exceeds limits, or platform-proprietary
+By default it reads:
 
-**`import_mode` values**:
-- `manual-from-hub` — team member downloads from Hub via Penpot UI import
-- `preseed-pending` — planned for automated preseed (technical spike required)
-- `internal-file` — Nofida-authored file stored in `files/`
+```text
+branding/libraries/penpot-hub.inventory.json
+```
 
----
+And writes:
+
+```text
+/opt/nofida-core/library-store/
+```
+
+Publicly exposed:
+
+- `/nofida/libraries/catalog.json`
+- `/nofida/libraries/files/<id>.penpot`
+
+Not publicly exposed:
+
+- `/nofida/libraries/inventory.json`
+- `/nofida/libraries/quarantine/`
+- `/nofida/libraries/logs/`
+
+## Manual Inbox
+
+The manual inbox is an internal fallback / maintenance path for operator-supplied recovery files. It is not the primary Hub integration strategy.
+
+The inbox lives beside the host store:
+
+```text
+/opt/nofida-core/library-store/manual-inbox/
+```
+
+Expected subdirectories:
+
+- `processed/`
+- `rejected/`
+- `logs/`
+
+Manual ingestion entrypoint:
+
+```bash
+bash scripts/ingest-manual-penpot-files.sh
+```
+
+Optional internal add-flow verification for newly staged modern files:
+
+```bash
+bash scripts/ingest-manual-penpot-files.sh --verify-imports
+```
+
+Or run the verification pass directly:
+
+```bash
+node scripts/verify-014m.mjs --store-root /opt/nofida-core/library-store
+```
 
 ## License Review Policy
 
-Before adding any file to `files/` or marking `status: ready_to_vendor`:
+Before moving any Hub file into the approved vendored store:
 
 1. Check for a `.LICENSE` companion in `https://github.com/penpot/penpot-files`
-2. If absent, default is CC BY 4.0 (confirmed via CONTRIBUTING.md)
-3. For icon sets: check the upstream source repo license, not just the Hub page
-4. MPL-2.0 and GPL entries require legal review before redistribution
-5. Trademark-bearing content (company logos, platform UI kits) — do not vendor
+2. If absent, use the Penpot default only when provenance is still clear
+3. For icon sets, verify the upstream icon repository license
+4. Route MPL/GPL/copyleft cases to review
+5. Route trademark-bearing content to `legal_review`
 
-CC BY 4.0 requires attribution (`attribution_required: true`). MIT/ISC/Apache-2.0 entries may be used without attribution.
+## Bootstrap / Verification
 
----
-
-## Adding a Library (Vendored Workflow)
-
-See `download-plan.md` for the full plan. Short version:
+Dry run:
 
 ```bash
-# Download (example — Heroicons, MIT)
-curl -L -o branding/libraries/files/heroicons.penpot \
-  "https://penpot.github.io/penpot-files/Heroicons.penpot"
-
-# Then update catalog.json:
-#   "file": "files/heroicons.penpot"
-#   "status": "vendored"
+bash scripts/sync-penpot-hub-libraries.sh --dry-run
 ```
 
-Files > 5 MB must use Git LFS or be hosted in object storage — see `download-plan.md`.
+Metadata only:
 
-Rebuild the frontend image after adding files:
 ```bash
-docker compose build penpot-frontend
+bash scripts/sync-penpot-hub-libraries.sh --skip-downloads
 ```
 
----
+Sample approved downloads:
 
-## Importing into Penpot (Manual)
+```bash
+bash scripts/sync-penpot-hub-libraries.sh \
+  --id penpot-design-system \
+  --id heroicons \
+  --id wireframes-kit \
+  --limit 3
+```
 
-There is no automated preseed yet. Current workflow:
+## Importing Into Penpot
 
-1. Open Nofida (engine.sys.bachopus.com)
-2. File → Import → select the `.penpot` file
-3. Share as a library from the file's main menu
+Current NOFIDA Hub behavior is split by file format:
 
-Programmatic preseed via the Penpot internal API is tracked in `download-plan.md` as a future spike.
+1. Modern `.penpot` archives can be added from the in-app `Библиотеки NOFIDA` flow.
+2. Legacy binary Penpot files are still hostable, but they surface as `Требуется конвертация` until they are migrated to the modern archive format.
+3. Larger modern archives that fit the verified host-side import window can still be vendored and added from the same-origin hub flow.
+4. Manually supplied modern files can carry `open_default_page` so `Открыть` avoids a broken `Cover` page when a better page exists, once the file is explicitly approved for use.
+5. Operator-supplied manual uploads should default to `license_status: needs_review` until explicitly approved.
+
+Maintenance notes and follow-up options remain in [docs/penpot-library-import-options.md](/c:/Nofida/docs/penpot-library-import-options.md:1).

@@ -65,9 +65,15 @@
 
   /* Human-readable labels for import_skip_reason values */
   var SKIP_LABELS = {
-    old_binary_format_v1:      "Старый формат файла",
-    too_large:                 "Слишком большой файл",
-    trademark_license_review:  "Проверка торговой марки",
+    old_binary_format_v1:      "Требуется конвертация",
+    needs_manual_conversion:   "Требуется конвертация",
+    too_large:                 "Требуется большой импорт",
+    needs_manual_large_import: "Требуется большой импорт",
+    too_large_hard_limit:      "Слишком большой файл",
+    trademark_license_review:  "Требует проверки лицензии",
+    needs_license_review:      "Требует проверки лицензии",
+    invalid_manual_file:       "Некорректный файл",
+    manual_import_failed:      "Импорт не прошел проверку",
     no_download_url:           "Нет ссылки на файл",
     download_failed:           "Ошибка загрузки"
   };
@@ -385,7 +391,11 @@
    * IMPORT — download vendored file → POST to Penpot API
    * ========================================================== */
   function canImport(item) {
-    return item.internal_url && !item.import_skip_reason && item.status === "available";
+    return item.internal_url &&
+      !item.import_skip_reason &&
+      item.status === "available" &&
+      item.quality_status !== "empty_or_broken" &&
+      item.import_verification_status !== "import_failed";
   }
 
   /* Read the SSE (Server-Sent Events) response from import-binfile and
@@ -506,7 +516,76 @@
   function openFile(item) {
     var e = S.installed[item.id];
     if (!e) return;
-    window.location.href = "/#/workspace/" + e.projectId + "/" + e.fileId;
+    resolveTeamId().then(function (tid) {
+      var params = [];
+      if (tid) params.push("team-id=" + encodeURIComponent(tid));
+      params.push("file-id=" + encodeURIComponent(e.fileId));
+      if (item.open_default_page_id) {
+        params.push("nhb-page-id=" + encodeURIComponent(item.open_default_page_id));
+      } else if (item.open_default_page) {
+        params.push("nhb-page=" + encodeURIComponent(item.open_default_page));
+      }
+      window.location.href = "/#/workspace?" + params.join("&");
+    });
+  }
+
+  function workspaceHashParams() {
+    var hash = window.location.hash || "";
+    var qPos = hash.indexOf("?");
+    if (qPos === -1) return new URLSearchParams();
+    return new URLSearchParams(hash.slice(qPos + 1));
+  }
+
+  function clearWorkspaceHintParams() {
+    var hash = window.location.hash || "";
+    if (!/^#\/workspace/.test(hash)) return;
+    var qPos = hash.indexOf("?");
+    if (qPos === -1) return;
+    var params = new URLSearchParams(hash.slice(qPos + 1));
+    if (!params.has("nhb-page-id") && !params.has("nhb-page")) return;
+    params.delete("nhb-page-id");
+    params.delete("nhb-page");
+    var nextHash = "#/workspace";
+    var nextQuery = params.toString();
+    if (nextQuery) nextHash += "?" + nextQuery;
+    history.replaceState(null, "", window.location.pathname + nextHash);
+  }
+
+  function applyWorkspacePageHint() {
+    var hash = window.location.hash || "";
+    if (!/^#\/workspace/.test(hash)) return;
+    var params = workspaceHashParams();
+    var pageId = params.get("nhb-page-id");
+    var pageName = params.get("nhb-page");
+    if (!pageId && !pageName) return;
+
+    var tries = 0;
+    function attempt() {
+      tries += 1;
+      var target = null;
+      if (pageId) {
+        target = document.querySelector('[data-testid="page-' + pageId + '"]');
+      }
+      if (!target && pageName) {
+        var pageNames = document.querySelectorAll('[data-testid="page-name"]');
+        for (var i = 0; i < pageNames.length; i++) {
+          if ((pageNames[i].getAttribute("title") || pageNames[i].textContent || "").trim() === pageName) {
+            target = pageNames[i].closest("[data-testid^='page-']") || pageNames[i];
+            break;
+          }
+        }
+      }
+      if (target) {
+        var clickable = target.closest("[data-testid^='page-']") || target;
+        var alreadySelected = clickable.classList.contains("main_ui_workspace_sidebar_sitemap__selected") ||
+          !!clickable.closest(".main_ui_workspace_sidebar_sitemap__selected");
+        if (!alreadySelected) clickable.click();
+        setTimeout(clearWorkspaceHintParams, 500);
+        return;
+      }
+      if (tries < 40) setTimeout(attempt, 500);
+    }
+    attempt();
   }
 
   /* ============================================================
@@ -530,13 +609,24 @@
            item.type === "library";
   }
 
+  function isReviewReason(reason) {
+    return reason === "trademark_license_review" ||
+           reason === "needs_license_review";
+  }
+
   function itemAction(item) {
     if (S.importing[item.id])         return "importing";
     if (S.installed[item.id])         return "open";
     if (canImport(item))              return "add";
+    if (isReviewReason(item.import_skip_reason) ||
+        item.status === "review_required" ||
+        item.status === "trademark_review" ||
+        item.status === "needs_review" ||
+        item.status === "needs_license_review" ||
+        item.license_status === "trademark_review" ||
+        item.license_status === "needs_review" ||
+        item.license_status === "needs_license_review") return "review";
     if (item.import_skip_reason)      return "skip";
-    if (item.status === "trademark_review" ||
-        item.license_status === "trademark_review") return "review";
     return "unavailable";
   }
 
@@ -584,11 +674,15 @@
     var btnDis   = "";
     switch (action) {
       case "add":
-        btnLabel = isLib ? "Добавить библиотеку" : "Добавить шаблон";
+        btnLabel = item.manual_upload
+          ? "Добавить в моё пространство"
+          : (isLib ? "Добавить библиотеку" : "Добавить шаблон");
         btnMod   = "nhb-btn-add";
         break;
       case "open":
-        btnLabel = isLib ? "Открыть файл библиотеки" : "Открыть шаблон";
+        btnLabel = item.manual_upload
+          ? "Открыть файл"
+          : (isLib ? "Открыть файл библиотеки" : "Открыть шаблон");
         btnMod   = "nhb-btn-open";
         break;
       case "importing":
@@ -597,7 +691,21 @@
         btnDis   = "disabled";
         break;
       case "skip":
-        btnLabel = "Недоступно: " + e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason);
+        if (item.import_skip_reason === "needs_manual_conversion" ||
+            item.import_skip_reason === "old_binary_format_v1") {
+          btnLabel = "Требуется конвертация";
+        } else if (item.import_skip_reason === "needs_manual_large_import" ||
+                   item.import_skip_reason === "too_large") {
+          btnLabel = "Требуется большой импорт";
+        } else if (item.import_skip_reason === "invalid_manual_file") {
+          btnLabel = "Некорректный файл";
+        } else if (item.import_skip_reason === "manual_import_failed") {
+          btnLabel = "Импорт не прошел проверку";
+        } else if (item.import_skip_reason === "too_large_hard_limit") {
+          btnLabel = "Недоступно: " + e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason);
+        } else {
+          btnLabel = "Недоступно: " + e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason);
+        }
         btnMod   = "nhb-btn-dim";
         btnDis   = "disabled";
         break;
@@ -1195,6 +1303,10 @@
       return;
     }
 
+    if (/^#\/workspace/.test(hash)) {
+      applyWorkspacePageHint();
+    }
+
     /* If hub is open and user navigated to a real Penpot route → close hub */
     if (S.overlayEl && !S.overlayEl.hasAttribute("hidden")) {
       if (/^#\/(dashboard|workspace|auth|login)/.test(hash)) {
@@ -1244,6 +1356,8 @@
     var h = window.location.hash || "";
     if (h === HUB_HASH || h.indexOf(HUB_HASH + "/") === 0) {
       showHub();
+    } else if (/^#\/workspace/.test(h)) {
+      applyWorkspacePageHint();
     } else if (isDashboard()) {
       /* Re-run sidebar injection after team ID resolves */
       resolveTeamId().then(function () { runChecks(); });
