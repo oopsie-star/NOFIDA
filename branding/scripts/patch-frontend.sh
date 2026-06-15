@@ -78,9 +78,23 @@ replace_symbol "asset-penpot-logo-icon" "0 0 1254 1254" "${NOFIDA_ICON_HREF}" "1
 replace_symbol "icon-penpot-logo-icon" "0 0 1254 1254" "${NOFIDA_ICON_HREF}" "1254" "1254"
 replace_symbol "icon-penpot-logo-icon-loader" "0 0 1254 1254" "${NOFIDA_ICON_HREF}" "1254" "1254"
 
-# Deep white-label pass across compiled bundles/templates. Replace only the
-# standalone capitalized word "Penpot" so ClojureScript identifiers like
-# PenpotContext remain intact.
+# ── Email and domain replacement — cover ALL compiled JS bundles ─────────────
+# support@penpot.app appears in translation files AND in main-workspace.js.
+# We must sweep the full /js/ tree, not only translation*.js files.
+find "${WEBROOT}" \
+  ! -path "${WEBROOT}/nofida/*" \
+  -type f \
+  \( -name '*.js' -o -name '*.html' -o -name '*.json' \) | while IFS= read -r file; do
+  grep -q 'penpot\.app' "${file}" || continue
+  sed -i \
+    -e 's/support@penpot\.app/support@nofida.internal/g' \
+    -e 's/@penpot\.app/@nofida.internal/g' \
+    "${file}"
+done
+
+# ── Deep white-label pass across compiled bundles/templates ──────────────────
+# Replace only the standalone capitalized word "Penpot" so ClojureScript
+# identifiers like PenpotContext remain intact.
 find "${WEBROOT}" \
   ! -path "${WEBROOT}/nofida/*" \
   -type f \

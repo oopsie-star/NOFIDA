@@ -13,6 +13,10 @@ const MAX_IMPORT_BYTES = Number(process.env.NOFIDA_HUB_MAX_IMPORT_BYTES || 36700
 const REQUEST_TIMEOUT_MS = Number(process.env.NOFIDA_HUB_REQUEST_TIMEOUT_MS || 10 * 60 * 1000);
 const JSON_LIMIT_BYTES = 1024 * 1024;
 
+// A page with fewer objects than this per page is considered empty/bad import.
+// A page always has at least 1 root frame; real content adds many more.
+const MIN_OBJECTS_PER_PAGE = 4;
+
 const REVIEW_STATUSES = new Set(["trademark_review", "needs_license_review", "needs_review"]);
 const HTML_MARKERS = ["<!doctype html", "<html", "<body", "no matching published entries found"];
 const OLD_BINARY_MAGIC = Buffer.from("010b1a865063a15f", "hex");
@@ -298,7 +302,11 @@ function collectNameCandidates(record, filePath) {
 function findExistingFile(files, record, filePath) {
   const candidates = collectNameCandidates(record, filePath);
   if (candidates.size === 0) return null;
-  return files.find((file) => candidates.has(slugify(file?.name))) || null;
+  // Skip files that were marked as bad imports
+  return files.find((file) =>
+    candidates.has(slugify(file?.name)) &&
+    !String(file?.name || "").startsWith("OLD BAD IMPORT -")
+  ) || null;
 }
 
 function chooseImportName(record, filePath) {
@@ -334,7 +342,7 @@ function buildOpenUrl(teamId, fileId, record) {
 
 function buildPenpotHeaders(cookieHeader, extra = undefined) {
   const headers = new Headers(extra || {});
-  headers.set("user-agent", "nofida-hub-adapter/015b");
+  headers.set("user-agent", "nofida-hub-adapter/015e");
   headers.set("cookie", cookieHeader);
   return headers;
 }
@@ -655,6 +663,83 @@ async function resolveThumbnailStatus(cookieHeader, fileRecord) {
   };
 }
 
+// Rename a file in Penpot via the rename-file RPC command.
+async function renameFile(cookieHeader, fileId, newName) {
+  const response = await fetchPenpot(
+    "/api/rpc/command/rename-file",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/transit+json",
+        "Content-Type": "application/transit+json",
+      },
+      body: JSON.stringify(encodeTransit({ id: fileId, name: newName })),
+    },
+    cookieHeader,
+  );
+
+  if (!response.ok) {
+    const message = await readErrorResponse(response);
+    throw Object.assign(new Error(`rename-file failed: ${message}`), {
+      status: response.status,
+      code: "rename_file_failed",
+    });
+  }
+
+  return readTransitResponse(response);
+}
+
+// Check if an imported file has real visual content.
+// Returns { healthy, pages, totalObjects, reason }.
+// Fails open: if the check itself errors, we assume healthy to avoid false positives.
+async function checkFileHealth(cookieHeader, fileId) {
+  try {
+    const response = await fetchPenpot(
+      `/api/rpc/command/get-file?id=${encodeURIComponent(fileId)}`,
+      { method: "GET", headers: { Accept: "application/transit+json" } },
+      cookieHeader,
+    );
+
+    if (!response.ok) {
+      log("WARN", "file health check: get-file failed", { fileId, status: response.status });
+      return { healthy: true, reason: "api_error_assume_healthy", pages: 0, totalObjects: 0 };
+    }
+
+    const data = await readTransitResponse(response);
+    const pages = data?.pages || data?.data?.pages || [];
+    const pagesIndex = data?.["pages-index"] || data?.data?.["pages-index"] || {};
+
+    if (!Array.isArray(pages) || pages.length === 0) {
+      return { healthy: false, reason: "no_pages", pages: 0, totalObjects: 0 };
+    }
+
+    let totalObjects = 0;
+    for (const pageId of pages) {
+      const page = pagesIndex[pageId];
+      const objects = page?.objects || {};
+      totalObjects += Object.keys(objects).length;
+    }
+
+    // Each real page should have substantially more than 1 root frame object.
+    // A bad import typically has pages but almost no objects (just the root frame per page).
+    const threshold = pages.length * MIN_OBJECTS_PER_PAGE;
+    if (totalObjects < threshold) {
+      return {
+        healthy: false,
+        reason: "empty_pages",
+        pages: pages.length,
+        totalObjects,
+        threshold,
+      };
+    }
+
+    return { healthy: true, pages: pages.length, totalObjects };
+  } catch (err) {
+    log("WARN", "file health check threw, assuming healthy", { fileId, error: err.message });
+    return { healthy: true, reason: "check_exception_assume_healthy", pages: 0, totalObjects: 0 };
+  }
+}
+
 function guardImportableRecord(record) {
   if (!record) {
     const error = new Error("catalog item not found");
@@ -703,6 +788,7 @@ async function handleImport(req, res) {
   const catalogItemId = body.catalog_item_id || body.catalogItemId;
   const teamId = body.team_id || body.teamId;
   const requestedProjectId = body.project_id || body.projectId || null;
+  const forceReimport = body.force_reimport === true || body.forceReimport === true;
 
   if (!catalogItemId || typeof catalogItemId !== "string") {
     fail(res, 400, "missing_catalog_item_id", "catalog_item_id is required.");
@@ -724,8 +810,12 @@ async function handleImport(req, res) {
     const filesBefore = await getProjectFiles(cookieHeader, project.id);
     const existing = findExistingFile(filesBefore, record, filePath);
 
-    if (existing) {
+    if (existing && !forceReimport) {
+      // Run a health check so the UI knows whether reimport is recommended.
+      const health = await checkFileHealth(cookieHeader, existing.id);
+      const qualityStatus = health.healthy ? "healthy" : "bad_import";
       const thumb = await resolveThumbnailStatus(cookieHeader, existing);
+
       json(res, 200, {
         ok: true,
         status: "already_installed",
@@ -740,8 +830,31 @@ async function handleImport(req, res) {
         open_url: buildOpenUrl(teamId, existing.id, record),
         thumbnail_status: thumb.thumbnailStatus,
         thumbnail_id: thumb.thumbnailId,
+        quality_status: qualityStatus,
+        quality_pages: health.pages,
+        quality_objects: health.totalObjects,
       });
       return;
+    }
+
+    if (existing && forceReimport) {
+      // Rename the bad import before importing a fresh copy.
+      const badName = `OLD BAD IMPORT - ${existing.name}`;
+      log("INFO", "force reimport: renaming existing file", {
+        itemId: catalogItemId,
+        fileId: existing.id,
+        oldName: existing.name,
+        newName: badName,
+      });
+      try {
+        await renameFile(cookieHeader, existing.id, badName);
+        log("INFO", "old file renamed successfully", { fileId: existing.id });
+      } catch (renameErr) {
+        log("WARN", "rename of old file failed — proceeding with reimport anyway", {
+          fileId: existing.id,
+          error: renameErr.message,
+        });
+      }
     }
 
     log("INFO", "starting native hub import", {
@@ -750,6 +863,7 @@ async function handleImport(req, res) {
       projectId: project.id,
       format: descriptor.format,
       bytes: descriptor.size,
+      forceReimport,
     });
 
     const sessionId = await uploadFileInChunks(cookieHeader, filePath, descriptor.size);
@@ -771,11 +885,24 @@ async function handleImport(req, res) {
       });
     }
 
+    // Quality check on the fresh import to confirm it has real content.
+    const health = await checkFileHealth(cookieHeader, imported.id);
+    const qualityStatus = health.healthy ? "healthy" : "bad_import";
+    if (!health.healthy) {
+      log("WARN", "freshly imported file failed quality check", {
+        itemId: catalogItemId,
+        fileId: imported.id,
+        reason: health.reason,
+        pages: health.pages,
+        objects: health.totalObjects,
+      });
+    }
+
     const thumb = await resolveThumbnailStatus(cookieHeader, imported);
 
     json(res, 200, {
       ok: true,
-      status: "imported",
+      status: forceReimport ? "reimported" : "imported",
       duplicate_prevented: false,
       import_adapter: "native",
       format: descriptor.format,
@@ -787,6 +914,9 @@ async function handleImport(req, res) {
       open_url: buildOpenUrl(teamId, imported.id, record),
       thumbnail_status: thumb.thumbnailStatus,
       thumbnail_id: thumb.thumbnailId,
+      quality_status: qualityStatus,
+      quality_pages: health.pages,
+      quality_objects: health.totalObjects,
     });
   } catch (error) {
     log("ERROR", "hub import failed", {
@@ -795,6 +925,44 @@ async function handleImport(req, res) {
       code: error.code || "unknown_error",
       message: error.message,
     });
+    fail(res, error.status || 500, error.code || "internal_error", error.message);
+  }
+}
+
+// Lightweight quality check endpoint: POST /quality-check { file_id, team_id }
+async function handleQualityCheck(req, res) {
+  const cookieHeader = req.headers.cookie || "";
+  if (!cookieHeader) {
+    fail(res, 401, "missing_session", "This endpoint requires an authenticated Penpot session.");
+    return;
+  }
+
+  let body;
+  try {
+    body = await parseBody(req);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "invalid_body", error.message);
+    return;
+  }
+
+  const fileId = body.file_id || body.fileId;
+  if (!fileId || !isUuidString(fileId)) {
+    fail(res, 400, "invalid_file_id", "file_id is required and must be a UUID.");
+    return;
+  }
+
+  try {
+    const health = await checkFileHealth(cookieHeader, fileId);
+    json(res, 200, {
+      ok: true,
+      file_id: fileId,
+      quality_status: health.healthy ? "healthy" : "bad_import",
+      pages: health.pages,
+      total_objects: health.totalObjects,
+      reason: health.reason || null,
+    });
+  } catch (error) {
+    log("ERROR", "quality check failed", { fileId, error: error.message });
     fail(res, error.status || 500, error.code || "internal_error", error.message);
   }
 }
@@ -808,12 +976,17 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://nofida-hub-adapter.local");
 
   if (req.method === "GET" && url.pathname === "/health") {
-    json(res, 200, { ok: true, service: "nofida-hub-adapter" });
+    json(res, 200, { ok: true, service: "nofida-hub-adapter", version: "015e" });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/import") {
     await handleImport(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/quality-check") {
+    await handleQualityCheck(req, res);
     return;
   }
 

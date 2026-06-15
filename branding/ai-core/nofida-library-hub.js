@@ -79,6 +79,8 @@
     download_failed:           "Ошибка загрузки"
   };
 
+  var QUALITY_CHECK_URL = "/api/nofida/hub/quality-check";
+
   /* ── mutable state ─────────────────────────────────────────────────────── */
   var S = {
     catalog:         null,   /* Array of catalog items once loaded */
@@ -86,6 +88,7 @@
     hubProjectId:    null,   /* "NOFIDA Hub" project id for this team */
     installed:       {},     /* itemId → {fileId, projectId} */
     importing:       {},     /* itemId → true (in-progress guard) */
+    badImports:      {},     /* itemId → true when quality_status === "bad_import" */
     activeFilter:    "all",
     searchQuery:     "",
     overlayEl:       null,
@@ -440,6 +443,11 @@
             sharedLibraryStatus: payload.shared_library_status || null
           };
           S.installed[item.id] = entry;
+          if (payload.quality_status === "bad_import") {
+            S.badImports[item.id] = true;
+          } else {
+            delete S.badImports[item.id];
+          }
           localStorage.setItem(
             storageKey(teamId, item.id),
             JSON.stringify(entry)
@@ -455,6 +463,96 @@
         console.warn("[NofidaHub] import error for", item.id, ":", err.message);
         throw err;
       });
+  }
+
+  /* Force-reimport: renames old broken file and imports a fresh copy */
+  function reimportItem(item, teamId) {
+    if (S.importing[item.id]) return Promise.reject(new Error("Already importing"));
+
+    S.importing[item.id] = true;
+    updateCardState(item.id);
+
+    return fetch(IMPORT_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        catalog_item_id: item.id,
+        team_id: teamId,
+        project_id: S.hubProjectId || null,
+        force_reimport: true
+      })
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return null; })
+          .then(function (payload) {
+            if (!r.ok || !payload || payload.ok === false) {
+              var msg = payload && (payload.message || payload.code) || ("Import API " + r.status);
+              throw new Error(msg);
+            }
+            return payload;
+          });
+      })
+      .then(function (payload) {
+        if (!payload.file_id || !payload.project_id) {
+          throw new Error("Adapter response missing file_id or project_id");
+        }
+
+        S.hubProjectId = payload.project_id;
+        var entry = {
+          fileId: payload.file_id,
+          projectId: payload.project_id,
+          openUrl: payload.open_url || null,
+          thumbnailStatus: payload.thumbnail_status || null,
+          sharedLibraryStatus: payload.shared_library_status || null
+        };
+        S.installed[item.id] = entry;
+        delete S.badImports[item.id];
+        localStorage.setItem(storageKey(teamId, item.id), JSON.stringify(entry));
+        delete S.importing[item.id];
+        updateCardState(item.id);
+        updateStatusBar();
+        return entry;
+      })
+      .catch(function (err) {
+        delete S.importing[item.id];
+        updateCardState(item.id, "error");
+        console.warn("[NofidaHub] reimport error for", item.id, ":", err.message);
+        throw err;
+      });
+  }
+
+  /* Background quality check for all installed items — marks bad imports */
+  function checkInstalledQuality(teamId, catalog) {
+    var installedItems = (catalog || []).filter(function (item) {
+      return !!S.installed[item.id];
+    });
+    if (installedItems.length === 0) return;
+
+    installedItems.forEach(function (item) {
+      var entry = S.installed[item.id];
+      if (!entry || !entry.fileId) return;
+
+      fetch(QUALITY_CHECK_URL, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_id: entry.fileId, team_id: teamId })
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (payload) {
+          if (!payload) return;
+          var wasBad = !!S.badImports[item.id];
+          if (payload.quality_status === "bad_import") {
+            S.badImports[item.id] = true;
+            if (!wasBad) updateCardState(item.id);
+          } else if (wasBad) {
+            delete S.badImports[item.id];
+            updateCardState(item.id);
+          }
+        })
+        .catch(function () { /* ignore quality check failures silently */ });
+    });
   }
 
   /* Open an already-imported file in the Penpot workspace */
@@ -561,7 +659,10 @@
 
   function itemAction(item) {
     if (S.importing[item.id])         return "importing";
-    if (S.installed[item.id])         return "open";
+    if (S.installed[item.id]) {
+      if (S.badImports[item.id])      return "bad_import";
+      return "open";
+    }
     if (canImport(item))              return "add";
     if (isReviewReason(item.import_skip_reason) ||
         item.status === "review_required" ||
@@ -593,7 +694,9 @@
 
     /* status badge */
     var badge = "";
-    if (S.installed[item.id]) {
+    if (action === "bad_import") {
+      badge = '<span class="nhb-badge nhb-warn">Повреждённый импорт</span>';
+    } else if (S.installed[item.id]) {
       badge = isLib
         ? '<span class="nhb-badge nhb-ok">Библиотека добавлена</span>'
         : '<span class="nhb-badge nhb-ok">Шаблон добавлен</span>';
@@ -613,56 +716,83 @@
         e(HUB_PROJECT) + '</strong></div>';
     }
 
-    /* action button */
-    var btnLabel = "";
-    var btnMod   = "";
-    var btnDis   = "";
-    switch (action) {
-      case "add":
-        btnLabel = item.manual_upload
-          ? "Добавить в моё пространство"
-          : (isLib ? "Добавить библиотеку" : "Добавить шаблон");
-        btnMod   = "nhb-btn-add";
-        break;
-      case "open":
-        btnLabel = item.manual_upload
-          ? "Открыть файл"
-          : (isLib ? "Открыть файл библиотеки" : "Открыть шаблон");
-        btnMod   = "nhb-btn-open";
-        break;
-      case "importing":
-        btnLabel = "Добавляем…";
-        btnMod   = "nhb-btn-dim nhb-spin";
-        btnDis   = "disabled";
-        break;
-      case "skip":
-        if (item.import_skip_reason === "needs_manual_conversion" ||
-            item.import_skip_reason === "old_binary_format_v1") {
-          btnLabel = "Требуется конвертация";
-        } else if (item.import_skip_reason === "needs_manual_large_import" ||
-                   item.import_skip_reason === "too_large") {
-          btnLabel = "Требуется большой импорт";
-        } else if (item.import_skip_reason === "invalid_manual_file") {
-          btnLabel = "Некорректный файл";
-        } else if (item.import_skip_reason === "manual_import_failed") {
-          btnLabel = "Импорт не прошел проверку";
-        } else if (item.import_skip_reason === "too_large_hard_limit") {
-          btnLabel = "Недоступно: " + e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason);
-        } else {
-          btnLabel = "Недоступно: " + e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason);
-        }
-        btnMod   = "nhb-btn-dim";
-        btnDis   = "disabled";
-        break;
-      case "review":
-        btnLabel = "Требует проверки лицензии";
-        btnMod   = "nhb-btn-dim";
-        btnDis   = "disabled";
-        break;
-      default:
-        btnLabel = "Недоступно";
-        btnMod   = "nhb-btn-dim";
-        btnDis   = "disabled";
+    /* action footer — single or dual-button depending on state */
+    var actionsHtml;
+    if (action === "open") {
+      /* Healthy installed item: primary open + small reimport icon */
+      var openLabel = item.manual_upload ? "Открыть файл" : (isLib ? "Открыть файл библиотеки" : "Открыть шаблон");
+      actionsHtml = [
+        '<div class="nhb-card-actions">',
+        '  <button class="nhb-btn nhb-btn-open"',
+        '    data-act="open" data-id="' + e(item.id) + '"',
+        '    type="button">' + openLabel + '</button>',
+        '  <button class="nhb-btn-icon" data-act="reimport" data-id="' + e(item.id) + '"',
+        '    type="button" title="Переимпортировать заново">↻</button>',
+        '</div>'
+      ].join("");
+    } else if (action === "bad_import") {
+      /* Bad import: primary reimport + secondary open */
+      actionsHtml = [
+        '<div class="nhb-card-actions">',
+        '  <button class="nhb-btn nhb-btn-reimport-primary"',
+        '    data-act="reimport" data-id="' + e(item.id) + '"',
+        '    type="button">Переимпортировать корректно</button>',
+        '  <button class="nhb-btn nhb-btn-open nhb-btn-sm"',
+        '    data-act="open" data-id="' + e(item.id) + '"',
+        '    type="button">Открыть</button>',
+        '</div>'
+      ].join("");
+    } else {
+      /* Non-installed items: single button */
+      var btnLabel = "";
+      var btnMod   = "";
+      var btnDis   = "";
+      switch (action) {
+        case "add":
+          btnLabel = item.manual_upload
+            ? "Добавить в моё пространство"
+            : (isLib ? "Добавить библиотеку" : "Добавить шаблон");
+          btnMod   = "nhb-btn-add";
+          break;
+        case "importing":
+          btnLabel = "Добавляем…";
+          btnMod   = "nhb-btn-dim nhb-spin";
+          btnDis   = "disabled";
+          break;
+        case "skip":
+          if (item.import_skip_reason === "needs_manual_conversion" ||
+              item.import_skip_reason === "old_binary_format_v1") {
+            btnLabel = "Требуется конвертация";
+          } else if (item.import_skip_reason === "needs_manual_large_import" ||
+                     item.import_skip_reason === "too_large") {
+            btnLabel = "Требуется большой импорт";
+          } else if (item.import_skip_reason === "invalid_manual_file") {
+            btnLabel = "Некорректный файл";
+          } else if (item.import_skip_reason === "manual_import_failed") {
+            btnLabel = "Импорт не прошел проверку";
+          } else {
+            btnLabel = "Недоступно: " + e(SKIP_LABELS[item.import_skip_reason] || item.import_skip_reason);
+          }
+          btnMod   = "nhb-btn-dim";
+          btnDis   = "disabled";
+          break;
+        case "review":
+          btnLabel = "Требует проверки лицензии";
+          btnMod   = "nhb-btn-dim";
+          btnDis   = "disabled";
+          break;
+        default:
+          btnLabel = "Недоступно";
+          btnMod   = "nhb-btn-dim";
+          btnDis   = "disabled";
+      }
+      actionsHtml = [
+        '<button class="nhb-btn ' + btnMod + '"',
+        '  data-act="' + action + '" data-id="' + e(item.id) + '"',
+        '  type="button" ' + btnDis + '>',
+        btnLabel,
+        '</button>'
+      ].join("");
     }
 
     return [
@@ -678,11 +808,7 @@
       item.license ? '<span>Лицензия: ' + e(item.license) + '</span>' : '',
       '  </div>',
       locationHint,
-      '  <button class="nhb-btn ' + btnMod + '"',
-      '    data-act="' + action + '" data-id="' + e(item.id) + '"',
-      '    type="button" ' + btnDis + '>',
-      btnLabel,
-      '  </button>',
+      actionsHtml,
       '</article>'
     ].join("");
   }
@@ -826,6 +952,17 @@
     /* location hint shown after install */
     ".nhb-location{font-size:11px;color:" + BRAND.muted + ";padding:4px 0}",
     ".nhb-location strong{color:" + BRAND.accent + "}",
+    /* dual-button card actions row */
+    ".nhb-card-actions{display:flex;gap:6px;align-items:center;margin-top:auto}",
+    ".nhb-card-actions .nhb-btn{flex:1;margin-top:0}",
+    ".nhb-btn-icon{border:0;border-radius:8px;padding:9px 11px;font-size:15px;",
+      "cursor:pointer;background:rgba(148,163,184,.1);color:" + BRAND.muted + ";",
+      "flex-shrink:0;transition:all .14s;line-height:1}",
+    ".nhb-btn-icon:hover{background:rgba(148,163,184,.2);color:" + BRAND.text + "}",
+    ".nhb-btn-reimport-primary{background:rgba(245,158,11,.14);color:" + BRAND.warning + ";",
+      "border:1px solid rgba(245,158,11,.28)}",
+    ".nhb-btn-reimport-primary:hover{background:rgba(245,158,11,.24)}",
+    ".nhb-btn-sm{padding:7px 10px;font-size:11px;flex-shrink:0;flex:0 0 auto}",
     /* open-hub-project link */
     ".nhb-open-proj{background:0;border:0;color:" + BRAND.muted + ";font-size:12px;",
       "cursor:pointer;padding:4px 8px;border-radius:8px;text-decoration:underline;font-family:inherit}",
@@ -931,6 +1068,16 @@
         });
       } else if (act === "open") {
         openFile(item);
+      } else if (act === "reimport") {
+        resolveTeamId().then(function (tid) {
+          if (!tid) {
+            showMsg("Не удалось определить текущую команду. Перейдите на дашборд и попробуйте снова.");
+            return;
+          }
+          reimportItem(item, tid).catch(function (err) {
+            showMsg("Ошибка переимпорта: " + err.message);
+          });
+        });
       }
     });
 
@@ -990,6 +1137,8 @@
         return detectInstalledItems(tid, catalog).then(function () {
           refreshGrid();
           updateStatusBar();
+          /* Background quality check — marks bad imports without blocking the UI */
+          checkInstalledQuality(tid, catalog);
         });
       });
     }).catch(function (err) {

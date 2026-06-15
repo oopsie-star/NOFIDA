@@ -68,7 +68,7 @@ services:
   nofida-hub-adapter:
     build:
       context: ./services/nofida-hub-adapter
-    image: nofida/hub-adapter:015b
+    image: nofida/hub-adapter:015e
     restart: always
     volumes:
       - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/srv/library-store:ro
