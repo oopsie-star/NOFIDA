@@ -45,6 +45,7 @@ services:
     image: nofida/frontend:2.16.0
     restart: always
     volumes:
+      - penpot_assets:/opt/data/assets:ro
       - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/var/www/app/nofida/libraries:ro
     ports:
       # Bind to loopback only. Docker's published ports bypass ufw, so exposing

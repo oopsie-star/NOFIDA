@@ -40,6 +40,22 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function gotoWithRetry(page, url, options = {}, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await page.goto(url, options);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      await sleep(1500 * attempt);
+    }
+  }
+
+  throw lastError;
+}
+
 function slugify(value) {
   return String(value || "")
     .toLowerCase()
@@ -47,6 +63,19 @@ function slugify(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-{2,}/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function collectSlugCandidates(item) {
+  const values = [
+    item.title,
+    item.name,
+    item.id,
+    item.verified_file_name,
+    item.penpot_file_name,
+    item.file_name,
+  ];
+
+  return new Set(values.map((value) => slugify(value)).filter(Boolean));
 }
 
 function makeTD() {
@@ -116,6 +145,15 @@ function td(value) {
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function resolveJsonPath(storeRoot, preferredNames) {
+  for (const name of preferredNames) {
+    const candidate = path.join(storeRoot, name);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return path.join(storeRoot, preferredNames[0]);
 }
 
 function writeJsonAtomic(filePath, payload) {
@@ -248,7 +286,7 @@ async function resolveTeamId(page) {
 }
 
 async function loginAs(page, user) {
-  await page.goto(`${BASE}/#/auth/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await gotoWithRetry(page, `${BASE}/#/auth/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForSelector("input[type='email'], input[name='email']", { timeout: 60000 });
   await page.fill("input[type='email'], input[name='email']", user.email);
   await page.fill("input[type='password'], input[name='password']", user.password);
@@ -276,7 +314,7 @@ async function ensureHubProject(page, teamId) {
 }
 
 async function openHub(page) {
-  await page.goto(`${BASE}/${HUB_HASH}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await gotoWithRetry(page, `${BASE}/${HUB_HASH}`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await sleep(3000);
   const visible = await page.locator("#nhb-overlay:not([hidden])").isVisible().catch(() => false);
   if (!visible) throw new Error("Hub overlay did not open");
@@ -298,6 +336,77 @@ async function getStoredEntry(page, itemId) {
       return null;
     }
   }, { ns: STORE_NS, id: itemId });
+}
+
+function classifyButtonLabel(label) {
+  if (/Ошибка/i.test(label)) return "error";
+  if (/Добавить/i.test(label)) return "add";
+  if (/Открыть|Уже добавлено/i.test(label)) return "open";
+  return "unknown";
+}
+
+async function waitForCardAction(button, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastLabel = "";
+
+  while (Date.now() < deadline) {
+    lastLabel = ((await button.textContent().catch(() => "")) || "").trim();
+    const action = classifyButtonLabel(lastLabel);
+    if (action !== "unknown") {
+      return { action, label: lastLabel };
+    }
+    await sleep(500);
+  }
+
+  return { action: classifyButtonLabel(lastLabel), label: lastLabel };
+}
+
+async function resolveInstalledEntry(page, item, projectId) {
+  const cached = await getStoredEntry(page, item.id);
+  if (cached?.fileId && cached?.projectId) return cached;
+
+  const files = await getFiles(page, projectId);
+  const candidates = collectSlugCandidates(item);
+  const match = files.find((file) => candidates.has(slugify(file.name)));
+  if (!match) return null;
+
+  return {
+    fileId: match.id,
+    projectId,
+    fileName: match.name,
+    sharedLibraryStatus: match["is-shared"] ? "enabled" : "disabled",
+  };
+}
+
+async function verifyDuplicatePrevention(page, item, teamId, projectId) {
+  const response = await page.request.post(`${BASE}/api/nofida/hub/import`, {
+    headers: { "Content-Type": "application/json" },
+    data: {
+      catalog_item_id: item.id,
+      team_id: teamId,
+      project_id: projectId,
+    },
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  const ok = response.ok() &&
+    payload?.ok === true &&
+    payload?.status === "already_installed" &&
+    payload?.duplicate_prevented === true;
+
+  return {
+    ok,
+    statusCode: response.status(),
+    status: payload?.status ?? null,
+    duplicatePrevented: payload?.duplicate_prevented ?? null,
+    payload,
+  };
 }
 
 async function getFileSummary(page, fileId) {
@@ -329,49 +438,77 @@ async function importFromHub(page, item, teamId, expectAdd = true) {
   }
 
   const button = card.locator(".nhb-btn");
-  const initialLabel = ((await button.textContent().catch(() => "")) || "").trim();
-  if (expectAdd && !/Добавить/i.test(initialLabel)) {
-    return { ok: false, issue: `expected add button, saw "${initialLabel}"` };
+  const initial = await waitForCardAction(button);
+  if (initial.action === "error") {
+    return { ok: false, issue: `hub reported error: ${initial.label}` };
   }
 
-  if (/Добавить/i.test(initialLabel)) {
+  if (expectAdd && initial.action !== "add" && initial.action !== "open") {
+    return { ok: false, issue: `unexpected card action "${initial.label || "unknown"}"` };
+  }
+
+  if (initial.action === "add") {
     await button.click();
     for (let attempt = 0; attempt < 90; attempt += 1) {
       await sleep(1000);
-      const label = ((await button.textContent().catch(() => "")) || "").trim();
-      if (/Открыть/i.test(label)) break;
-      if (/Ошибка/i.test(label)) return { ok: false, issue: `hub reported error: ${label}` };
+      const next = await waitForCardAction(button, 1000);
+      if (next.action === "open") break;
+      if (next.action === "error") return { ok: false, issue: `hub reported error: ${next.label}` };
     }
   }
 
-  const afterLabel = ((await button.textContent().catch(() => "")) || "").trim();
-  if (!/Открыть/i.test(afterLabel)) {
-    return { ok: false, issue: `expected open button after import, saw "${afterLabel}"` };
+  const after = await waitForCardAction(button, 5000);
+  if (after.action !== "open") {
+    return { ok: false, issue: `expected installed/open state, saw "${after.label}"` };
   }
 
-  const stored = await getStoredEntry(page, item.id);
+  const stored = await resolveInstalledEntry(page, item, await ensureHubProject(page, teamId));
   if (!stored?.fileId || !stored?.projectId) {
-    return { ok: false, issue: "adapter result was not cached in localStorage" };
+    return { ok: false, issue: "could not resolve installed file after import/open" };
   }
 
-  await button.click();
-  await page.waitForURL(/\/#\/workspace/, { timeout: 25000 });
+  let workspaceLoaded = false;
+  await button.click().catch(() => {});
+  await page.waitForURL(/\/#\/workspace/, { timeout: 10000 }).catch(() => {});
+  workspaceLoaded = page.url().includes("workspace");
+  if (!workspaceLoaded) {
+    await gotoWithRetry(page,
+      `${BASE}/#/workspace?team-id=${teamId}&file-id=${stored.fileId}`,
+      { waitUntil: "domcontentloaded", timeout: 30000 },
+    );
+    await page.waitForURL(/\/#\/workspace/, { timeout: 10000 }).catch(() => {});
+    workspaceLoaded = page.url().includes("workspace");
+  }
   await sleep(6000);
 
-  const workspaceLoaded = page.url().includes("workspace");
   const summary = workspaceLoaded ? await getFileSummary(page, stored.fileId) : null;
   const fileData = workspaceLoaded ? await getFileData(page, stored.fileId, stored.projectId) : null;
   const pageCount = Array.isArray(fileData?.data?.pages) ? fileData.data.pages.length : null;
   const componentsCount = summary?.components?.count ?? null;
 
-  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects/${stored.projectId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await gotoWithRetry(
+    page,
+    `${BASE}/#/dashboard/team/${teamId}/projects/${stored.projectId}`,
+    { waitUntil: "domcontentloaded", timeout: 30000 },
+  );
   await sleep(4000);
   const files = await getFiles(page, stored.projectId);
-  const duplicateVisible = files.some((file) => slugify(file.name) === slugify(item.title || item.id));
+  const candidates = collectSlugCandidates(item);
+  const duplicateVisible = files.some((file) => candidates.has(slugify(file.name)));
   const thumb = await getThumbnailStatus(page, stored.fileId, stored.projectId);
+  const duplicate = await verifyDuplicatePrevention(page, item, teamId, stored.projectId);
+  const issue = !workspaceLoaded
+    ? "workspace did not open"
+    : !duplicateVisible
+      ? "imported file not visible in NOFIDA Hub project"
+      : !duplicate.ok
+        ? `duplicate check failed (${duplicate.statusCode}/${duplicate.status}/${duplicate.duplicatePrevented})`
+        : null;
 
   return {
-    ok: workspaceLoaded && duplicateVisible,
+    ok: !issue,
+    issue,
+    mode: initial.action === "add" ? "first_time_import" : "already_installed",
     fileId: stored.fileId,
     projectId: stored.projectId,
     pageCount,
@@ -379,6 +516,7 @@ async function importFromHub(page, item, teamId, expectAdd = true) {
     duplicateVisible,
     thumbnailStatus: thumb.status,
     thumbnailId: thumb.thumbnailId,
+    duplicateCheck: duplicate,
   };
 }
 
@@ -410,8 +548,8 @@ async function runUserFlow(browser, user, items, options = {}) {
 async function run() {
   const args = parseArgs(process.argv.slice(2));
   const storeRoot = path.resolve(args.storeRoot);
-  const inventoryPath = path.join(storeRoot, "inventory.json");
-  const catalogPath = path.join(storeRoot, "catalog.json");
+  const inventoryPath = resolveJsonPath(storeRoot, ["inventory.json", "penpot-hub.inventory.json"]);
+  const catalogPath = resolveJsonPath(storeRoot, ["catalog.json", "catalog.example.json"]);
   const inventory = readJson(inventoryPath);
   const catalog = readJson(catalogPath);
   const inventoryById = new Map(inventory.items.map((item) => [item.id, item]));
@@ -489,9 +627,11 @@ async function run() {
   user1Flow.results.forEach((result) => {
     console.log(
       `${result.ok ? "PASS" : "FAIL"} ${result.itemId}` +
+      ` | mode=${result.mode || "?"}` +
       ` | pages=${result.pageCount ?? "?"}` +
       ` | components=${result.componentsCount ?? "?"}` +
       ` | thumbnail=${result.thumbnailStatus || "?"}` +
+      ` | duplicate=${result.duplicateCheck?.ok ? "pass" : "fail"}` +
       `${result.issue ? ` | issue=${result.issue}` : ""}`,
     );
   });
@@ -499,7 +639,9 @@ async function run() {
   const user2Result = user2Flow.results[0];
   console.log(
     `${user2Result.ok ? "PASS" : "FAIL"} user2:${user2Result.itemId}` +
+    ` | mode=${user2Result.mode || "?"}` +
     ` | thumbnail=${user2Result.thumbnailStatus || "?"}` +
+    ` | duplicate=${user2Result.duplicateCheck?.ok ? "pass" : "fail"}` +
     `${user2Result.issue ? ` | issue=${user2Result.issue}` : ""}`,
   );
 
