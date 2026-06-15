@@ -13,10 +13,11 @@
 set -euo pipefail
 
 HOST="root@engine.sys.bachopus.com"
-PROJECT_DIR="/root/NOFIDA"
+PROJECT_DIR="/opt/nofida-core"
 SSH_KEY="${NOFIDA_SSH_KEY:-$HOME/.ssh/id_rsa}"
 COMPOSE_PROJECT="nofida-core"
 PUBLIC_URI="https://engine.sys.bachopus.com"
+LIBRARY_STORE_ROOT="/opt/nofida-core/library-store"
 
 echo "▶  Connecting to $HOST …"
 
@@ -39,6 +40,18 @@ if grep -q '^PENPOT_PUBLIC_URI=' .env; then
 else
   echo "PENPOT_PUBLIC_URI=${PUBLIC_URI}" >> .env
 fi
+if grep -q '^NOFIDA_LIBRARY_STORE_ROOT=' .env; then
+  sed -i "s#^NOFIDA_LIBRARY_STORE_ROOT=.*#NOFIDA_LIBRARY_STORE_ROOT=${LIBRARY_STORE_ROOT}#" .env
+else
+  echo "NOFIDA_LIBRARY_STORE_ROOT=${LIBRARY_STORE_ROOT}" >> .env
+fi
+
+echo "── bootstrap library store ──────────────────────────"
+mkdir -p "${LIBRARY_STORE_ROOT}"/files "${LIBRARY_STORE_ROOT}"/quarantine "${LIBRARY_STORE_ROOT}"/logs
+bash ./scripts/sync-penpot-hub-libraries.sh --skip-downloads
+
+echo "── install library sync timer ───────────────────────"
+bash ./scripts/install-library-sync-systemd.sh
 
 echo "── docker compose cleanup (stale default project) ─────"
 docker compose -p nofida down --remove-orphans 2>/dev/null || true

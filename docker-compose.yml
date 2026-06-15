@@ -44,6 +44,8 @@ services:
         PENPOT_VERSION: *penpot-version
     image: nofida/frontend:2.16.0
     restart: always
+    volumes:
+      - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/var/www/app/nofida/libraries:ro
     ports:
       # Bind to loopback only. Docker's published ports bypass ufw, so exposing
       # 0.0.0.0 would make Penpot publicly reachable on :9001 around the

@@ -48,6 +48,7 @@ NOFIDA_DOMAIN="${NOFIDA_DOMAIN:-engine.sys.bachopus.com}"
 NOFIDA_REDIRECT_FROM="${NOFIDA_REDIRECT_FROM:-}"
 
 PENPOT_PUBLIC_URI="https://${NOFIDA_DOMAIN}"
+NOFIDA_LIBRARY_STORE_ROOT="/opt/nofida-core/library-store"
 
 echo ""
 echo "🚀 [Nofida DevOps] Cloud Core setup"
@@ -121,10 +122,29 @@ else
   fi
 fi
 
+if grep -qs '^NOFIDA_LIBRARY_STORE_ROOT=' "${ENV_FILE}" 2>/dev/null; then
+  sudo sed -i "s#^NOFIDA_LIBRARY_STORE_ROOT=.*#NOFIDA_LIBRARY_STORE_ROOT=${NOFIDA_LIBRARY_STORE_ROOT}#" "${ENV_FILE}"
+else
+  echo "NOFIDA_LIBRARY_STORE_ROOT=${NOFIDA_LIBRARY_STORE_ROOT}" >> "${ENV_FILE}"
+fi
+
+echo "📚 Ensuring host-backed library store exists..."
+sudo install -d -m 0755 \
+  "${NOFIDA_LIBRARY_STORE_ROOT}" \
+  "${NOFIDA_LIBRARY_STORE_ROOT}/files" \
+  "${NOFIDA_LIBRARY_STORE_ROOT}/quarantine" \
+  "${NOFIDA_LIBRARY_STORE_ROOT}/logs"
+
+echo "🗂️ Bootstrapping library catalog metadata..."
+sudo bash "${REPO_ROOT}/scripts/sync-penpot-hub-libraries.sh" --skip-downloads
+
 # ── 6. Build + start the Nofida stack (branded frontend from ./branding) ─────
 echo "⚡ Building and starting the Nofida stack..."
 cd "${REPO_ROOT}"
 sudo docker compose up -d --build
+
+echo "⏰ Installing monthly library sync timer..."
+sudo bash "${REPO_ROOT}/scripts/install-library-sync-systemd.sh"
 
 # ── 7. Caddyfile — TLS termination + clean reverse proxy (NO iframe headers) ─
 echo "🔐 Writing Caddyfile..."

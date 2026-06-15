@@ -41,11 +41,18 @@
   };
 
   function onReady(fn) {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", fn, { once: true });
-    } else {
-      fn();
+    function runAfterPaint() {
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(fn);
+      });
     }
+
+    if (document.readyState === "complete") {
+      runAfterPaint();
+      return;
+    }
+
+    window.addEventListener("load", runAfterPaint, { once: true });
   }
 
   function isDashboardRoute() {
@@ -53,8 +60,14 @@
   }
 
   function isAssistantRoute() {
-    return /^#\/dashboard/.test(window.location.hash || "") ||
-      /^#\/workspace/.test(window.location.hash || "");
+    var hash = window.location.hash || "";
+    return hash === "" ||
+      /^#\/dashboard/.test(hash) ||
+      /^#\/workspace/.test(hash) ||
+      /^#\/auth/.test(hash) ||
+      /^#\/login/.test(hash) ||
+      /^#\/register/.test(hash) ||
+      /^#\/recovery/.test(hash);
   }
 
   function escapeHtml(text) {
@@ -101,12 +114,18 @@
     return items.map(function (item) {
       var href = item.internal_url || item.hub_url || "#";
       var source = item.internal_url ? "Внутренний ресурс" : "Источник";
+      var title = item.title || item.name || item.id || "Library";
+      var meta = [
+        item.type || "library",
+        item.tier || "catalog",
+        item.author || "Nofida"
+      ].join(" · ");
       return [
         '<article class="library-item">',
         '  <div class="library-copy">',
         '    <span class="library-status">' + escapeHtml(item.status || "catalog") + "</span>",
-        '    <h3>' + escapeHtml(item.name) + "</h3>",
-        '    <p>' + escapeHtml((item.type || "library") + " · " + (item.author || "Nofida")) + "</p>",
+        '    <h3>' + escapeHtml(title) + "</h3>",
+        '    <p>' + escapeHtml(meta) + "</p>",
         "  </div>",
         '  <button class="library-link" type="button" data-href="' + escapeHtml(href) + '">' + source + "</button>",
         "</article>"
@@ -121,7 +140,7 @@
 
   function buildUI() {
     state.host = ensureHost();
-    state.root = state.host.attachShadow({ mode: "open" });
+    state.root = state.host.shadowRoot || state.host.attachShadow({ mode: "open" });
     state.root.innerHTML = [
       "<style>",
       ":host{all:initial}",
@@ -194,7 +213,7 @@
       '        <span class="action-kicker">Libraries</span>',
       '        <p class="action-title">Каталог Nofida</p>',
       '        <p class="action-copy">Локальный curated catalog из <code>/nofida/libraries/catalog.json</code>.</p>',
-      '        <span class="action-foot">Готово для внутреннего хранилища</span>',
+      '        <span class="action-foot">Host-backed store и same-origin файлы</span>',
       "      </button>",
       "    </div>",
       "  </section>",
@@ -211,7 +230,7 @@
       '  <aside class="library-drawer" id="library-drawer" role="dialog" aria-label="Nofida libraries">',
       '    <div class="panel-head"><span class="dot"></span><h2>Nofida Libraries</h2><small>local catalog</small><button class="close" type="button" data-close="libraries">×</button></div>',
       '    <div class="library-body">',
-      '      <p class="library-note">Каталог читается из локального JSON слоя. Когда vendored-файлы появятся в <code>branding/libraries/files</code>, эта панель уже сможет вести на внутренние URL.</p>',
+      '      <p class="library-note">Каталог читается из server-side store. После monthly sync approved файлы доступны по same-origin URL в <code>/nofida/libraries/files/</code>.</p>',
       '      <div class="library-list" id="library-list"><div class="library-empty">Загрузка каталога…</div></div>',
       "    </div>",
       "  </aside>",
@@ -265,7 +284,7 @@
         state.catalog = items;
         state.els.libraryList.innerHTML = items.length ?
           renderCatalog(items) :
-          '<div class="library-empty">Каталог пока пуст. Добавьте vendored-библиотеки в branding/libraries/files.</div>';
+          '<div class="library-empty">Каталог пока пуст. Запустите host-side sync и проверьте vendored файлы в /nofida/libraries/files/.</div>';
       })
       .catch(function () {
         state.els.libraryList.innerHTML = '<div class="library-empty">Не удалось загрузить local catalog.</div>';

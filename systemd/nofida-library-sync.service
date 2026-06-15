@@ -1,0 +1,16 @@
+[Unit]
+Description=NOFIDA Penpot Hub library sync
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/opt/nofida-core/scripts/sync-penpot-hub-libraries.sh
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/nofida-core
+Environment=LIBRARY_STORE_DIR=/opt/nofida-core/library-store
+Environment=NOFIDA_LIBRARY_STORE_ROOT=/opt/nofida-core/library-store
+Environment=NOFIDA_PENPOT_INVENTORY_SOURCE=/opt/nofida-core/branding/libraries/penpot-hub.inventory.json
+ExecStart=/usr/bin/env bash /opt/nofida-core/scripts/sync-penpot-hub-libraries.sh --all
+Nice=10
+IOSchedulingClass=best-effort
+UMask=0022
