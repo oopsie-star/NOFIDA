@@ -23,10 +23,10 @@ COPY --chown=penpot:penpot ai-core/   ${WEBROOT}/nofida/ai-core/
 COPY --chown=penpot:penpot libraries/ ${WEBROOT}/nofida/libraries/
 COPY --chmod=755 scripts/patch-frontend.sh /usr/local/bin/patch-frontend.sh
 
-# ── nginx override: serve /nofida/* as plain static files ───────────────────
-# Without this, Penpot's catch-all `location ~ ^/[^/]+/(.*){return 301 /404}`
-# redirects .json and .html paths (needed by the companion plugin) to /404.
-COPY nginx/nofida.conf /etc/nginx/overrides/location.d/nofida.conf
+# ── nginx override: serve /nofida/* and proxy /api/nofida/* at server level ─
+# These locations must live in server.d so the API route is evaluated before
+# Penpot's top-level `location /api { ... }` proxy and the SPA catch-all.
+COPY nginx/nofida.conf /etc/nginx/overrides/server.d/nofida.conf
 
 # ── Build-time white-label patching ─────────────────────────────────────────
 # We patch index.html + compiled assets ONCE at image build time instead of
