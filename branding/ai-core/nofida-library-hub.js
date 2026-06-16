@@ -1237,7 +1237,7 @@
 
     /* Step 1: replace any external penpot.app links in the entire dashboard */
     var extLinks = document.querySelectorAll(
-      "a[href*='penpot.app/penpothub'],a[href*='penpot.app/hub']"
+      "a[href*='penpot.app/penpothub'],a[href*='penpot.app/hub'],a[href*='penpot.app/libraries-templates']"
     );
     if (extLinks.length === 0) return;   /* section not rendered yet */
 
@@ -1245,7 +1245,7 @@
     extLinks.forEach(function (link) {
       var clone       = document.createElement("button");
       clone.type      = "button";
-      clone.textContent = link.textContent || "Открыть каталог NOFIDA";
+      clone.textContent = "Explore NOFIDA resources";
       /* preserve visual styling by copying inline style */
       if (link.getAttribute("style")) clone.setAttribute("style", link.getAttribute("style"));
       clone.style.cursor   = "pointer";
@@ -1300,8 +1300,8 @@
     card.innerHTML =
       '<span style="font-size:18px">📚</span>' +
       '<div>' +
-        '<div style="font-size:13px;font-weight:700;color:#bfff00">Библиотеки NOFIDA</div>' +
-        '<div style="font-size:11px;color:#94a3b8">Внутренний каталог для вашей команды</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#bfff00">NOFIDA Hub</div>' +
+        '<div style="font-size:11px;color:#94a3b8">Explore libraries, templates, UI kits, and design-system resources inside your workspace.</div>' +
       '</div>';
     card.addEventListener("click", function () {
       state_teamId_refresh();
@@ -1401,9 +1401,9 @@
       applyWorkspacePageHint();
     }
 
-    /* If hub is open and user navigated to a real Penpot route → close hub */
+    /* If hub is open and user navigated away from the hub route → close hub */
     if (S.overlayEl && !S.overlayEl.hasAttribute("hidden")) {
-      if (/^#\/(dashboard|workspace|auth|login)/.test(hash)) {
+      if (!(hash === HUB_HASH || hash.indexOf(HUB_HASH + "/") === 0)) {
         hideHub();
       }
     }

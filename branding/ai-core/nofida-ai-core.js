@@ -1362,7 +1362,7 @@
         <span class="action-kicker">Nofida</span>\
         <p class="action-title">Создать файл</p>\
         <p class="action-copy">Быстрый вход в новый проект без зависимости от React-плейсхолдера.</p>\
-        <span class="action-foot">Нативный create flow Penpot</span>\
+        <span class="action-foot">Нативный flow создания файла</span>\
       </button>\
       <button class="action-card" type="button" data-action="import">\
         <span class="action-kicker">Import</span>\
@@ -1767,7 +1767,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // PATCH 016C — External Penpot link interception
+  // PATCH 017A — External Penpot link interception + white-label cleanup
   // ─────────────────────────────────────────────────────────────────────
 
   var _extLinkObserver = null;
@@ -1778,35 +1778,119 @@
     "github.com/penpot",
     "penpot.app/learn",
     "penpot.app/blog",
-    "penpot.app/libraries-templates"
+    "penpot.app/libraries-templates",
+    "penpot.app/terms",
+    "penpot.app/privacy",
+    "penpot.app/changelog",
+    "penpot.app/releases",
+    "blog.penpot.app"
   ];
+
+  function isPenpotExternalHref(href) {
+    var value = String(href || "").toLowerCase();
+    return value.indexOf("penpot.app") >= 0 ||
+      value.indexOf("help.penpot.app") >= 0 ||
+      value.indexOf("community.penpot.app") >= 0 ||
+      value.indexOf("blog.penpot.app") >= 0 ||
+      value.indexOf("github.com/penpot") >= 0;
+  }
+
+  function resolveNofidaInternalRoute(href, text, ariaLabel, title) {
+    var hay = normalizeText([href, text, ariaLabel, title].join(" "));
+    if (!hay) return "#/nofida/help";
+
+    if (hay.indexOf("penpothub") >= 0 ||
+        hay.indexOf("libraries-templates") >= 0 ||
+        hay.indexOf("/hub") >= 0 ||
+        hay.indexOf(" hub") >= 0 ||
+        hay.indexOf("библиотек") >= 0 ||
+        hay.indexOf("шаблон") >= 0) {
+      return null;
+    }
+    if (hay.indexOf("privacy") >= 0 || hay.indexOf("конфиденц") >= 0) {
+      return "#/nofida/privacy";
+    }
+    if (hay.indexOf("terms") >= 0 || hay.indexOf("услов") >= 0) {
+      return "#/nofida/terms";
+    }
+    if (hay.indexOf("changelog") >= 0 || hay.indexOf("what's new") >= 0 || hay.indexOf("измен") >= 0) {
+      return "#/nofida/changelog";
+    }
+    if (hay.indexOf("release") >= 0 || hay.indexOf("релиз") >= 0 || hay.indexOf("blog") >= 0) {
+      return "#/nofida/releases";
+    }
+    if (hay.indexOf("repository") >= 0 || hay.indexOf("repo") >= 0 ||
+        hay.indexOf("github") >= 0 || hay.indexOf("репозит") >= 0) {
+      return "#/nofida/repository";
+    }
+    if (hay.indexOf("community") >= 0 || hay.indexOf("feedback") >= 0 ||
+        hay.indexOf("сообщест") >= 0) {
+      return "#/nofida/community";
+    }
+    if (hay.indexOf("learn") >= 0 || hay.indexOf("guide") >= 0 ||
+        hay.indexOf("обуч") >= 0) {
+      return "#/nofida/learn";
+    }
+    if (hay.indexOf("help") >= 0 || hay.indexOf("support") >= 0 ||
+        hay.indexOf("docs") >= 0 || hay.indexOf("справ") >= 0) {
+      return "#/nofida/help";
+    }
+    return "#/nofida/help";
+  }
+
+  function replacePenpotCopy(value) {
+    return String(value || "")
+      .replace(/\bPenpot Hub\b/g, "NOFIDA Hub")
+      .replace(/\bPenpot\b/g, "NOFIDA");
+  }
+
+  function sanitizePenpotBrandingUi() {
+    document.querySelectorAll("[title],[aria-label]").forEach(function (node) {
+      var title = node.getAttribute("title");
+      var ariaLabel = node.getAttribute("aria-label");
+      if (title && /Penpot/i.test(title)) {
+        node.setAttribute("title", replacePenpotCopy(title));
+      }
+      if (ariaLabel && /Penpot/i.test(ariaLabel)) {
+        node.setAttribute("aria-label", replacePenpotCopy(ariaLabel));
+      }
+    });
+
+    document.querySelectorAll("svg title").forEach(function (node) {
+      if (/Penpot/i.test(node.textContent || "")) {
+        node.textContent = replacePenpotCopy(node.textContent || "");
+      }
+    });
+
+    document.querySelectorAll("a,button,span,small").forEach(function (node) {
+      if (node.children && node.children.length) return;
+      var text = node.textContent || "";
+      if (!/Penpot/i.test(text) || text.length > 48) return;
+      node.textContent = replacePenpotCopy(text);
+    });
+  }
 
   function interceptPenpotExternalLinks() {
     document.querySelectorAll("a[href]").forEach(function (link) {
       if (link.getAttribute("data-nofida-ext")) return;
       var href = link.getAttribute("href") || "";
-      var isExt = PENPOT_EXT_DOMAINS.some(function (d) { return href.indexOf(d) >= 0; });
+      var isExt = PENPOT_EXT_DOMAINS.some(function (d) { return href.indexOf(d) >= 0; }) || isPenpotExternalHref(href);
       if (!isExt) return;
       link.setAttribute("data-nofida-ext", "1");
 
-      var text = normalizeText(link.textContent || "");
-      var dest;
-      if (href.indexOf("github.com/penpot") >= 0 || text.indexOf("репозитори") >= 0) {
-        dest = "/nofida/help/community.html";
-      } else if (href.indexOf("community.penpot.app") >= 0 || text.indexOf("сообщест") >= 0) {
-        dest = "/nofida/help/community.html";
-      } else if (href.indexOf("learn") >= 0 || text.indexOf("обучени") >= 0) {
-        dest = "/nofida/help/learn.html";
-      } else if (href.indexOf("libraries-templates") >= 0) {
-        dest = null; // handled by nofida-library-hub.js
-      } else {
-        dest = "/nofida/help/";
-      }
+      var dest = resolveNofidaInternalRoute(
+        href,
+        link.textContent || "",
+        link.getAttribute("aria-label") || "",
+        link.getAttribute("title") || ""
+      );
       if (!dest) return;
       link.setAttribute("href", dest);
-      link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener noreferrer");
+      link.removeAttribute("target");
+      link.removeAttribute("rel");
     });
+
+    sanitizePenpotBrandingUi();
   }
 
   function startExtLinkObserver() {
