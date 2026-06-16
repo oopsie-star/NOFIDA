@@ -61,7 +61,8 @@ docker compose -p "${COMPOSE_PROJECT}" up -d --build --remove-orphans \
   penpot-frontend \
   penpot-backend \
   penpot-exporter \
-  penpot-mcp
+  penpot-mcp \
+  nofida-hub-adapter
 
 echo ""
 echo "✓  Deploy complete — https://engine.sys.bachopus.com"
