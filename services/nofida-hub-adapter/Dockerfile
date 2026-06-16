@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY . /app
 
+RUN mkdir -p /var/lib/nofida-hub-adapter \
+  && chown -R node:node /app /var/lib/nofida-hub-adapter
+
 ENV NODE_ENV=production
 ENV PORT=3101
 
