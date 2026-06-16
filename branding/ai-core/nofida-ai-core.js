@@ -1143,7 +1143,7 @@
       }
     }
 
-    host.innerHTML = [
+    var markup = [
       "<style>", getAccountSettingsScopedStyles(), "</style>",
       activePage ? [
         '<section class="account-shell page">',
@@ -1189,6 +1189,11 @@
         "</section>"
       ].join("")
     ].join("");
+
+    if (host.getAttribute("data-nofida-markup") !== markup) {
+      host.innerHTML = markup;
+      host.setAttribute("data-nofida-markup", markup);
+    }
   }
 
   function scheduleAccountSettingsRefresh() {
