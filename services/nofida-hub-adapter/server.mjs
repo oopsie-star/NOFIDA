@@ -97,6 +97,15 @@ function makeTransitDecoder() {
         }
         return out;
       }
+      // Transit tagged values: ["~#tag", payload] — e.g. sets, instants, etc.
+      if (value.length === 2 && typeof value[0] === "string" && value[0].startsWith("~#")) {
+        const tag = value[0].slice(2);
+        if (tag === "set" || tag === "list") {
+          return Array.isArray(value[1]) ? value[1].map(decode) : [decode(value[1])];
+        }
+        // For other tagged values just unwrap the payload
+        return decode(value[1]);
+      }
       return value.map(decode);
     }
 
@@ -342,7 +351,7 @@ function buildOpenUrl(teamId, fileId, record) {
 
 function buildPenpotHeaders(cookieHeader, extra = undefined) {
   const headers = new Headers(extra || {});
-  headers.set("user-agent", "nofida-hub-adapter/015e");
+  headers.set("user-agent", "nofida-hub-adapter/015g");
   headers.set("cookie", cookieHeader);
   return headers;
 }
@@ -706,11 +715,21 @@ async function checkFileHealth(cookieHeader, fileId) {
     }
 
     const data = await readTransitResponse(response);
+    const features = data?.features || data?.data?.features || [];
     const pages = data?.pages || data?.data?.pages || [];
     const pagesIndex = data?.["pages-index"] || data?.data?.["pages-index"] || {};
 
     if (!Array.isArray(pages) || pages.length === 0) {
       return { healthy: false, reason: "no_pages", pages: 0, totalObjects: 0 };
+    }
+
+    // Penpot 2.16 adds fdata/objects-map to all imported files. In this mode
+    // objects are stored in a flat binary map and get-file only returns a
+    // subset (typically the first page's objects). Object-count thresholds are
+    // therefore meaningless here — trust the import if pages exist.
+    const usesObjectsMap = Array.isArray(features) && features.includes("fdata/objects-map");
+    if (usesObjectsMap) {
+      return { healthy: true, pages: pages.length, totalObjects: -1, reason: "ok_objects_map" };
     }
 
     let totalObjects = 0;
@@ -976,7 +995,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://nofida-hub-adapter.local");
 
   if (req.method === "GET" && url.pathname === "/health") {
-    json(res, 200, { ok: true, service: "nofida-hub-adapter", version: "015e" });
+    json(res, 200, { ok: true, service: "nofida-hub-adapter", version: "015g" });
     return;
   }
 
