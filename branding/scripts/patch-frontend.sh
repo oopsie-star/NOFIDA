@@ -95,15 +95,15 @@ find "${WEBROOT}" \
   sed -i \
     -e 's/support@penpot\.app/support@nofida.internal/g' \
     -e 's/@penpot\.app/@nofida.internal/g' \
-    -e 's#https://help\.penpot\.app[^"'"'"' <>]*#/#/nofida/help#g' \
-    -e 's#https://community\.penpot\.app[^"'"'"' <>]*#/#/nofida/community#g' \
-    -e 's#https://github\.com/penpot/penpot/tree/develop/mcp#/#/nofida/repository#g' \
-    -e 's#https://github\.com/penpot[^"'"'"' <>]*#/#/nofida/repository#g' \
-    -e 's#https://penpot\.app/libraries-templates[^"'"'"' <>]*#/#/nofida/libraries#g' \
-    -e 's#https://penpot\.app/learn[^"'"'"' <>]*#/#/nofida/learn#g' \
-    -e 's#https://penpot\.app/blog[^"'"'"' <>]*#/#/nofida/releases#g' \
-    -e 's#https://penpot\.app/terms\.html#/#/nofida/terms#g' \
-    -e 's#https://penpot\.app/privacy\.html#/#/nofida/privacy#g' \
+    -e 's,https://help\.penpot\.app[^"'"'"' <>]*,/#/nofida/help,g' \
+    -e 's,https://community\.penpot\.app[^"'"'"' <>]*,/#/nofida/community,g' \
+    -e 's,https://github\.com/penpot/penpot/tree/develop/mcp,/#/nofida/repository,g' \
+    -e 's,https://github\.com/penpot[^"'"'"' <>]*,/#/nofida/repository,g' \
+    -e 's,https://penpot\.app/libraries-templates[^"'"'"' <>]*,/#/nofida/libraries,g' \
+    -e 's,https://penpot\.app/learn[^"'"'"' <>]*,/#/nofida/learn,g' \
+    -e 's,https://penpot\.app/blog[^"'"'"' <>]*,/#/nofida/releases,g' \
+    -e 's,https://penpot\.app/terms\.html,/#/nofida/terms,g' \
+    -e 's,https://penpot\.app/privacy\.html,/#/nofida/privacy,g' \
     "${file}"
 done
 
