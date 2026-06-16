@@ -1,54 +1,61 @@
 /* ==========================================================================
- * Nofida AI Bridge — transport abstraction for layer generation
+ * Nofida AI Bridge — transport abstraction (PATCH 016A)
  * --------------------------------------------------------------------------
- * The overlay (nofida-ai-core.js) calls `NofidaAIBridge.generateLayers(spec)`
- * and never cares HOW the layers get created. This file owns that "how" with
- * pluggable transports, so the UI never changes as the backend matures.
+ * The overlay (nofida-ai-core.js) calls bridge methods and never cares how
+ * they are fulfilled. Pluggable transports keep the UI stable as the backend
+ * matures.
  *
- * Hard Penpot constraint that drives this design:
- *   The `penpot` layer-creation API (penpot.createBoard / createRectangle /
- *   createText …) is ONLY available inside a plugin's sandboxed `code` file.
- *   Our injected DOM script cannot call it directly. So the real transport is
- *   a companion Penpot plugin (see ./plugin/) that we talk to over postMessage.
+ * Hard Penpot constraint: the `penpot` canvas API is ONLY available inside
+ * a plugin's sandboxed `code` file. Our injected DOM script cannot call it
+ * directly. The real transport is a companion plugin (./plugin/) reached via
+ * postMessage.
+ *
+ * 016A additions:
+ *   - extractContext()  — requests a summarised file/page/selection snapshot
+ *                        from the plugin; used by the AI panel context strip.
  *
  * Transports:
- *   - "stub"   (v1 default) — logs the request, materializes nothing.
- *   - "plugin" (target)     — relays the spec to the Nofida companion plugin
- *                             iframe; the plugin calls the penpot API.
- *   - "rpc"    (fallback)   — same-origin POST /api/rpc/... with the session
- *                             cookie. Penpot's file-change RPC is complex and
- *                             undocumented for external use → last resort.
+ *   "stub"   — logs requests, materialises nothing (default when plugin absent).
+ *   "plugin" — relays over postMessage to the companion plugin iframe.
+ *   "rpc"    — same-origin backend fallback (not implemented in 016A).
  * ========================================================================== */
 (function () {
   "use strict";
   if (window.NofidaAIBridge) return;
 
   var PLUGIN_MANIFEST_URL = "/nofida/ai-core/plugin/manifest.json";
-  var MSG = { REQ: "nofida-ai:generate", RES: "nofida-ai:result", READY: "nofida-ai:ready" };
+  var MSG = {
+    REQ:     "nofida-ai:generate",
+    RES:     "nofida-ai:result",
+    READY:   "nofida-ai:ready",
+    CTX_REQ: "nofida-ai:extract-context",
+    CTX_RES: "nofida-ai:context",
+  };
+  var CONTEXT_TIMEOUT_MS = 5000;
 
-  var pluginWindow = null;   // set once the companion plugin connects
+  var pluginWindow = null;
   var pluginOrigin = window.location.origin;
 
+  // ── transports ─────────────────────────────────────────────────────────────
+
   var transports = {
-    /* v1 default: prove the wiring end-to-end without touching the document. */
     stub: function (spec) {
       console.info("[Nofida AI] stub.generateLayers", spec);
       return Promise.resolve({
         ok: true,
-        message: 'stub: would generate layers for "' + (spec.prompt || "") + '"'
+        message: 'stub: would generate layers for "' + (spec.prompt || "") + '"',
       });
     },
 
-    /* Target transport: relay to the sandboxed companion plugin. */
     plugin: function (spec) {
       if (!pluginWindow) {
-        console.warn("[Nofida AI] plugin transport selected but plugin not connected yet");
+        console.warn("[Nofida AI] plugin transport: plugin not connected");
         return Promise.resolve({ ok: false, message: "plugin not connected" });
       }
       return new Promise(function (resolve) {
         var id = Math.random().toString(36).slice(2);
         function onMessage(e) {
-          if (e.source !== pluginWindow) return;             // origin/source check
+          if (e.source !== pluginWindow) return;
           if (!e.data || e.data.type !== MSG.RES || e.data.id !== id) return;
           window.removeEventListener("message", onMessage);
           resolve(e.data.result);
@@ -58,12 +65,13 @@
       });
     },
 
-    /* Fallback: direct backend RPC (left unimplemented in v1). */
     rpc: function (spec) {
-      console.warn("[Nofida AI] rpc transport not implemented in v1", spec);
+      console.warn("[Nofida AI] rpc transport not implemented in 016A", spec);
       return Promise.resolve({ ok: false, message: "rpc transport not implemented" });
-    }
+    },
   };
+
+  // ── bridge object ──────────────────────────────────────────────────────────
 
   var bridge = {
     transport: "stub",
@@ -75,8 +83,6 @@
       this.transport = name;
     },
 
-    /* Called by the companion plugin's UI once it has loaded, to register the
-       postMessage channel and flip the bridge onto the live transport. */
     connectPlugin: function (win, origin) {
       pluginWindow = win;
       if (origin) pluginOrigin = origin;
@@ -86,10 +92,36 @@
 
     generateLayers: function (spec) {
       return transports[this.transport](spec || {});
-    }
+    },
+
+    /* Request a summarised file/page/selection context snapshot from the plugin.
+       Returns a Promise<context|null>. Resolves null if plugin unavailable or
+       if the response does not arrive within CONTEXT_TIMEOUT_MS. */
+    extractContext: function () {
+      if (!pluginWindow) return Promise.resolve(null);
+
+      return new Promise(function (resolve) {
+        var id = Math.random().toString(36).slice(2);
+        var timer = setTimeout(function () {
+          window.removeEventListener("message", onMessage);
+          resolve(null);
+        }, CONTEXT_TIMEOUT_MS);
+
+        function onMessage(e) {
+          if (e.source !== pluginWindow) return;
+          if (!e.data || e.data.type !== MSG.CTX_RES || e.data.id !== id) return;
+          window.removeEventListener("message", onMessage);
+          clearTimeout(timer);
+          resolve(e.data.context || null);
+        }
+
+        window.addEventListener("message", onMessage);
+        pluginWindow.postMessage({ type: MSG.CTX_REQ, id: id }, pluginOrigin);
+      });
+    },
   };
 
-  // Listen for the plugin announcing itself (future auto-connect path).
+  // Auto-connect when the companion plugin announces itself.
   window.addEventListener("message", function (e) {
     if (e.data && e.data.type === MSG.READY) bridge.connectPlugin(e.source, e.origin);
   });

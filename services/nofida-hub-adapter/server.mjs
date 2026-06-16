@@ -13,6 +13,33 @@ const MAX_IMPORT_BYTES = Number(process.env.NOFIDA_HUB_MAX_IMPORT_BYTES || 36700
 const REQUEST_TIMEOUT_MS = Number(process.env.NOFIDA_HUB_REQUEST_TIMEOUT_MS || 10 * 60 * 1000);
 const JSON_LIMIT_BYTES = 1024 * 1024;
 
+// ── NOFIDA AI configuration ────────────────────────────────────────────────
+// Provider: "stub" (default, no key required), "openai" (OpenAI-compatible),
+// "anthropic". Set NOFIDA_AI_API_KEY + NOFIDA_AI_PROVIDER in .env for a real
+// LLM. The stub works out of the box and never calls an external API.
+const AI_PROVIDER = process.env.NOFIDA_AI_PROVIDER || "stub";
+const AI_MODEL = process.env.NOFIDA_AI_MODEL || "";
+const AI_API_KEY = process.env.NOFIDA_AI_API_KEY || "";
+const AI_BASE_URL = process.env.NOFIDA_AI_BASE_URL || "";
+const AI_MAX_TOKENS = Number(process.env.NOFIDA_AI_MAX_TOKENS || 1024);
+
+// Operation Plan Schema — valid operation types for PATCH 016A (preview-only).
+// A plan is returned alongside AI answers so the frontend can render a preview.
+// No mutations are applied in 016A; every plan has preview:true, safe:true.
+//
+// Schema per operation:
+//   audit_design   → items: [{severity, issue, suggestion}]
+//   rename_layers  → items: [{layer_name, suggested_name, reason}]
+//   suggest_tokens → items: [{property, current_value, suggested_token}]
+//   generate_copy  → items: [{layer_name, current_text, suggested_text}]
+//   create_screen_plan → items: [{screen_name, purpose, components:[]}]
+//   recommend_libraries → items: [{catalog_id, title, reason, category}]
+//   organize_pages → items: [{action, page_name, suggestion}]
+const VALID_OPERATIONS = new Set([
+  "audit_design", "rename_layers", "suggest_tokens", "generate_copy",
+  "create_screen_plan", "recommend_libraries", "organize_pages",
+]);
+
 // A page with fewer objects than this per page is considered empty/bad import.
 // A page always has at least 1 root frame; real content adds many more.
 const MIN_OBJECTS_PER_PAGE = 4;
@@ -986,6 +1013,249 @@ async function handleQualityCheck(req, res) {
   }
 }
 
+// ── AI helpers ────────────────────────────────────────────────────────────
+
+function buildSystemPrompt(fileCtx, hubCtx) {
+  const lines = [
+    "You are NOFIDA AI, an expert design assistant embedded in the NOFIDA platform (built on Penpot).",
+    "Help designers understand their files, find issues, and pick NOFIDA Hub libraries.",
+    "",
+    "Rules:",
+    "- ONLY recommend libraries from the NOFIDA Hub catalog supplied in the context.",
+    "- NEVER suggest external tools, competitors, or libraries not in the catalog.",
+    "- NEVER apply changes directly — describe plans only (always preview:true).",
+    "- Be concise, specific, and reply in the same language as the user's message.",
+    "- When referencing libraries use their catalog_id.",
+    "",
+  ];
+
+  if (fileCtx) {
+    if (fileCtx.file) lines.push(`File: "${fileCtx.file.name}"`);
+    if (fileCtx.page) lines.push(`Current page: "${fileCtx.page.name}"`);
+    if (fileCtx.objects) {
+      lines.push(`Objects on page: ${fileCtx.objects.total} total`);
+      const types = Object.entries(fileCtx.objects.byType || {}).map(([t, n]) => `${t}:${n}`).join(", ");
+      if (types) lines.push(`  Types: ${types}`);
+    }
+    if (fileCtx.selection && fileCtx.selection.length > 0)
+      lines.push(`Selected: ${fileCtx.selection.map((s) => `${s.name}(${s.type})`).join(", ")}`);
+    if (fileCtx.colors && fileCtx.colors.length > 0)
+      lines.push(`Colors used: ${fileCtx.colors.slice(0, 10).join(", ")}`);
+    if (fileCtx.texts && fileCtx.texts.length > 0)
+      lines.push(`Text samples: ${fileCtx.texts.slice(0, 3).map((t) => `"${t}"`).join(", ")}`);
+    lines.push("");
+  }
+
+  if (hubCtx && hubCtx.catalog && hubCtx.catalog.length > 0) {
+    lines.push("NOFIDA Hub catalog (use these IDs when recommending):");
+    for (const item of hubCtx.catalog.slice(0, 24)) {
+      const inst = (hubCtx.installed || []).includes(item.id) ? " [installed]" : "";
+      lines.push(`  ${item.id}: ${item.title || item.name}${inst} (${item.category || "library"})`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+function stubRespond(message, fileCtx, hubCtx) {
+  const msg = (message || "").toLowerCase();
+  const catalog = (hubCtx && hubCtx.catalog) || [];
+  const installed = (hubCtx && hubCtx.installed) || [];
+  const file = fileCtx && fileCtx.file;
+  const page = fileCtx && fileCtx.page;
+  const objects = fileCtx && fileCtx.objects;
+
+  const isFileSummary = /what|summary|overview|содержит|что|обзор|file|файл|pages|страниц/.test(msg);
+  const isLibRec = /librar|kit|dashboard|saas|ui|component|recommend|библиотек|компонент|recommend|какую|какие/.test(msg);
+  const isAudit = /audit|issue|problem|review|fix|улучш|исправ|аудит|проблем|проверь/.test(msg);
+
+  if (isFileSummary) {
+    const parts = [];
+    if (file) parts.push(`**Файл:** ${file.name}`);
+    if (page) parts.push(`**Страница:** ${page.name}`);
+    if (objects) {
+      parts.push(`**Объектов:** ${objects.total}`);
+      const types = Object.entries(objects.byType || {});
+      if (types.length) parts.push(types.map(([t, n]) => `  • ${t}: ${n}`).join("\n"));
+    }
+    if (fileCtx && fileCtx.colors && fileCtx.colors.length)
+      parts.push(`**Цветов:** ${fileCtx.colors.length} уникальных`);
+    if (!parts.length)
+      parts.push("Открытый файл не определён. Убедитесь, что плагин NOFIDA AI активен и файл открыт.");
+    return {
+      answer: parts.join("\n"),
+      operation_plan: {
+        plan_id: crypto.randomUUID(), operation: "audit_design",
+        preview: true, safe: true, items: [],
+      },
+    };
+  }
+
+  if (isLibRec) {
+    const recs = catalog.slice(0, 5);
+    const lines = recs.length
+      ? ["Библиотеки NOFIDA Hub для вашей задачи:"]
+      : ["Каталог NOFIDA Hub пока пуст. Откройте раздел библиотек через кнопку 📚."];
+    for (const item of recs) {
+      const inst = installed.includes(item.id) ? " ✓" : "";
+      lines.push(`• **${item.title || item.name}**${inst} — ${item.description || item.category || "дизайн-система"}`);
+    }
+    return {
+      answer: lines.join("\n"),
+      operation_plan: {
+        plan_id: crypto.randomUUID(), operation: "recommend_libraries",
+        preview: true, safe: true,
+        items: recs.map((item) => ({
+          catalog_id: item.id,
+          title: item.title || item.name,
+          reason: "Matches user request",
+          category: item.category || "library",
+        })),
+      },
+    };
+  }
+
+  if (isAudit) {
+    const issues = [];
+    if (objects) {
+      const texts = objects.byType["text"] || 0;
+      const frames = objects.byType["frame"] || 0;
+      const components = objects.byType["component"] || 0;
+      if (texts > 0 && frames === 0)
+        issues.push({ severity: "warning", issue: "Тексты не обёрнуты во фреймы", suggestion: "Сгруппируйте тексты во frame-контейнеры" });
+      if (objects.total > 80 && components === 0)
+        issues.push({ severity: "info", issue: "Много объектов без компонентов", suggestion: "Вынесите повторяющиеся элементы в shared components" });
+      if ((fileCtx.colors || []).length > 12)
+        issues.push({ severity: "warning", issue: `${fileCtx.colors.length} уникальных цветов — слишком много`, suggestion: "Создайте color tokens и сократите палитру" });
+    }
+    if (!issues.length)
+      issues.push({ severity: "info", issue: "Файл не определён или плагин не подключён", suggestion: "Откройте файл в Penpot и активируйте плагин NOFIDA AI" });
+    const lines = ["**Аудит дизайна:**"];
+    for (const iss of issues)
+      lines.push(`${iss.severity === "warning" ? "⚠" : "ℹ"} **${iss.issue}** — ${iss.suggestion}`);
+    return {
+      answer: lines.join("\n"),
+      operation_plan: {
+        plan_id: crypto.randomUUID(), operation: "audit_design",
+        preview: true, safe: true, items: issues,
+      },
+    };
+  }
+
+  return {
+    answer: "Я **NOFIDA AI** — ваш ассистент по дизайну. Могу:\n• **Описать файл** — «что в этом файле?»\n• **Порекомендовать библиотеки** — «какую библиотеку взять для SaaS?»\n• **Провести аудит** — «проверь экран на проблемы»\n\nЧто вас интересует?",
+    operation_plan: null,
+  };
+}
+
+async function callOpenAICompatible(message, systemPrompt) {
+  const baseUrl = (AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const model = AI_MODEL || "gpt-4o-mini";
+  const resp = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${AI_API_KEY}` },
+    body: JSON.stringify({
+      model, max_tokens: AI_MAX_TOKENS,
+      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.text().catch(() => "");
+    throw Object.assign(new Error(`OpenAI-compatible API error ${resp.status}: ${err.slice(0, 200)}`), { status: 502 });
+  }
+  const data = await resp.json();
+  return { answer: data.choices?.[0]?.message?.content || "", model };
+}
+
+async function callAnthropic(message, systemPrompt) {
+  const model = AI_MODEL || "claude-haiku-4-5-20251001";
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": AI_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model, max_tokens: AI_MAX_TOKENS,
+      system: systemPrompt,
+      messages: [{ role: "user", content: message }],
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.text().catch(() => "");
+    throw Object.assign(new Error(`Anthropic API error ${resp.status}: ${err.slice(0, 200)}`), { status: 502 });
+  }
+  const data = await resp.json();
+  return { answer: data.content?.[0]?.text || "", model };
+}
+
+// POST /ai/ask — NOFIDA AI conversation endpoint (read-only, non-destructive)
+async function handleAiAsk(req, res) {
+  // Require session for paid providers to prevent cost abuse.
+  const cookieHeader = req.headers.cookie || "";
+  if (!cookieHeader && AI_PROVIDER !== "stub") {
+    fail(res, 401, "missing_session", "Authenticated session required for AI endpoint.");
+    return;
+  }
+
+  let body;
+  try {
+    body = await parseBody(req);
+  } catch (err) {
+    fail(res, err.status || 400, err.code || "bad_request", err.message);
+    return;
+  }
+
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!message) {
+    fail(res, 400, "missing_message", "Field 'message' is required.");
+    return;
+  }
+
+  // Bound context to avoid prompt injection / oversized payloads
+  const fileCtx = body.file_context && typeof body.file_context === "object" ? body.file_context : null;
+  const hubCtx = body.hub_context && typeof body.hub_context === "object" ? body.hub_context : null;
+
+  try {
+    let answer, operationPlan, usedModel;
+
+    if (AI_PROVIDER === "stub" || !AI_API_KEY) {
+      const result = stubRespond(message, fileCtx, hubCtx);
+      answer = result.answer;
+      operationPlan = result.operation_plan;
+      usedModel = "stub";
+    } else if (AI_PROVIDER === "anthropic") {
+      const systemPrompt = buildSystemPrompt(fileCtx, hubCtx);
+      const result = await callAnthropic(message, systemPrompt);
+      answer = result.answer;
+      usedModel = result.model;
+      operationPlan = null;
+    } else {
+      // Default for "openai" or any OpenAI-compatible provider (Ollama, etc.)
+      const systemPrompt = buildSystemPrompt(fileCtx, hubCtx);
+      const result = await callOpenAICompatible(message, systemPrompt);
+      answer = result.answer;
+      usedModel = result.model;
+      operationPlan = null;
+    }
+
+    log("INFO", "ai/ask", { provider: AI_PROVIDER, model: usedModel, messageLen: message.length });
+
+    json(res, 200, {
+      ok: true,
+      answer,
+      operation_plan: operationPlan || null,
+      provider: AI_PROVIDER,
+      model: usedModel || AI_MODEL || AI_PROVIDER,
+    });
+  } catch (err) {
+    log("ERROR", "ai/ask failed", { message: err.message });
+    fail(res, err.status || 502, "ai_error", "AI provider error. Check server configuration.");
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (!req.url) {
     fail(res, 400, "missing_url", "Request URL is missing.");
@@ -995,7 +1265,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://nofida-hub-adapter.local");
 
   if (req.method === "GET" && url.pathname === "/health") {
-    json(res, 200, { ok: true, service: "nofida-hub-adapter", version: "015g" });
+    json(res, 200, {
+      ok: true, service: "nofida-hub-adapter", version: "016a",
+      ai_provider: AI_PROVIDER, ai_model_configured: AI_MODEL || null,
+    });
     return;
   }
 
@@ -1006,6 +1279,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/quality-check") {
     await handleQualityCheck(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ai/ask") {
+    await handleAiAsk(req, res);
     return;
   }
 

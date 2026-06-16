@@ -68,7 +68,7 @@ services:
   nofida-hub-adapter:
     build:
       context: ./services/nofida-hub-adapter
-    image: nofida/hub-adapter:015g
+    image: nofida/hub-adapter:016a
     restart: always
     volumes:
       - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/srv/library-store:ro
@@ -77,6 +77,15 @@ services:
       NOFIDA_LIBRARY_STORE_ROOT: /srv/library-store
       NOFIDA_HUB_IMPORT_CHUNK_SIZE: 26214400
       NOFIDA_HUB_MAX_IMPORT_BYTES: 367001600
+      # ── NOFIDA AI ─────────────────────────────────────────────────────────
+      # Default: "stub" — works without any API key, no external calls.
+      # Set NOFIDA_AI_PROVIDER=openai|anthropic + NOFIDA_AI_API_KEY in .env
+      # for a real LLM. Model defaults: openai → gpt-4o-mini, anthropic → claude-haiku-4-5-20251001.
+      NOFIDA_AI_PROVIDER: ${NOFIDA_AI_PROVIDER:-stub}
+      NOFIDA_AI_MODEL: ${NOFIDA_AI_MODEL:-}
+      NOFIDA_AI_API_KEY: ${NOFIDA_AI_API_KEY:-}
+      NOFIDA_AI_BASE_URL: ${NOFIDA_AI_BASE_URL:-}
+      NOFIDA_AI_MAX_TOKENS: ${NOFIDA_AI_MAX_TOKENS:-1024}
     networks: [nofida-network]
 
   penpot-backend:
