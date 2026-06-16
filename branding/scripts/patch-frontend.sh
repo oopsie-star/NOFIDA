@@ -90,21 +90,13 @@ replace_symbol "icon-penpot-logo-icon-loader" "0 0 1254 1254" "${NOFIDA_ICON_HRE
 find "${WEBROOT}" \
   ! -path "${WEBROOT}/nofida/*" \
   -type f \
-  \( -name '*.js' -o -name '*.html' -o -name '*.json' \) | while IFS= read -r file; do
-  grep -q 'penpot\.app' "${file}" || continue
+  \( -name '*.js' -o -name '*.html' -o -name '*.json' -o -name '*.map' \) | while IFS= read -r file; do
+  grep -Eq 'penpot\.app|github\.com/penpot' "${file}" || continue
   sed -i \
     -e 's/support@penpot\.app/support@nofida.internal/g' \
     -e 's/@penpot\.app/@nofida.internal/g' \
-    -e 's,https://help\.penpot\.app[^"'"'"' <>]*,/#/nofida/help,g' \
-    -e 's,https://community\.penpot\.app[^"'"'"' <>]*,/#/nofida/community,g' \
-    -e 's,https://github\.com/penpot/penpot/tree/develop/mcp,/#/nofida/repository,g' \
-    -e 's,https://github\.com/penpot[^"'"'"' <>]*,/#/nofida/repository,g' \
-    -e 's,https://penpot\.app/libraries-templates[^"'"'"' <>]*,/#/nofida/libraries,g' \
-    -e 's,https://penpot\.app/learn[^"'"'"' <>]*,/#/nofida/learn,g' \
-    -e 's,https://penpot\.app/blog[^"'"'"' <>]*,/#/nofida/releases,g' \
-    -e 's,https://penpot\.app/terms\.html,/#/nofida/terms,g' \
-    -e 's,https://penpot\.app/privacy\.html,/#/nofida/privacy,g' \
     "${file}"
+  perl -0pi -e "s{https://help\.penpot\.app[^\\\"' <>]*}{/#/nofida/help}g; s{https://community\.penpot\.app[^\\\"' <>]*}{/#/nofida/community}g; s{https://github\.com/penpot/penpot/tree/develop/mcp}{/#/nofida/repository}g; s{https://github\.com/penpot[^\\\"' <>]*}{/#/nofida/repository}g; s{https://penpot\.app/libraries-templates[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/learn[^\\\"' <>]*}{/#/nofida/learn}g; s{https://penpot\.app/blog[^\\\"' <>]*}{/#/nofida/releases}g; s{https://penpot\.app/terms\.html}{/#/nofida/terms}g; s{https://penpot\.app/privacy\.html}{/#/nofida/privacy}g" "${file}"
 done
 
 # ── Deep white-label pass across compiled bundles/templates ──────────────────
