@@ -318,7 +318,7 @@ def parse_hub_download_url(html: str, slug: str | None) -> str | None:
 
 
 def recover_download_url_from_public_hub(record: dict, checked_at: str, delay_ms: int, logger: Logger) -> None:
-    hub_url = record.get("hub_url")
+    hub_url = record.get("upstream_hub_url") or record.get("hub_url")
     slug = extract_hub_slug(hub_url)
     record["public_hub_checked_at"] = checked_at
 
@@ -419,6 +419,42 @@ def internal_url(file_rel: str | None) -> str | None:
     return f"/nofida/libraries/{file_rel}"
 
 
+def nofida_route(path: str) -> str:
+    return f"/#/nofida/{path}"
+
+
+def public_reference_route(url: str | None) -> str | None:
+    if not url:
+        return None
+
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.netloc or "").lower()
+    path = (parsed.path or "").lower()
+    joined = f"{host}{path}"
+
+    if "github.com/penpot" in joined:
+        return nofida_route("repository")
+    if "help.penpot.app" in host:
+        return nofida_route("help")
+    if "community.penpot.app" in host or path.startswith("/penpotfest"):
+        return nofida_route("community")
+    if path.startswith("/penpothub") or path.startswith("/hub") or path.startswith("/libraries-templates"):
+        return nofida_route("libraries")
+    if path.startswith("/learn") or path.startswith("/why-beta"):
+        return nofida_route("learn")
+    if path.startswith("/blog") or path.startswith("/releases"):
+        return nofida_route("releases")
+    if path.startswith("/changelog"):
+        return nofida_route("changelog")
+    if path.startswith("/terms"):
+        return nofida_route("terms")
+    if path.startswith("/privacy"):
+        return nofida_route("privacy")
+    if host.endswith("penpot.app"):
+        return nofida_route("help")
+    return url
+
+
 def build_base_record(
     item: dict,
     previous: dict | None,
@@ -431,7 +467,8 @@ def build_base_record(
     license_status = classify_license_status(item, tier)
     known_size_bytes = parse_known_size_bytes(item.get("risk_notes"))
     download_url = item.get("download_url")
-    source_url = item.get("source_repo") or item.get("hub_url")
+    upstream_hub_url = item.get("hub_url")
+    source_url = item.get("source_repo") or upstream_hub_url
     file_rel = previous.get("file")
     base = {
         "id": item["id"],
@@ -440,8 +477,10 @@ def build_base_record(
         "author": item.get("author"),
         "type": item.get("type"),
         "tier": tier,
-        "hub_url": item.get("hub_url"),
-        "source_url": source_url,
+        "hub_url": public_reference_route(upstream_hub_url),
+        "source_url": public_reference_route(source_url),
+        "upstream_hub_url": upstream_hub_url,
+        "upstream_source_url": source_url,
         "download_url": download_url,
         "license": item.get("license") or "unknown",
         "license_status": license_status,
@@ -873,13 +912,20 @@ def build_catalog(records: list[dict], checked_at: str, source_ref: str, max_siz
 
 
 def build_inventory(records: list[dict], checked_at: str, source_ref: str, max_size_bytes: int) -> dict:
+    items = []
+    for record in records:
+        item = dict(record)
+        item.pop("upstream_hub_url", None)
+        item.pop("upstream_source_url", None)
+        items.append(item)
+
     return {
         "version": VERSION,
         "generated_at": checked_at,
         "source_inventory": source_ref,
         "max_auto_download_bytes": max_size_bytes,
         "items_count": len(records),
-        "items": records,
+        "items": items,
     }
 
 
@@ -983,7 +1029,7 @@ def main() -> int:
         recovery_targets = [
             record
             for record in records
-            if record.get("hub_url")
+            if (record.get("upstream_hub_url") or record.get("hub_url"))
             and (
                 not record.get("download_url")
                 or record.get("status") in {"download_failed", "too_large"}
