@@ -356,8 +356,8 @@
 
   function renderCatalog(items) {
     return items.map(function (item) {
-      var href = item.internal_url || item.hub_url || "#";
-      var source = item.internal_url ? "Внутренний ресурс" : "Источник";
+      var href = item.internal_url || "#/nofida/libraries";
+      var source = item.internal_url ? "Внутренний ресурс" : "Открыть каталог";
       var title = item.title || item.name || item.id || "Library";
       var meta = [item.type || "library", item.tier || "catalog", item.author || "Nofida"].join(" · ");
       return [
@@ -375,6 +375,14 @@
 
   function openExternal(href) {
     if (!href || href === "#") return;
+    if (/^(#|\/#\/)/.test(href)) {
+      window.location.href = href;
+      return;
+    }
+    if (isPenpotExternalHref(href)) {
+      window.location.href = resolveNofidaInternalRoute(href, "", "", "") || "#/nofida/help";
+      return;
+    }
     window.open(href, "_blank", "noopener,noreferrer");
   }
 
@@ -1776,13 +1784,19 @@
     "help.penpot.app",
     "community.penpot.app",
     "github.com/penpot",
+    "penpot.app/",
     "penpot.app/learn",
     "penpot.app/blog",
+    "penpot.app/penpothub",
+    "penpot.app/hub",
     "penpot.app/libraries-templates",
+    "penpot.app/pricing",
     "penpot.app/terms",
     "penpot.app/privacy",
     "penpot.app/changelog",
     "penpot.app/releases",
+    "penpot.app/penpotfest",
+    "penpot.app/why-beta",
     "blog.penpot.app"
   ];
 
@@ -1805,13 +1819,22 @@
         hay.indexOf(" hub") >= 0 ||
         hay.indexOf("библиотек") >= 0 ||
         hay.indexOf("шаблон") >= 0) {
-      return null;
+      return "#/nofida/libraries";
     }
     if (hay.indexOf("privacy") >= 0 || hay.indexOf("конфиденц") >= 0) {
       return "#/nofida/privacy";
     }
     if (hay.indexOf("terms") >= 0 || hay.indexOf("услов") >= 0) {
       return "#/nofida/terms";
+    }
+    if (hay.indexOf("pricing") >= 0 || hay.indexOf("тариф") >= 0) {
+      return "#/nofida/help";
+    }
+    if (hay.indexOf("penpotfest") >= 0 || hay.indexOf("festival") >= 0 || hay.indexOf("event") >= 0) {
+      return "#/nofida/community";
+    }
+    if (hay.indexOf("why-beta") >= 0 || hay.indexOf("beta") >= 0) {
+      return "#/nofida/learn";
     }
     if (hay.indexOf("changelog") >= 0 || hay.indexOf("what's new") >= 0 || hay.indexOf("измен") >= 0) {
       return "#/nofida/changelog";

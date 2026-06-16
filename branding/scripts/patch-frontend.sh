@@ -96,7 +96,13 @@ find "${WEBROOT}" \
     -e 's/support@penpot\.app/support@nofida.internal/g' \
     -e 's/@penpot\.app/@nofida.internal/g' \
     "${file}"
-  perl -0pi -e "s{https://help\.penpot\.app[^\\\"' <>]*}{/#/nofida/help}g; s{https://community\.penpot\.app[^\\\"' <>]*}{/#/nofida/community}g; s{https://github\.com/penpot/penpot/tree/develop/mcp}{/#/nofida/repository}g; s{https://github\.com/penpot[^\\\"' <>]*}{/#/nofida/repository}g; s{https://penpot\.app/libraries-templates[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/learn[^\\\"' <>]*}{/#/nofida/learn}g; s{https://penpot\.app/blog[^\\\"' <>]*}{/#/nofida/releases}g; s{https://penpot\.app/terms\.html}{/#/nofida/terms}g; s{https://penpot\.app/privacy\.html}{/#/nofida/privacy}g" "${file}"
+  perl -0pi -e "s{https://help\.penpot\.app[^\\\"' <>]*}{/#/nofida/help}g; s{https://community\.penpot\.app[^\\\"' <>]*}{/#/nofida/community}g; s{https://github\.com/penpot/penpot/tree/develop/mcp}{/#/nofida/repository}g; s{https://github\.com/penpot[^\\\"' <>]*}{/#/nofida/repository}g; s{https://penpot\.app/penpothub(?:/libraries-templates)?[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/hub[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/libraries-templates[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/learn[^\\\"' <>]*}{/#/nofida/learn}g; s{https://penpot\.app/why-beta[^\\\"' <>]*}{/#/nofida/learn}g; s{https://penpot\.app/penpotfest[^\\\"' <>]*}{/#/nofida/community}g; s{https://blog\.penpot\.app[^\\\"' <>]*}{/#/nofida/releases}g; s{https://penpot\.app/blog[^\\\"' <>]*}{/#/nofida/releases}g; s{https://penpot\.app/releases[^\\\"' <>]*}{/#/nofida/releases}g; s{https://penpot\.app/changelog[^\\\"' <>]*}{/#/nofida/changelog}g; s{https://penpot\.app/pricing[^\\\"' <>]*}{/#/nofida/help}g; s{https://penpot\.app/terms(?:\.html)?[^\\\"' <>]*}{/#/nofida/terms}g; s{https://penpot\.app/privacy(?:\.html)?[^\\\"' <>]*}{/#/nofida/privacy}g; s{https://penpot\.app/(?=[\\\"' <>])}{/#/nofida/help}g" "${file}"
+done
+
+find "${WEBROOT}/nofida/libraries" \
+  -type f \
+  \( -name '*.json' \) | while IFS= read -r file; do
+  perl -0pi -e "s{https://github\.com/penpot/penpot-files}{/#/nofida/repository}g; s{https://github\.com/penpot[^\\\"' <>]*}{/#/nofida/repository}g; s{https://penpot\.app/penpothub(?:/libraries-templates)?[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/hub[^\\\"' <>]*}{/#/nofida/libraries}g; s{https://penpot\.app/libraries-templates[^\\\"' <>]*}{/#/nofida/libraries}g" "${file}"
 done
 
 # ── Deep white-label pass across compiled bundles/templates ──────────────────
