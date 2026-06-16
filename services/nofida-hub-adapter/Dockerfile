@@ -2,7 +2,7 @@ FROM node:24-alpine
 
 WORKDIR /app
 
-COPY server.mjs /app/server.mjs
+COPY . /app
 
 ENV NODE_ENV=production
 ENV PORT=3101

@@ -2,6 +2,7 @@ import http from "node:http";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
+import { createAISettingsService } from "./ai-service.mjs";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3101);
@@ -12,16 +13,6 @@ const CHUNK_SIZE = Number(process.env.NOFIDA_HUB_IMPORT_CHUNK_SIZE || 25 * 1024 
 const MAX_IMPORT_BYTES = Number(process.env.NOFIDA_HUB_MAX_IMPORT_BYTES || 367001600);
 const REQUEST_TIMEOUT_MS = Number(process.env.NOFIDA_HUB_REQUEST_TIMEOUT_MS || 10 * 60 * 1000);
 const JSON_LIMIT_BYTES = 1024 * 1024;
-
-// ── NOFIDA AI configuration ────────────────────────────────────────────────
-// Provider: "stub" (default, no key required), "openai" (OpenAI-compatible),
-// "anthropic". Set NOFIDA_AI_API_KEY + NOFIDA_AI_PROVIDER in .env for a real
-// LLM. The stub works out of the box and never calls an external API.
-const AI_PROVIDER = process.env.NOFIDA_AI_PROVIDER || "stub";
-const AI_MODEL = process.env.NOFIDA_AI_MODEL || "";
-const AI_API_KEY = process.env.NOFIDA_AI_API_KEY || "";
-const AI_BASE_URL = process.env.NOFIDA_AI_BASE_URL || "";
-const AI_MAX_TOKENS = Number(process.env.NOFIDA_AI_MAX_TOKENS || 1024);
 
 // Operation Plan Schema — valid operation types for PATCH 016A (preview-only).
 // A plan is returned alongside AI answers so the frontend can render a preview.
@@ -62,6 +53,8 @@ function log(level, message, extra = undefined) {
   }
   console.log(`[${stamp}] ${level} ${message}`, extra);
 }
+
+const aiSettingsService = createAISettingsService(log);
 
 function isUuidString(value) {
   return typeof value === "string" && UUID_RE.test(value);
@@ -1015,15 +1008,60 @@ async function handleQualityCheck(req, res) {
 
 // ── AI helpers ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(fileCtx, hubCtx) {
+const AI_ROLES = new Set([
+  "default",
+  "file_summary",
+  "design_audit",
+  "library_recommendation",
+  "screen_planner",
+  "copywriter",
+  "reviewer",
+  "vision",
+  "fast",
+  "premium",
+]);
+
+function requireSession(req, res, message = "Authenticated session required.") {
+  const cookieHeader = req.headers.cookie || "";
+  if (!cookieHeader) {
+    fail(res, 401, "missing_session", message);
+    return null;
+  }
+  return cookieHeader;
+}
+
+function normalizeAiRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return AI_ROLES.has(normalized) ? normalized : null;
+}
+
+function inferAiRole(message, fileCtx) {
+  const text = String(message || "").toLowerCase();
+  if (/audit|review|fix|issue|problem|проверь|аудит|проблем|исправ/.test(text)) return "design_audit";
+  if (/librar|catalog|kit|saas|component|recommend|библиотек|каталог|компонент|подбери/.test(text))
+    return "library_recommendation";
+  if (/summary|overview|what|file|screen|сводк|обзор|что в этом файле|что на экране/.test(text))
+    return "file_summary";
+  if (/screen|flow|plan|wireframe|план экрана|структур/.test(text)) return "screen_planner";
+  if (/copy|headline|cta|microcopy|текст|копирайт/.test(text)) return "copywriter";
+  if (/vision|image|screenshot|изображен|картинк/.test(text) || Array.isArray(fileCtx?.images) && fileCtx.images.length > 0)
+    return "vision";
+  if (/fast|quick|быстро/.test(text)) return "fast";
+  if (/premium|best|лучший/.test(text)) return "premium";
+  if (/reviewer|ревью/.test(text)) return "reviewer";
+  return "default";
+}
+
+function buildSystemPrompt(fileCtx, hubCtx, role) {
   const lines = [
     "You are NOFIDA AI, an expert design assistant embedded in the NOFIDA platform (built on Penpot).",
+    `Current task role: ${role}.`,
     "Help designers understand their files, find issues, and pick NOFIDA Hub libraries.",
     "",
     "Rules:",
     "- ONLY recommend libraries from the NOFIDA Hub catalog supplied in the context.",
     "- NEVER suggest external tools, competitors, or libraries not in the catalog.",
-    "- NEVER apply changes directly — describe plans only (always preview:true).",
+    "- NEVER apply changes directly — describe plans only, previews only, no mutations.",
     "- Be concise, specific, and reply in the same language as the user's message.",
     "- When referencing libraries use their catalog_id.",
     "",
@@ -1034,23 +1072,23 @@ function buildSystemPrompt(fileCtx, hubCtx) {
     if (fileCtx.page) lines.push(`Current page: "${fileCtx.page.name}"`);
     if (fileCtx.objects) {
       lines.push(`Objects on page: ${fileCtx.objects.total} total`);
-      const types = Object.entries(fileCtx.objects.byType || {}).map(([t, n]) => `${t}:${n}`).join(", ");
+      const types = Object.entries(fileCtx.objects.byType || {}).map(([type, count]) => `${type}:${count}`).join(", ");
       if (types) lines.push(`  Types: ${types}`);
     }
-    if (fileCtx.selection && fileCtx.selection.length > 0)
-      lines.push(`Selected: ${fileCtx.selection.map((s) => `${s.name}(${s.type})`).join(", ")}`);
-    if (fileCtx.colors && fileCtx.colors.length > 0)
+    if (Array.isArray(fileCtx.selection) && fileCtx.selection.length > 0)
+      lines.push(`Selected: ${fileCtx.selection.map((item) => `${item.name}(${item.type})`).join(", ")}`);
+    if (Array.isArray(fileCtx.colors) && fileCtx.colors.length > 0)
       lines.push(`Colors used: ${fileCtx.colors.slice(0, 10).join(", ")}`);
-    if (fileCtx.texts && fileCtx.texts.length > 0)
-      lines.push(`Text samples: ${fileCtx.texts.slice(0, 3).map((t) => `"${t}"`).join(", ")}`);
+    if (Array.isArray(fileCtx.texts) && fileCtx.texts.length > 0)
+      lines.push(`Text samples: ${fileCtx.texts.slice(0, 3).map((item) => `"${item}"`).join(", ")}`);
     lines.push("");
   }
 
-  if (hubCtx && hubCtx.catalog && hubCtx.catalog.length > 0) {
+  if (hubCtx && Array.isArray(hubCtx.catalog) && hubCtx.catalog.length > 0) {
     lines.push("NOFIDA Hub catalog (use these IDs when recommending):");
     for (const item of hubCtx.catalog.slice(0, 24)) {
-      const inst = (hubCtx.installed || []).includes(item.id) ? " [installed]" : "";
-      lines.push(`  ${item.id}: ${item.title || item.name}${inst} (${item.category || "library"})`);
+      const installed = (hubCtx.installed || []).includes(item.id) ? " [installed]" : "";
+      lines.push(`  ${item.id}: ${item.title || item.name}${installed} (${item.category || "library"})`);
     }
     lines.push("");
   }
@@ -1058,153 +1096,223 @@ function buildSystemPrompt(fileCtx, hubCtx) {
   return lines.join("\n");
 }
 
-function stubRespond(message, fileCtx, hubCtx) {
-  const msg = (message || "").toLowerCase();
-  const catalog = (hubCtx && hubCtx.catalog) || [];
-  const installed = (hubCtx && hubCtx.installed) || [];
-  const file = fileCtx && fileCtx.file;
-  const page = fileCtx && fileCtx.page;
-  const objects = fileCtx && fileCtx.objects;
+function buildAuditItems(fileCtx) {
+  const issues = [];
+  const objects = fileCtx?.objects || null;
+  const byType = objects?.byType || {};
+  const colors = Array.isArray(fileCtx?.colors) ? fileCtx.colors : [];
 
-  const isFileSummary = /what|summary|overview|содержит|что|обзор|file|файл|pages|страниц/.test(msg);
-  const isLibRec = /librar|kit|dashboard|saas|ui|component|recommend|библиотек|компонент|recommend|какую|какие/.test(msg);
-  const isAudit = /audit|issue|problem|review|fix|улучш|исправ|аудит|проблем|проверь/.test(msg);
-
-  if (isFileSummary) {
-    const parts = [];
-    if (file) parts.push(`**Файл:** ${file.name}`);
-    if (page) parts.push(`**Страница:** ${page.name}`);
-    if (objects) {
-      parts.push(`**Объектов:** ${objects.total}`);
-      const types = Object.entries(objects.byType || {});
-      if (types.length) parts.push(types.map(([t, n]) => `  • ${t}: ${n}`).join("\n"));
+  if (objects) {
+    const texts = byType.text || 0;
+    const frames = byType.frame || 0;
+    const components = byType.component || 0;
+    if (texts > 0 && frames === 0) {
+      issues.push({
+        severity: "warning",
+        issue: "Text layers are not grouped into frames",
+        suggestion: "Wrap text blocks in frame containers before layout refinement.",
+      });
     }
-    if (fileCtx && fileCtx.colors && fileCtx.colors.length)
-      parts.push(`**Цветов:** ${fileCtx.colors.length} уникальных`);
-    if (!parts.length)
-      parts.push("Открытый файл не определён. Убедитесь, что плагин NOFIDA AI активен и файл открыт.");
-    return {
-      answer: parts.join("\n"),
-      operation_plan: {
-        plan_id: crypto.randomUUID(), operation: "audit_design",
-        preview: true, safe: true, items: [],
-      },
-    };
+    if (objects.total > 80 && components === 0) {
+      issues.push({
+        severity: "info",
+        issue: "Many objects are present without reusable components",
+        suggestion: "Promote repeated patterns into shared components.",
+      });
+    }
+    if ((byType.rect || 0) > 24 && components < 2) {
+      issues.push({
+        severity: "info",
+        issue: "The screen appears to rely on many raw rectangles",
+        suggestion: "Turn repeated card and button shapes into reusable UI components.",
+      });
+    }
   }
 
-  if (isLibRec) {
-    const recs = catalog.slice(0, 5);
-    const lines = recs.length
-      ? ["Библиотеки NOFIDA Hub для вашей задачи:"]
-      : ["Каталог NOFIDA Hub пока пуст. Откройте раздел библиотек через кнопку 📚."];
-    for (const item of recs) {
-      const inst = installed.includes(item.id) ? " ✓" : "";
-      lines.push(`• **${item.title || item.name}**${inst} — ${item.description || item.category || "дизайн-система"}`);
-    }
-    return {
-      answer: lines.join("\n"),
-      operation_plan: {
-        plan_id: crypto.randomUUID(), operation: "recommend_libraries",
-        preview: true, safe: true,
-        items: recs.map((item) => ({
-          catalog_id: item.id,
-          title: item.title || item.name,
-          reason: "Matches user request",
-          category: item.category || "library",
-        })),
-      },
-    };
+  if (colors.length > 12) {
+    issues.push({
+      severity: "warning",
+      issue: `${colors.length} unique colors detected`,
+      suggestion: "Consolidate the palette into reusable color tokens.",
+    });
   }
 
-  if (isAudit) {
-    const issues = [];
-    if (objects) {
-      const texts = objects.byType["text"] || 0;
-      const frames = objects.byType["frame"] || 0;
-      const components = objects.byType["component"] || 0;
-      if (texts > 0 && frames === 0)
-        issues.push({ severity: "warning", issue: "Тексты не обёрнуты во фреймы", suggestion: "Сгруппируйте тексты во frame-контейнеры" });
-      if (objects.total > 80 && components === 0)
-        issues.push({ severity: "info", issue: "Много объектов без компонентов", suggestion: "Вынесите повторяющиеся элементы в shared components" });
-      if ((fileCtx.colors || []).length > 12)
-        issues.push({ severity: "warning", issue: `${fileCtx.colors.length} уникальных цветов — слишком много`, suggestion: "Создайте color tokens и сократите палитру" });
-    }
-    if (!issues.length)
-      issues.push({ severity: "info", issue: "Файл не определён или плагин не подключён", suggestion: "Откройте файл в Penpot и активируйте плагин NOFIDA AI" });
-    const lines = ["**Аудит дизайна:**"];
-    for (const iss of issues)
-      lines.push(`${iss.severity === "warning" ? "⚠" : "ℹ"} **${iss.issue}** — ${iss.suggestion}`);
-    return {
-      answer: lines.join("\n"),
-      operation_plan: {
-        plan_id: crypto.randomUUID(), operation: "audit_design",
-        preview: true, safe: true, items: issues,
-      },
-    };
+  if (!issues.length) {
+    issues.push({
+      severity: "info",
+      issue: "No deterministic structural issues were detected from the current context",
+      suggestion: "Use the AI answer plus manual review before applying design changes.",
+    });
   }
 
-  return {
-    answer: "Я **NOFIDA AI** — ваш ассистент по дизайну. Могу:\n• **Описать файл** — «что в этом файле?»\n• **Порекомендовать библиотеки** — «какую библиотеку взять для SaaS?»\n• **Провести аудит** — «проверь экран на проблемы»\n\nЧто вас интересует?",
-    operation_plan: null,
-  };
+  return issues;
 }
 
-async function callOpenAICompatible(message, systemPrompt) {
-  const baseUrl = (AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const model = AI_MODEL || "gpt-4o-mini";
-  const resp = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${AI_API_KEY}` },
-    body: JSON.stringify({
-      model, max_tokens: AI_MAX_TOKENS,
-      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
-    }),
-  });
-  if (!resp.ok) {
-    const err = await resp.text().catch(() => "");
-    throw Object.assign(new Error(`OpenAI-compatible API error ${resp.status}: ${err.slice(0, 200)}`), { status: 502 });
+function buildSafeOperationPlan(role, fileCtx, hubCtx) {
+  if (role === "library_recommendation") {
+    const items = (hubCtx?.catalog || []).slice(0, 5).map((item) => ({
+      catalog_id: item.id,
+      title: item.title || item.name,
+      reason: item.description || "Relevant NOFIDA Hub library candidate.",
+      category: item.category || "library",
+    }));
+    return {
+      plan_id: crypto.randomUUID(),
+      operation: "recommend_libraries",
+      preview: true,
+      safe: true,
+      items,
+    };
   }
-  const data = await resp.json();
-  return { answer: data.choices?.[0]?.message?.content || "", model };
+
+  if (role === "screen_planner") {
+    const pageName = fileCtx?.page?.name || "New Screen";
+    return {
+      plan_id: crypto.randomUUID(),
+      operation: "create_screen_plan",
+      preview: true,
+      safe: true,
+      items: [{
+        screen_name: pageName,
+        purpose: "Draft a clearer structure for the current flow.",
+        components: ["header", "content", "actions"],
+      }],
+    };
+  }
+
+  if (role === "copywriter") {
+    const texts = Array.isArray(fileCtx?.texts) ? fileCtx.texts.slice(0, 3) : [];
+    return {
+      plan_id: crypto.randomUUID(),
+      operation: "generate_copy",
+      preview: true,
+      safe: true,
+      items: texts.map((text, index) => ({
+        layer_name: `Text ${index + 1}`,
+        current_text: text,
+        suggested_text: text,
+      })),
+    };
+  }
+
+  if (role === "file_summary") {
+    return {
+      plan_id: crypto.randomUUID(),
+      operation: "audit_design",
+      preview: true,
+      safe: true,
+      items: [],
+    };
+  }
+
+  if (role === "design_audit" || role === "reviewer" || role === "vision" || role === "default" || role === "fast" || role === "premium") {
+    return {
+      plan_id: crypto.randomUUID(),
+      operation: "audit_design",
+      preview: true,
+      safe: true,
+      items: buildAuditItems(fileCtx),
+    };
+  }
+
+  return null;
 }
 
-async function callAnthropic(message, systemPrompt) {
-  const model = AI_MODEL || "claude-haiku-4-5-20251001";
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": AI_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model, max_tokens: AI_MAX_TOKENS,
-      system: systemPrompt,
-      messages: [{ role: "user", content: message }],
-    }),
-  });
-  if (!resp.ok) {
-    const err = await resp.text().catch(() => "");
-    throw Object.assign(new Error(`Anthropic API error ${resp.status}: ${err.slice(0, 200)}`), { status: 502 });
+async function handleAiSettingsGet(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const settings = await aiSettingsService.getSettingsView();
+    json(res, 200, { ok: true, settings });
+  } catch (error) {
+    fail(res, error.status || 500, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
   }
-  const data = await resp.json();
-  return { answer: data.content?.[0]?.text || "", model };
+}
+
+async function handleAiProviderModePut(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const body = await parseBody(req);
+    const settings = await aiSettingsService.setProviderMode(body.providerMode || body.mode);
+    json(res, 200, { ok: true, settings });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
+  }
+}
+
+async function handleAiProviderKeyPut(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const body = await parseBody(req);
+    const provider = await aiSettingsService.saveProviderKey(body);
+    json(res, 200, { ok: true, provider });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
+  }
+}
+
+async function handleAiProviderKeyDelete(req, res, providerId) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const provider = await aiSettingsService.deleteProviderKey(providerId);
+    json(res, 200, { ok: true, provider });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
+  }
+}
+
+async function handleAiModelAssignmentPut(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const body = await parseBody(req);
+    const assignments = await aiSettingsService.setModelAssignment(body);
+    json(res, 200, { ok: true, assignments });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
+  }
+}
+
+async function handleAiEnginePut(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const body = await parseBody(req);
+    const engine = await aiSettingsService.setEngine(body);
+    json(res, 200, { ok: true, engine });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
+  }
+}
+
+async function handleAiTestProvider(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const body = await parseBody(req);
+    const result = await aiSettingsService.testProvider(body);
+    json(res, 200, { ok: true, result });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_test_error", aiSettingsService.sanitizeText(error.message));
+  }
+}
+
+async function handleAiTestModel(req, res) {
+  if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
+  try {
+    const body = await parseBody(req);
+    const result = await aiSettingsService.testModel(body);
+    json(res, 200, { ok: true, result });
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "ai_test_error", aiSettingsService.sanitizeText(error.message));
+  }
 }
 
 // POST /ai/ask — NOFIDA AI conversation endpoint (read-only, non-destructive)
 async function handleAiAsk(req, res) {
-  // Require session for paid providers to prevent cost abuse.
-  const cookieHeader = req.headers.cookie || "";
-  if (!cookieHeader && AI_PROVIDER !== "stub") {
-    fail(res, 401, "missing_session", "Authenticated session required for AI endpoint.");
-    return;
-  }
+  if (!requireSession(req, res, "Authenticated session required for AI endpoint.")) return;
 
   let body;
   try {
     body = await parseBody(req);
-  } catch (err) {
-    fail(res, err.status || 400, err.code || "bad_request", err.message);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "bad_request", error.message);
     return;
   }
 
@@ -1214,45 +1322,41 @@ async function handleAiAsk(req, res) {
     return;
   }
 
-  // Bound context to avoid prompt injection / oversized payloads
   const fileCtx = body.file_context && typeof body.file_context === "object" ? body.file_context : null;
   const hubCtx = body.hub_context && typeof body.hub_context === "object" ? body.hub_context : null;
+  const requestedRole = normalizeAiRole(body.role) || inferAiRole(message, fileCtx);
 
   try {
-    let answer, operationPlan, usedModel;
+    const resolved = await aiSettingsService.resolveModelForRole(requestedRole);
+    const systemPrompt = buildSystemPrompt(fileCtx, hubCtx, requestedRole);
+    const result = await aiSettingsService.callWithResolvedModel({
+      resolved,
+      message,
+      systemPrompt,
+    });
+    const operationPlan = buildSafeOperationPlan(requestedRole, fileCtx, hubCtx);
 
-    if (AI_PROVIDER === "stub" || !AI_API_KEY) {
-      const result = stubRespond(message, fileCtx, hubCtx);
-      answer = result.answer;
-      operationPlan = result.operation_plan;
-      usedModel = "stub";
-    } else if (AI_PROVIDER === "anthropic") {
-      const systemPrompt = buildSystemPrompt(fileCtx, hubCtx);
-      const result = await callAnthropic(message, systemPrompt);
-      answer = result.answer;
-      usedModel = result.model;
-      operationPlan = null;
-    } else {
-      // Default for "openai" or any OpenAI-compatible provider (Ollama, etc.)
-      const systemPrompt = buildSystemPrompt(fileCtx, hubCtx);
-      const result = await callOpenAICompatible(message, systemPrompt);
-      answer = result.answer;
-      usedModel = result.model;
-      operationPlan = null;
-    }
-
-    log("INFO", "ai/ask", { provider: AI_PROVIDER, model: usedModel, messageLen: message.length });
+    log("INFO", "ai/ask", {
+      role: requestedRole,
+      provider: result.providerId,
+      model: result.modelId,
+      source: resolved.source,
+      messageLen: message.length,
+    });
 
     json(res, 200, {
       ok: true,
-      answer,
-      operation_plan: operationPlan || null,
-      provider: AI_PROVIDER,
-      model: usedModel || AI_MODEL || AI_PROVIDER,
+      answer: result.answer,
+      operation_plan: operationPlan,
+      provider: result.providerId,
+      model: result.modelId,
+      role: requestedRole,
+      resolution_source: resolved.source,
     });
-  } catch (err) {
-    log("ERROR", "ai/ask failed", { message: err.message });
-    fail(res, err.status || 502, "ai_error", "AI provider error. Check server configuration.");
+  } catch (error) {
+    const safeMessage = aiSettingsService.sanitizeText(error.message);
+    log("ERROR", "ai/ask failed", { code: error.code || "ai_error", message: safeMessage });
+    fail(res, error.status || 502, error.code || "ai_error", safeMessage || "AI provider error. Check server configuration.");
   }
 }
 
@@ -1265,9 +1369,20 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://nofida-hub-adapter.local");
 
   if (req.method === "GET" && url.pathname === "/health") {
+    const health = await aiSettingsService.getHealthSummary().catch(() => ({
+      configuredProviders: [],
+      settingsPath: null,
+      registrySyncedAt: null,
+      providerMode: "role_assignments",
+    }));
     json(res, 200, {
-      ok: true, service: "nofida-hub-adapter", version: "016a",
-      ai_provider: AI_PROVIDER, ai_model_configured: AI_MODEL || null,
+      ok: true,
+      service: "nofida-hub-adapter",
+      version: "016b",
+      ai_provider_mode: health.providerMode,
+      ai_configured_providers: health.configuredProviders,
+      ai_settings_path: health.settingsPath,
+      ai_registry_synced_at: health.registrySyncedAt,
     });
     return;
   }
@@ -1284,6 +1399,47 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/ai/ask") {
     await handleAiAsk(req, res);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/ai/settings") {
+    await handleAiSettingsGet(req, res);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/ai/settings/provider-mode") {
+    await handleAiProviderModePut(req, res);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/ai/settings/provider-key") {
+    await handleAiProviderKeyPut(req, res);
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname.startsWith("/ai/settings/provider-key/")) {
+    const providerId = decodeURIComponent(url.pathname.slice("/ai/settings/provider-key/".length));
+    await handleAiProviderKeyDelete(req, res, providerId);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/ai/settings/model-assignment") {
+    await handleAiModelAssignmentPut(req, res);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/ai/settings/engine") {
+    await handleAiEnginePut(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ai/test-provider") {
+    await handleAiTestProvider(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ai/test-model") {
+    await handleAiTestModel(req, res);
     return;
   }
 

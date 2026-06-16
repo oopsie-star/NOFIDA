@@ -68,20 +68,22 @@ services:
   nofida-hub-adapter:
     build:
       context: ./services/nofida-hub-adapter
-    image: nofida/hub-adapter:016a
+    image: nofida/hub-adapter:016b
     restart: always
     volumes:
       - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/srv/library-store:ro
+      - nofida_ai_settings:/var/lib/nofida-hub-adapter
     environment:
       PENPOT_BASE_URL: http://penpot-frontend:8080
       NOFIDA_LIBRARY_STORE_ROOT: /srv/library-store
       NOFIDA_HUB_IMPORT_CHUNK_SIZE: 26214400
       NOFIDA_HUB_MAX_IMPORT_BYTES: 367001600
+      NOFIDA_AI_SETTINGS_PATH: /var/lib/nofida-hub-adapter/secrets/ai-settings.json
       # ── NOFIDA AI ─────────────────────────────────────────────────────────
-      # Default: "stub" — works without any API key, no external calls.
-      # Set NOFIDA_AI_PROVIDER=openai|anthropic + NOFIDA_AI_API_KEY in .env
-      # for a real LLM. Model defaults: openai → gpt-4o-mini, anthropic → claude-haiku-4-5-20251001.
-      NOFIDA_AI_PROVIDER: ${NOFIDA_AI_PROVIDER:-stub}
+      # 016B migrates env-only AI config into server-side settings storage.
+      # These env vars are still read once as a migration seed if no settings
+      # file exists yet; afterwards, live configuration is managed in-app.
+      NOFIDA_AI_PROVIDER: ${NOFIDA_AI_PROVIDER:-}
       NOFIDA_AI_MODEL: ${NOFIDA_AI_MODEL:-}
       NOFIDA_AI_API_KEY: ${NOFIDA_AI_API_KEY:-}
       NOFIDA_AI_BASE_URL: ${NOFIDA_AI_BASE_URL:-}
@@ -153,6 +155,7 @@ volumes:
   penpot_postgres_v15:
   penpot_valkey_data:
   penpot_assets:
+  nofida_ai_settings:
 
 networks:
   nofida-network:
