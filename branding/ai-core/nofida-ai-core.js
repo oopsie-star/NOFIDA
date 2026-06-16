@@ -82,7 +82,9 @@
       container: null,
       sidebarItem: null,
       refreshFrame: 0,
-      refreshPasses: 0
+      refreshPasses: 0,
+      loopActive: false,
+      lastTickAt: 0
     },
     settingsUi: {
       activeTab: "api",
@@ -1190,18 +1192,33 @@
   }
 
   function scheduleAccountSettingsRefresh() {
-    if (state.accountSettings.refreshFrame) cancelAnimationFrame(state.accountSettings.refreshFrame);
+    if (state.accountSettings.loopActive) return;
+    state.accountSettings.loopActive = true;
     state.accountSettings.refreshPasses = 0;
+    state.accountSettings.lastTickAt = 0;
 
-    function tick() {
-      state.accountSettings.refreshPasses += 1;
-      renderAccountSettingsHost();
-      updateAccountSidebarItem();
-      if (state.accountSettings.refreshPasses < 14 && isAccountSettingsRoute()) {
-        state.accountSettings.refreshFrame = requestAnimationFrame(tick);
-      } else {
+    function tick(timestamp) {
+      if (!state.accountSettings.loopActive) {
         state.accountSettings.refreshFrame = 0;
+        return;
       }
+
+      if (!isAccountSettingsRoute()) {
+        renderAccountSettingsHost();
+        updateAccountSidebarItem();
+        state.accountSettings.loopActive = false;
+        state.accountSettings.refreshFrame = 0;
+        return;
+      }
+
+      if (!state.accountSettings.lastTickAt || (timestamp - state.accountSettings.lastTickAt) >= 180) {
+        state.accountSettings.lastTickAt = timestamp;
+        state.accountSettings.refreshPasses += 1;
+        renderAccountSettingsHost();
+        updateAccountSidebarItem();
+      }
+
+      state.accountSettings.refreshFrame = requestAnimationFrame(tick);
     }
 
     state.accountSettings.refreshFrame = requestAnimationFrame(tick);
