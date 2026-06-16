@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Сообщество — NOFIDA</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0b1020; --surface: #131e35; --border: rgba(37,99,235,.22);
+    --primary: #2563eb; --accent: #10b981; --text: #f8fafc; --muted: #94a3b8;
+    --font: Montserrat, Inter, "Segoe UI", system-ui, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font);
+    font-size: 15px; line-height: 1.65; min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 40px; display: flex; align-items: center; gap: 16px; }
+  header .logo { font-size: 18px; font-weight: 900; color: var(--text); text-decoration: none; }
+  header .badge { font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 999px;
+    background: rgba(16,185,129,.16); color: #6ee7b7; letter-spacing: .08em; text-transform: uppercase; }
+  nav.topnav { margin-left: auto; display: flex; gap: 8px; }
+  nav.topnav a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; transition: all .15s; }
+  nav.topnav a:hover, nav.topnav a.active { color: var(--text); border-color: var(--border);
+    background: rgba(37,99,235,.1); }
+  .hero { padding: 48px 40px 32px; border-bottom: 1px solid var(--border); }
+  .hero h1 { font-size: 28px; font-weight: 900; margin-bottom: 10px; }
+  .hero p { color: var(--muted); font-size: 14px; max-width: 560px; }
+  main { max-width: 900px; margin: 0 auto; padding: 40px; }
+  .channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-bottom: 48px; }
+  .channel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+  .channel .icon { font-size: 32px; }
+  .channel h2 { font-size: 15px; font-weight: 800; }
+  .channel p { color: var(--muted); font-size: 13px; line-height: 1.55; flex: 1; }
+  .channel .ch-status { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 5px; width: fit-content; }
+  .ch-status.active { background: rgba(16,185,129,.14); color: #6ee7b7; }
+  .ch-status.active::before { content: ""; width: 6px; height: 6px; border-radius: 999px;
+    background: var(--accent); }
+  .section-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+  .contact-form { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; margin-bottom: 48px; }
+  .contact-form h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+  .contact-form > p { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:600px){ .form-grid { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); }
+  .field input, .field select, .field textarea {
+    background: rgba(7,12,24,.9); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); padding: 10px 12px; font-size: 13px; font-family: var(--font);
+    outline: none; transition: border-color .15s; resize: vertical; }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--primary); }
+  .field textarea { min-height: 100px; }
+  .field.full { grid-column: 1 / -1; }
+  .form-note { font-size: 12px; color: var(--muted); margin-top: 16px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px;
+    border-radius: 9px; font-size: 13px; font-weight: 700; text-decoration: none;
+    border: none; cursor: pointer; transition: all .15s; font-family: var(--font); }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: rgba(37,99,235,.1); }
+  .about-section { background: linear-gradient(135deg, rgba(37,99,235,.1), rgba(16,185,129,.06));
+    border: 1px solid rgba(37,99,235,.28); border-radius: 16px; padding: 32px; margin-bottom: 48px; }
+  .about-section h2 { font-size: 20px; font-weight: 900; margin-bottom: 14px; }
+  .about-section p { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+  .about-section p:last-child { margin-bottom: 0; }
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px; margin-top: 24px; }
+  .principle { background: rgba(7,12,24,.6); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; }
+  .principle h3 { font-size: 13px; font-weight: 800; margin-bottom: 4px; }
+  .principle p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  footer { border-top: 1px solid var(--border); padding: 20px 40px; color: var(--muted);
+    font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/" class="logo">NOFIDA</a>
+  <span class="badge">Сообщество</span>
+  <nav class="topnav">
+    <a href="/nofida/help/">Справка</a>
+    <a href="/nofida/help/learn.html">Обучение</a>
+    <a href="/nofida/help/community.html" class="active">Сообщество</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <h1>Сообщество NOFIDA</h1>
+  <p>Здесь вы можете связаться с командой разработки, сообщить об ошибке, предложить функцию или получить помощь с настройкой платформы.</p>
+</div>
+
+<main>
+  <div class="section-title">Каналы поддержки</div>
+  <div class="channels">
+    <div class="channel">
+      <div class="icon">💬</div>
+      <h2>Внутренняя поддержка</h2>
+      <p>Вопросы по платформе, настройке ИИ и работе с библиотеками. Отвечаем в рабочее время.</p>
+      <span class="ch-status active">Активно</span>
+    </div>
+    <div class="channel">
+      <div class="icon">🐛</div>
+      <h2>Сообщить об ошибке</h2>
+      <p>Нашли баг или неожиданное поведение? Опишите шаги воспроизведения и приложите скриншот.</p>
+      <span class="ch-status active">Принимаем</span>
+    </div>
+    <div class="channel">
+      <div class="icon">💡</div>
+      <h2>Предложения</h2>
+      <p>Есть идея для улучшения платформы? Предложите новую функцию — лучшие идеи попадают в роадмап.</p>
+      <span class="ch-status active">Открыто</span>
+    </div>
+  </div>
+
+  <div class="contact-form" id="contact">
+    <h2>Написать в поддержку</h2>
+    <p>Заполните форму — ваш запрос попадёт напрямую к команде NOFIDA.</p>
+    <form onsubmit="handleSubmit(event)">
+      <div class="form-grid">
+        <div class="field">
+          <label>Ваше имя</label>
+          <input type="text" name="name" placeholder="Иван Иванов" required />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" name="email" placeholder="ivan@company.ru" required />
+        </div>
+        <div class="field">
+          <label>Тема обращения</label>
+          <select name="topic">
+            <option value="support">Техническая поддержка</option>
+            <option value="bug">Сообщить об ошибке</option>
+            <option value="feature">Предложение функции</option>
+            <option value="ai">Вопрос по NOFIDA AI</option>
+            <option value="library">Вопрос по библиотекам</option>
+            <option value="other">Другое</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Версия платформы</label>
+          <input type="text" name="version" placeholder="2.16.0" />
+        </div>
+        <div class="field full">
+          <label>Описание</label>
+          <textarea name="message" placeholder="Опишите вашу проблему или предложение как можно подробнее…" required></textarea>
+        </div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <button type="submit" class="btn btn-primary" id="submit-btn">Отправить запрос</button>
+        <span id="form-status" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+      <p class="form-note">Мы обрабатываем запросы в течение 1–2 рабочих дней. Для срочных вопросов используйте прямой канал поддержки вашей организации.</p>
+    </form>
+  </div>
+
+  <div class="about-section">
+    <h2>О платформе NOFIDA</h2>
+    <p>NOFIDA — это приватная дизайн-платформа для команд, создающих цифровые продукты. Мы строим инструмент с акцентом на безопасность данных, автономность инфраструктуры и интеграцию ИИ в рабочий процесс дизайнера.</p>
+    <p>Платформа работает полностью на инфраструктуре вашей организации — данные не передаются на сторонние серверы. ИИ-функции подключаются к внешним поставщикам только через явно указанные ключи API, которые хранятся на вашем сервере.</p>
+    <div class="principles">
+      <div class="principle">
+        <h3>🔒 Данные остаются у вас</h3>
+        <p>Вся инфраструктура развёртывается на ваших серверах. Никаких внешних зависимостей по данным.</p>
+      </div>
+      <div class="principle">
+        <h3>🤖 ИИ по вашим правилам</h3>
+        <p>Вы выбираете поставщика ИИ и модели. Ключи API хранятся зашифрованно и никогда не передаются клиенту.</p>
+      </div>
+      <div class="principle">
+        <h3>🧩 Открытые компоненты</h3>
+        <p>Библиотека NOFIDA Hub содержит проверенные дизайн-системы и компоненты для быстрого старта.</p>
+      </div>
+      <div class="principle">
+        <h3>⚡ Без vendor lock-in</h3>
+        <p>Форматы файлов совместимы с открытыми стандартами. Вы всегда можете экспортировать и мигрировать.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>© NOFIDA — Приватная дизайн-платформа для команд</footer>
+
+<script>
+function handleSubmit(ev) {
+  ev.preventDefault();
+  var btn = document.getElementById("submit-btn");
+  var status = document.getElementById("form-status");
+  btn.disabled = true;
+  btn.textContent = "Отправка…";
+  status.textContent = "";
+  // Simulate sending (replace with real endpoint if needed)
+  setTimeout(function() {
+    btn.disabled = false;
+    btn.textContent = "Отправить запрос";
+    status.style.color = "#6ee7b7";
+    status.textContent = "✓ Запрос отправлен. Мы свяжемся с вами в ближайшее время.";
+    ev.target.reset();
+  }, 1200);
+}
+</script>
+</body>
+</html>

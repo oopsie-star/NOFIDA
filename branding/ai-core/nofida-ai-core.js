@@ -1667,6 +1667,163 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────
+  // PATCH 016C — Dashboard NOFIDA AI shortcut
+  // ─────────────────────────────────────────────────────────────────────
+
+  var _dashAIEntry = null;
+  var _dashAIStylesDone = false;
+  var _dashAIObserver = null;
+
+  function findDashboardSidebarNav() {
+    var selectors = [
+      ".main_ui_dashboard_sidebar__sidebar-nav",
+      "[class*='dashboard_sidebar'][class*='nav']",
+      "[class*='dashboard_sidebar'][class*='menu']",
+      "[class*='dashboard-sidebar'] nav",
+      "[class*='dashboard-sidebar'] ul"
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var found = document.querySelector(selectors[i]);
+      if (found) return found;
+    }
+    var navEls = document.querySelectorAll("nav, [role='navigation'], aside ul");
+    for (var j = 0; j < navEls.length; j++) {
+      if (/черновики|drafts|проекты|projects/i.test(navEls[j].textContent || "")) return navEls[j];
+    }
+    return document.querySelector("[class*='dashboard_sidebar']");
+  }
+
+  function ensureDashboardAIStyles() {
+    if (_dashAIStylesDone || document.getElementById("nofida-ai-dash-style")) return;
+    var style = document.createElement("style");
+    style.id = "nofida-ai-dash-style";
+    style.textContent = [
+      "#nofida-ai-dash-entry{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 6px;",
+      "border-radius:10px;font-size:13px;font-weight:700;color:#93c5fd;",
+      "text-decoration:none;cursor:pointer;",
+      "background:rgba(37,99,235,.07);border:1px solid rgba(37,99,235,.2);",
+      "transition:background .15s,border-color .15s;",
+      "font-family:" + BRAND.font + ";box-sizing:border-box}",
+      "#nofida-ai-dash-entry:hover{background:rgba(37,99,235,.14);border-color:rgba(37,99,235,.38)}",
+      "#nofida-ai-dash-entry .nai-icon{display:flex;align-items:center;flex-shrink:0}",
+      "#nofida-ai-dash-entry .nai-badge{font-size:9px;font-weight:900;padding:1px 5px;",
+      "border-radius:999px;background:rgba(16,185,129,.18);color:#6ee7b7;",
+      "letter-spacing:.06em;text-transform:uppercase;margin-left:auto}"
+    ].join("");
+    document.head.appendChild(style);
+    _dashAIStylesDone = true;
+  }
+
+  function updateDashboardAIEntry() {
+    if (!isDashboardRoute()) {
+      if (_dashAIEntry && _dashAIEntry.parentNode) _dashAIEntry.parentNode.removeChild(_dashAIEntry);
+      _dashAIEntry = null;
+      if (_dashAIObserver) { _dashAIObserver.disconnect(); _dashAIObserver = null; }
+      return;
+    }
+
+    var existing = document.getElementById("nofida-ai-dash-entry");
+    if (existing) { _dashAIEntry = existing; return; }
+
+    var nav = findDashboardSidebarNav();
+    if (!nav) {
+      if (!_dashAIObserver) {
+        _dashAIObserver = new MutationObserver(function () { updateDashboardAIEntry(); });
+        _dashAIObserver.observe(document.body, { childList: true, subtree: true });
+      }
+      return;
+    }
+    if (_dashAIObserver) { _dashAIObserver.disconnect(); _dashAIObserver = null; }
+
+    ensureDashboardAIStyles();
+
+    var entry = document.createElement("a");
+    entry.id = "nofida-ai-dash-entry";
+    entry.href = "javascript:void(0)"; // eslint-disable-line no-script-url
+    entry.setAttribute("role", "menuitem");
+    entry.setAttribute("aria-label", "NOFIDA AI — Настройки ИИ");
+    entry.innerHTML = [
+      '<span class="nai-icon">',
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">',
+      '<path d="M12 3l1.5 3.8L17 8.3l-3.5 1.5L12 14l-1.5-4.2L7 8.3l3.5-1.5z"/>',
+      '<path d="M18.5 14.5l.6 1.5.9.4-.9.1-.6 1.5-.6-1.5-.9-.1.9-.4z"/>',
+      "</svg></span>",
+      "NOFIDA AI",
+      '<span class="nai-badge">AI</span>'
+    ].join("");
+    entry.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      openAccountSettingsPage("api");
+    });
+
+    var nhbBtn = document.getElementById("nhb-sidebar-btn");
+    if (nhbBtn && nhbBtn.parentNode === nav) {
+      nav.insertBefore(entry, nhbBtn.nextSibling || null);
+    } else {
+      nav.appendChild(entry);
+    }
+    _dashAIEntry = entry;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // PATCH 016C — External Penpot link interception
+  // ─────────────────────────────────────────────────────────────────────
+
+  var _extLinkObserver = null;
+
+  var PENPOT_EXT_DOMAINS = [
+    "help.penpot.app",
+    "community.penpot.app",
+    "github.com/penpot",
+    "penpot.app/learn",
+    "penpot.app/blog",
+    "penpot.app/libraries-templates"
+  ];
+
+  function interceptPenpotExternalLinks() {
+    document.querySelectorAll("a[href]").forEach(function (link) {
+      if (link.getAttribute("data-nofida-ext")) return;
+      var href = link.getAttribute("href") || "";
+      var isExt = PENPOT_EXT_DOMAINS.some(function (d) { return href.indexOf(d) >= 0; });
+      if (!isExt) return;
+      link.setAttribute("data-nofida-ext", "1");
+
+      var text = normalizeText(link.textContent || "");
+      var dest;
+      if (href.indexOf("github.com/penpot") >= 0 || text.indexOf("репозитори") >= 0) {
+        dest = "/nofida/help/community.html";
+      } else if (href.indexOf("community.penpot.app") >= 0 || text.indexOf("сообщест") >= 0) {
+        dest = "/nofida/help/community.html";
+      } else if (href.indexOf("learn") >= 0 || text.indexOf("обучени") >= 0) {
+        dest = "/nofida/help/learn.html";
+      } else if (href.indexOf("libraries-templates") >= 0) {
+        dest = null; // handled by nofida-library-hub.js
+      } else {
+        dest = "/nofida/help/";
+      }
+      if (!dest) return;
+      link.setAttribute("href", dest);
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    });
+  }
+
+  function startExtLinkObserver() {
+    if (_extLinkObserver) return;
+    _extLinkObserver = new MutationObserver(function (mutations) {
+      var hasNew = mutations.some(function (m) {
+        return Array.prototype.some.call(m.addedNodes, function (n) {
+          return n.nodeType === 1;
+        });
+      });
+      if (hasNew) interceptPenpotExternalLinks();
+    });
+    _extLinkObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+
   function updateRouteState() {
     var visible = isAssistantRoute();
     state.els.fab.hidden = !visible;
@@ -1674,6 +1831,9 @@
     updateDashboardPosition();
     ensureLibrariesExpanded();
     scheduleAccountSettingsRefresh();
+    updateDashboardAIEntry();
+    interceptPenpotExternalLinks();
+    startExtLinkObserver();
   }
 
   function readTargetProviderDraft(providerId) {

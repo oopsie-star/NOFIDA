@@ -21,6 +21,7 @@ ARG WEBROOT=/var/www/app
 COPY --chown=penpot:penpot brand/     ${WEBROOT}/nofida/brand/
 COPY --chown=penpot:penpot ai-core/   ${WEBROOT}/nofida/ai-core/
 COPY --chown=penpot:penpot libraries/ ${WEBROOT}/nofida/libraries/
+COPY --chown=penpot:penpot help/      ${WEBROOT}/nofida/help/
 COPY --chmod=755 scripts/patch-frontend.sh /usr/local/bin/patch-frontend.sh
 
 # ── nginx override: serve /nofida/* and proxy /api/nofida/* at server level ─
