@@ -3,10 +3,16 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
 import { createAISettingsService } from "./ai-service.mjs";
+import { getPromptDefinition, TASK_OPERATION_TYPE, DASHBOARD_ALLOWED_TASKS, EDITOR_REQUIRED_TASKS } from "./ai/prompt-registry.mjs";
+import { packHubContext, loadCatalog } from "./ai/hub-context-packer.mjs";
+import { routeTask } from "./ai/intent-router.mjs";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3101);
 const STORE_ROOT = path.resolve(process.env.NOFIDA_LIBRARY_STORE_ROOT || "/srv/library-store");
+const CATALOG_PATH = path.resolve(
+  process.env.NOFIDA_HUB_CATALOG_PATH || path.join(STORE_ROOT, "catalog.json"),
+);
 const PENPOT_BASE_URL = process.env.PENPOT_BASE_URL || "http://penpot-frontend:8080";
 const HUB_PROJECT_NAME = process.env.NOFIDA_HUB_PROJECT_NAME || "NOFIDA Hub";
 const CHUNK_SIZE = Number(process.env.NOFIDA_HUB_IMPORT_CHUNK_SIZE || 25 * 1024 * 1024);
@@ -1008,19 +1014,6 @@ async function handleQualityCheck(req, res) {
 
 // ── AI helpers ────────────────────────────────────────────────────────────
 
-const AI_ROLES = new Set([
-  "default",
-  "file_summary",
-  "design_audit",
-  "library_recommendation",
-  "screen_planner",
-  "copywriter",
-  "reviewer",
-  "vision",
-  "fast",
-  "premium",
-]);
-
 function requireSession(req, res, message = "Authenticated session required.") {
   const cookieHeader = req.headers.cookie || "";
   if (!cookieHeader) {
@@ -1030,192 +1023,168 @@ function requireSession(req, res, message = "Authenticated session required.") {
   return cookieHeader;
 }
 
-function normalizeAiRole(role) {
-  const normalized = String(role || "").trim().toLowerCase();
-  return AI_ROLES.has(normalized) ? normalized : null;
+
+// ── Catalog cache ─────────────────────────────────────────────────────────────
+// Loaded lazily on first AI task request; held in memory for the process lifetime.
+// Refresh by restarting the service (or extend with a TTL in a future patch).
+
+let _catalogCache = null;
+
+async function getCatalog() {
+  if (_catalogCache !== null) return _catalogCache;
+  _catalogCache = await loadCatalog(CATALOG_PATH);
+  return _catalogCache;
 }
 
-function inferAiRole(message, fileCtx) {
-  const text = String(message || "").toLowerCase();
-  if (/audit|review|fix|issue|problem|проверь|аудит|проблем|исправ/.test(text)) return "design_audit";
-  if (/librar|catalog|kit|saas|component|recommend|библиотек|каталог|компонент|подбери/.test(text))
-    return "library_recommendation";
-  if (/summary|overview|what|file|screen|сводк|обзор|что в этом файле|что на экране/.test(text))
-    return "file_summary";
-  if (/screen|flow|plan|wireframe|план экрана|структур/.test(text)) return "screen_planner";
-  if (/copy|headline|cta|microcopy|текст|копирайт/.test(text)) return "copywriter";
-  if (/vision|image|screenshot|изображен|картинк/.test(text) || Array.isArray(fileCtx?.images) && fileCtx.images.length > 0)
-    return "vision";
-  if (/fast|quick|быстро/.test(text)) return "fast";
-  if (/premium|best|лучший/.test(text)) return "premium";
-  if (/reviewer|ревью/.test(text)) return "reviewer";
-  return "default";
-}
+// ── Typed operation plan builder ──────────────────────────────────────────────
+// Builds a NofidaAIOperationPlan from context metadata and task type.
+// All plans are preview-only (allowApply: false) until PATCH 016E safe-apply lands.
 
-function buildSystemPrompt(fileCtx, hubCtx, role) {
-  const lines = [
-    "You are NOFIDA AI, an expert design assistant embedded in the NOFIDA platform (built on Penpot).",
-    `Current task role: ${role}.`,
-    "Help designers understand their files, find issues, and pick NOFIDA Hub libraries.",
-    "",
-    "Rules:",
-    "- ONLY recommend libraries from the NOFIDA Hub catalog supplied in the context.",
-    "- NEVER suggest external tools, competitors, or libraries not in the catalog.",
-    "- NEVER apply changes directly — describe plans only, previews only, no mutations.",
-    "- Be concise, specific, and reply in the same language as the user's message.",
-    "- When referencing libraries use their catalog_id.",
-    "",
-  ];
+const VALID_OPERATION_TYPES = new Set([
+  "recommend_library", "create_screen_plan", "rename_layer", "organize_layers",
+  "create_component_plan", "apply_shared_style_plan", "insert_component_plan",
+  "create_frame_plan", "improve_copy_plan", "accessibility_fix_plan",
+  "create_variant_plan", "document_design_decision",
+]);
 
-  if (fileCtx) {
-    if (fileCtx.file) lines.push(`File: "${fileCtx.file.name}"`);
-    if (fileCtx.page) lines.push(`Current page: "${fileCtx.page.name}"`);
-    if (fileCtx.objects) {
-      lines.push(`Objects on page: ${fileCtx.objects.total} total`);
-      const types = Object.entries(fileCtx.objects.byType || {}).map(([type, count]) => `${type}:${count}`).join(", ");
-      if (types) lines.push(`  Types: ${types}`);
+function buildTypedOperationPlan(taskType, context, hubCtx) {
+  const primaryType = TASK_OPERATION_TYPE[taskType];
+  if (!primaryType || !VALID_OPERATION_TYPES.has(primaryType)) return null;
+
+  const operations = [];
+
+  if (primaryType === "recommend_library") {
+    const libs = hubCtx?.matchedLibraries || [];
+    if (libs.length === 0) {
+      operations.push({
+        type: "recommend_library",
+        description: "No matching NOFIDA Hub libraries found. Describe the kind of library you need.",
+        confidence: 0.5,
+      });
+    } else {
+      for (const lib of libs.slice(0, 6)) {
+        operations.push({
+          type: "recommend_library",
+          targetId: lib.id,
+          targetName: lib.title,
+          description: lib.description || "Relevant NOFIDA Hub library candidate.",
+          confidence: lib.status === "available" ? 0.85 : 0.5,
+        });
+      }
     }
-    if (Array.isArray(fileCtx.selection) && fileCtx.selection.length > 0)
-      lines.push(`Selected: ${fileCtx.selection.map((item) => `${item.name}(${item.type})`).join(", ")}`);
-    if (Array.isArray(fileCtx.colors) && fileCtx.colors.length > 0)
-      lines.push(`Colors used: ${fileCtx.colors.slice(0, 10).join(", ")}`);
-    if (Array.isArray(fileCtx.texts) && fileCtx.texts.length > 0)
-      lines.push(`Text samples: ${fileCtx.texts.slice(0, 3).map((item) => `"${item}"`).join(", ")}`);
-    lines.push("");
-  }
-
-  if (hubCtx && Array.isArray(hubCtx.catalog) && hubCtx.catalog.length > 0) {
-    lines.push("NOFIDA Hub catalog (use these IDs when recommending):");
-    for (const item of hubCtx.catalog.slice(0, 24)) {
-      const installed = (hubCtx.installed || []).includes(item.id) ? " [installed]" : "";
-      lines.push(`  ${item.id}: ${item.title || item.name}${installed} (${item.category || "library"})`);
-    }
-    lines.push("");
-  }
-
-  return lines.join("\n");
-}
-
-function buildAuditItems(fileCtx) {
-  const issues = [];
-  const objects = fileCtx?.objects || null;
-  const byType = objects?.byType || {};
-  const colors = Array.isArray(fileCtx?.colors) ? fileCtx.colors : [];
-
-  if (objects) {
+  } else if (primaryType === "document_design_decision") {
+    const byType = context?.objects?.byType || {};
     const texts = byType.text || 0;
     const frames = byType.frame || 0;
     const components = byType.component || 0;
+    const totalObjs = context?.objects?.total || 0;
+    const colors = Array.isArray(context?.colors) ? context.colors : [];
+
     if (texts > 0 && frames === 0) {
-      issues.push({
-        severity: "warning",
-        issue: "Text layers are not grouped into frames",
-        suggestion: "Wrap text blocks in frame containers before layout refinement.",
+      operations.push({
+        type: "document_design_decision",
+        description: "Text layers exist without frame containers. Wrap text blocks in frames before layout refinement.",
+        confidence: 0.8,
+        requiredContext: ["page"],
       });
     }
-    if (objects.total > 80 && components === 0) {
-      issues.push({
-        severity: "info",
-        issue: "Many objects are present without reusable components",
-        suggestion: "Promote repeated patterns into shared components.",
+    if (totalObjs > 80 && components === 0) {
+      operations.push({
+        type: "document_design_decision",
+        description: "Many objects are present without reusable components. Promote repeated patterns into shared components.",
+        confidence: 0.7,
       });
     }
-    if ((byType.rect || 0) > 24 && components < 2) {
-      issues.push({
-        severity: "info",
-        issue: "The screen appears to rely on many raw rectangles",
-        suggestion: "Turn repeated card and button shapes into reusable UI components.",
+    if (colors.length > 12) {
+      operations.push({
+        type: "document_design_decision",
+        description: `${colors.length} unique colors detected. Consolidate the palette into reusable color tokens.`,
+        confidence: 0.75,
       });
     }
-  }
-
-  if (colors.length > 12) {
-    issues.push({
-      severity: "warning",
-      issue: `${colors.length} unique colors detected`,
-      suggestion: "Consolidate the palette into reusable color tokens.",
+    if (operations.length === 0) {
+      operations.push({
+        type: "document_design_decision",
+        description: "No deterministic structural issues detected from the current context. Review the AI answer for deeper insights.",
+        confidence: 0.6,
+      });
+    }
+  } else if (primaryType === "create_screen_plan") {
+    const pageName = context?.page?.name || "Current Page";
+    operations.push({
+      type: "create_screen_plan",
+      targetName: pageName,
+      description: `Draft a clear structure for the "${pageName}" flow: header, content area, action bar.`,
+      confidence: 0.7,
+      requiredContext: ["page"],
     });
-  }
-
-  if (!issues.length) {
-    issues.push({
-      severity: "info",
-      issue: "No deterministic structural issues were detected from the current context",
-      suggestion: "Use the AI answer plus manual review before applying design changes.",
+  } else if (primaryType === "improve_copy_plan") {
+    const texts = Array.isArray(context?.texts) ? context.texts.slice(0, 4) : [];
+    if (texts.length === 0) {
+      operations.push({
+        type: "improve_copy_plan",
+        description: "No text samples found in the current selection. Select text layers and retry.",
+        confidence: 0.5,
+        requiredContext: ["selection"],
+      });
+    } else {
+      for (const text of texts) {
+        operations.push({
+          type: "improve_copy_plan",
+          description: `Review and improve copy: "${text.slice(0, 60)}"`,
+          confidence: 0.7,
+          requiredContext: ["file"],
+        });
+      }
+    }
+  } else if (primaryType === "accessibility_fix_plan") {
+    const colors = Array.isArray(context?.colors) ? context.colors : [];
+    operations.push({
+      type: "accessibility_fix_plan",
+      description: colors.length > 0
+        ? `Check contrast ratios for ${colors.length} unique colors against WCAG 2.1 AA standards.`
+        : "No color data available. Open a file page for a full accessibility scan.",
+      confidence: 0.65,
+      requiredContext: ["file"],
     });
+  } else if (primaryType === "organize_layers") {
+    const total = context?.objects?.total || 0;
+    operations.push({
+      type: "organize_layers",
+      description: total > 0
+        ? `Propose naming and grouping for ${total} objects on this page.`
+        : "No objects found on the current page.",
+      confidence: 0.7,
+      requiredContext: ["page"],
+    });
+  } else if (primaryType === "rename_layer") {
+    const sel = Array.isArray(context?.selection) ? context.selection : [];
+    if (sel.length === 0) {
+      operations.push({
+        type: "rename_layer",
+        description: "No layers selected. Select layers first, then retry.",
+        confidence: 0.5,
+        requiredContext: ["selection"],
+      });
+    } else {
+      for (const item of sel.slice(0, 8)) {
+        operations.push({
+          type: "rename_layer",
+          targetName: item.name,
+          description: `Suggest a semantic name for "${item.name}" (${item.type}).`,
+          confidence: 0.75,
+          requiredContext: ["selection"],
+        });
+      }
+    }
   }
 
-  return issues;
-}
-
-function buildSafeOperationPlan(role, fileCtx, hubCtx) {
-  if (role === "library_recommendation") {
-    const items = (hubCtx?.catalog || []).slice(0, 5).map((item) => ({
-      catalog_id: item.id,
-      title: item.title || item.name,
-      reason: item.description || "Relevant NOFIDA Hub library candidate.",
-      category: item.category || "library",
-    }));
-    return {
-      plan_id: crypto.randomUUID(),
-      operation: "recommend_libraries",
-      preview: true,
-      safe: true,
-      items,
-    };
-  }
-
-  if (role === "screen_planner") {
-    const pageName = fileCtx?.page?.name || "New Screen";
-    return {
-      plan_id: crypto.randomUUID(),
-      operation: "create_screen_plan",
-      preview: true,
-      safe: true,
-      items: [{
-        screen_name: pageName,
-        purpose: "Draft a clearer structure for the current flow.",
-        components: ["header", "content", "actions"],
-      }],
-    };
-  }
-
-  if (role === "copywriter") {
-    const texts = Array.isArray(fileCtx?.texts) ? fileCtx.texts.slice(0, 3) : [];
-    return {
-      plan_id: crypto.randomUUID(),
-      operation: "generate_copy",
-      preview: true,
-      safe: true,
-      items: texts.map((text, index) => ({
-        layer_name: `Text ${index + 1}`,
-        current_text: text,
-        suggested_text: text,
-      })),
-    };
-  }
-
-  if (role === "file_summary") {
-    return {
-      plan_id: crypto.randomUUID(),
-      operation: "audit_design",
-      preview: true,
-      safe: true,
-      items: [],
-    };
-  }
-
-  if (role === "design_audit" || role === "reviewer" || role === "vision" || role === "default" || role === "fast" || role === "premium") {
-    return {
-      plan_id: crypto.randomUUID(),
-      operation: "audit_design",
-      preview: true,
-      safe: true,
-      items: buildAuditItems(fileCtx),
-    };
-  }
-
-  return null;
+  return {
+    preview: true,
+    safe: true,
+    allowApply: false,
+    operations,
+  };
 }
 
 async function handleAiSettingsGet(req, res) {
@@ -1304,7 +1273,19 @@ async function handleAiTestModel(req, res) {
   }
 }
 
-// POST /ai/ask — NOFIDA AI conversation endpoint (read-only, non-destructive)
+// POST /ai/ask — NOFIDA AI task endpoint (read-only, non-destructive)
+//
+// Accepts two request formats:
+//
+//   New format (preset buttons and free-text with task routing):
+//     { taskType?, scope?, context?, userPrompt? }
+//
+//   Legacy format (plain chat, backward compat):
+//     { message, file_context?, hub_context? }
+//
+// Always returns NofidaAITaskResult:
+//   { ok, taskType, scope, status, message, resultText?,
+//     operationPlan?, usedContext?, model?, prompt? }
 async function handleAiAsk(req, res) {
   if (!requireSession(req, res, "Authenticated session required for AI endpoint.")) return;
 
@@ -1316,48 +1297,165 @@ async function handleAiAsk(req, res) {
     return;
   }
 
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) {
-    fail(res, 400, "missing_message", "Field 'message' is required.");
+  // ── Detect and normalise request format ────────────────────────────────────
+
+  // Legacy format: body.message present
+  const legacyMessage = typeof body.message === "string" ? body.message.trim() : "";
+  const isLegacy = Boolean(legacyMessage) && !body.taskType;
+
+  const rawTaskType = isLegacy ? null : (body.taskType || null);
+  const rawUserPrompt = isLegacy ? legacyMessage : (typeof body.userPrompt === "string" ? body.userPrompt.trim() : "");
+  const rawScope = isLegacy ? null : (body.scope || null);
+  const rawContext = isLegacy
+    ? (body.file_context && typeof body.file_context === "object" ? body.file_context : null)
+    : (body.context && typeof body.context === "object" ? body.context : null);
+
+  if (!rawTaskType && !rawUserPrompt) {
+    fail(res, 400, "missing_input", "Provide either 'taskType' or 'userPrompt' (or legacy 'message').");
     return;
   }
 
-  const fileCtx = body.file_context && typeof body.file_context === "object" ? body.file_context : null;
-  const hubCtx = body.hub_context && typeof body.hub_context === "object" ? body.hub_context : null;
-  const requestedRole = normalizeAiRole(body.role) || inferAiRole(message, fileCtx);
+  // ── Route through intent router ────────────────────────────────────────────
 
+  let routed;
   try {
-    const resolved = await aiSettingsService.resolveModelForRole(requestedRole);
-    const systemPrompt = buildSystemPrompt(fileCtx, hubCtx, requestedRole);
-    const result = await aiSettingsService.callWithResolvedModel({
+    routed = routeTask({
+      taskType: rawTaskType,
+      userPrompt: rawUserPrompt,
+      scope: rawScope,
+      context: rawContext,
+    });
+  } catch (routeErr) {
+    const statusCode = routeErr.code === "context_missing" ? "context_missing" : "failed";
+    json(res, routeErr.status || 400, {
+      ok: false,
+      taskType: rawTaskType || "free_chat",
+      scope: rawScope || "dashboard",
+      status: statusCode,
+      message: routeErr.message,
+    });
+    return;
+  }
+
+  const { taskType, scope, role, userPrompt, context } = routed;
+
+  // ── Look up prompt definition ──────────────────────────────────────────────
+
+  const promptDef = getPromptDefinition(taskType);
+
+  // ── Pack hub context (server-side; library tasks get filtered catalog) ──────
+
+  let packedHub = null;
+  const needsHub = ["library_recommendation", "find_libraries_for_project"].includes(taskType)
+    || (body.hub_context && typeof body.hub_context === "object"); // legacy pass-through
+
+  if (needsHub) {
+    let catalogItems = await getCatalog();
+    // Legacy format may have passed installed IDs via hub_context; honour them
+    const installedIds = Array.isArray(body.hub_context?.installed) ? body.hub_context.installed : [];
+    packedHub = packHubContext({ taskType, userPrompt, catalogItems, installedIds });
+  }
+
+  // ── Build system prompt from registry ─────────────────────────────────────
+
+  const systemPrompt = promptDef.buildSystemPrompt(context, packedHub);
+
+  // ── Resolve model and call provider ───────────────────────────────────────
+
+  let resolved;
+  try {
+    resolved = await aiSettingsService.resolveModelForRole(role);
+  } catch (resolveErr) {
+    const status = resolveErr.code === "missing_provider_key" ? "provider_missing" : "model_missing";
+    const hint = status === "provider_missing"
+      ? "No AI provider configured. Open Account → NOFIDA AI → API Configuration."
+      : "No model assigned for this task. Open Account → NOFIDA AI → Model Library.";
+    json(res, 200, {
+      ok: false,
+      taskType,
+      scope,
+      status,
+      message: hint,
+      prompt: { id: promptDef.id, version: promptDef.version },
+    });
+    return;
+  }
+
+  let callResult;
+  try {
+    callResult = await aiSettingsService.callWithResolvedModel({
       resolved,
-      message,
+      message: userPrompt || `Run task: ${taskType}`,
       systemPrompt,
     });
-    const operationPlan = buildSafeOperationPlan(requestedRole, fileCtx, hubCtx);
-
-    log("INFO", "ai/ask", {
-      role: requestedRole,
-      provider: result.providerId,
-      model: result.modelId,
-      source: resolved.source,
-      messageLen: message.length,
+  } catch (callErr) {
+    const safeMsg = aiSettingsService.sanitizeText(callErr.message);
+    log("ERROR", "ai/ask provider call failed", {
+      taskType, scope, code: callErr.code || "ai_error", message: safeMsg,
     });
-
+    const status = callErr.code === "missing_provider_key" ? "provider_missing"
+      : callErr.code === "missing_model_assignment" ? "model_missing"
+      : "failed";
     json(res, 200, {
-      ok: true,
-      answer: result.answer,
-      operation_plan: operationPlan,
-      provider: result.providerId,
-      model: result.modelId,
-      role: requestedRole,
-      resolution_source: resolved.source,
+      ok: false,
+      taskType,
+      scope,
+      status,
+      message: safeMsg || "AI provider error. Check server configuration.",
+      model: { providerId: resolved?.providerId, modelId: resolved?.modelId, role, source: resolved?.source },
+      prompt: { id: promptDef.id, version: promptDef.version },
     });
-  } catch (error) {
-    const safeMessage = aiSettingsService.sanitizeText(error.message);
-    log("ERROR", "ai/ask failed", { code: error.code || "ai_error", message: safeMessage });
-    fail(res, error.status || 502, error.code || "ai_error", safeMessage || "AI provider error. Check server configuration.");
+    return;
   }
+
+  // ── Build typed operation plan ─────────────────────────────────────────────
+
+  const operationPlan = buildTypedOperationPlan(taskType, context, packedHub);
+
+  // ── Build used-context flags ───────────────────────────────────────────────
+
+  const usedContext = {
+    file: Boolean(context?.file),
+    page: Boolean(context?.page),
+    selection: Array.isArray(context?.selection) && context.selection.length > 0,
+    hubCatalog: Boolean(packedHub && packedHub.matchedLibraries.length > 0),
+    dashboard: scope === "dashboard",
+  };
+
+  log("INFO", "ai/ask", {
+    taskType,
+    scope,
+    role,
+    provider: callResult.providerId,
+    model: callResult.modelId,
+    source: resolved.source,
+    promptId: promptDef.id,
+    promptVersion: promptDef.version,
+    userPromptLen: userPrompt.length,
+  });
+
+  // ── Return NofidaAITaskResult ──────────────────────────────────────────────
+
+  json(res, 200, {
+    ok: true,
+    taskType,
+    scope,
+    status: "preview_only",
+    message: "Result is preview-only. Apply is disabled until PATCH 016E.",
+    resultText: callResult.answer,
+    operationPlan,
+    usedContext,
+    model: {
+      providerId: callResult.providerId,
+      modelId: callResult.modelId,
+      role,
+      source: resolved.source,
+    },
+    prompt: {
+      id: promptDef.id,
+      version: promptDef.version,
+    },
+  });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1378,7 +1476,7 @@ const server = http.createServer(async (req, res) => {
     json(res, 200, {
       ok: true,
       service: "nofida-hub-adapter",
-      version: "016b",
+      version: "016c",
       ai_provider_mode: health.providerMode,
       ai_configured_providers: health.configuredProviders,
       ai_settings_path: health.settingsPath,

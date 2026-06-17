@@ -64,6 +64,22 @@
     "premium": "Premium"
   };
 
+  // Preset task buttons available in dashboard scope (no canvas required)
+  var PRESET_TASKS_DASHBOARD = [
+    { taskType: "library_recommendation", label: "Библиотеки для проекта", desc: "Подобрать из NOFIDA Hub" },
+    { taskType: "find_libraries_for_project", label: "Найти по контексту", desc: "Подбор под текущий файл" },
+    { taskType: "design_audit", label: "Аудит дизайна", desc: "Проверить на проблемы" },
+    { taskType: "file_summary", label: "Сводка файла", desc: "Что в этом файле?" }
+  ];
+
+  // Additional presets available only in editor scope
+  var PRESET_TASKS_EDITOR_EXTRA = [
+    { taskType: "screen_plan", label: "План экрана", desc: "Структура текущей страницы" },
+    { taskType: "copy_review", label: "Копирайтинг", desc: "Улучшить тексты" },
+    { taskType: "accessibility_review", label: "Доступность", desc: "Проверить a11y" },
+    { taskType: "organize_layers", label: "Организовать слои", desc: "Порядок в слоях" }
+  ];
+
   var state = {
     bridge: null,
     catalog: null,
@@ -147,6 +163,25 @@
 
   function isAccountSettingsRoute() {
     return /^#\/settings\/options(?:$|\?)/.test(window.location.hash || "");
+  }
+
+  // Returns the current AI surface scope based on route + extracted canvas context.
+  function getAIScope() {
+    if (isDashboardRoute()) return "dashboard";
+    var ctx = state._fileContext;
+    if (!ctx) return "editor_file";
+    var sel = Array.isArray(ctx.selection) ? ctx.selection : [];
+    if (sel.length > 0) return "editor_selection";
+    if (ctx.page) return "editor_page";
+    if (ctx.file) return "editor_file";
+    return "editor_file";
+  }
+
+  // Returns the list of preset tasks appropriate for the current scope.
+  function getActivePresets() {
+    var scope = getAIScope();
+    if (scope === "dashboard") return PRESET_TASKS_DASHBOARD;
+    return PRESET_TASKS_DASHBOARD.concat(PRESET_TASKS_EDITOR_EXTRA);
   }
 
   function isAccountAIPageActive() {
@@ -342,17 +377,6 @@
       .catch(function () { state.catalog = []; });
   }
 
-  function buildHubContext() {
-    var catalogItems = (state.catalog || []).map(function (item) {
-      return {
-        id: item.id,
-        title: item.title || item.name,
-        category: item.category || item.type || "library",
-        description: item.description || ""
-      };
-    });
-    return { catalog: catalogItems, installed: state._installedItems || [] };
-  }
 
   function renderCatalog(items) {
     return items.map(function (item) {
@@ -473,6 +497,7 @@
     state.els.panel.classList.toggle("open", shouldOpen);
     if (shouldOpen) {
       prefetchCatalog();
+      updateCtxStrip(state._fileContext);  // render scope + presets immediately
       requestContext();
       state.els.input.focus();
     }
@@ -1276,6 +1301,15 @@
 .plan-item{padding:6px 8px;border-radius:6px;background:' + BRAND.bg + ';margin-bottom:6px;line-height:1.4}\
 .plan-item:last-child{margin-bottom:0}\
 .plan-item b{display:block;margin-bottom:2px;color:' + BRAND.text + '}\
+.scope-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;background:rgba(37,99,235,.14);color:#93c5fd;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}\
+.preset-row{display:flex;flex-direction:column;gap:0;border-bottom:1px solid ' + BRAND.border + ';flex-shrink:0}\
+.preset-section{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 6px}\
+.preset-label{padding:4px 10px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:' + BRAND.muted + ';background:rgba(11,16,32,.8)}\
+.preset-btn{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;border:1px solid ' + BRAND.border + ';border-radius:10px;background:rgba(15,23,42,.82);color:' + BRAND.text + ';padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;line-height:1.2;transition:border-color .15s,background .15s}\
+.preset-btn:hover{border-color:rgba(37,99,235,.5);background:rgba(37,99,235,.1)}\
+.preset-btn small{font-size:10px;font-weight:400;color:' + BRAND.muted + ';display:block}\
+.ai-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(37,99,235,.14)}\
+.ai-meta-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em;background:rgba(15,23,42,.9);border:1px solid rgba(37,99,235,.18);color:' + BRAND.muted + '}\
 .compose{display:flex;gap:8px;padding:12px;border-top:1px solid ' + BRAND.border + ';flex-shrink:0}\
 .compose input{flex:1;min-width:0;background:' + BRAND.bg + ';color:' + BRAND.text + ';border:1px solid ' + BRAND.border + ';border-radius:12px;padding:10px 12px;font-size:13px;outline:none}\
 .compose input:focus{border-color:' + BRAND.primary + '}\
@@ -1401,17 +1435,19 @@
       <button class="close" type="button" data-close="assistant" aria-label="Закрыть">×</button>\
     </div>\
     <div class="ctx-strip" id="ctx-strip">\
-      <span id="ctx-file">Файл: —</span>\
+      <span class="scope-badge" id="ctx-scope">Dashboard</span>\
+      <span id="ctx-file">—</span>\
       <span class="ctx-dot">·</span>\
-      <span id="ctx-page">Страница: —</span>\
+      <span id="ctx-page">—</span>\
       <span class="ctx-dot">·</span>\
-      <span id="ctx-sel">Выбрано: 0</span>\
+      <span id="ctx-sel">0 объектов</span>\
     </div>\
+    <div class="preset-row" id="preset-row"></div>\
     <div class="log" id="log">\
       <div class="ai-msg">\
         <div class="ai-avatar">N</div>\
         <div class="ai-content">\
-          <div class="ai-bubble">Привет! Я <b>NOFIDA AI</b> — ваш ассистент по дизайну.<br><br>Спросите меня:<br>• «что в этом файле?»<br>• «какую библиотеку взять для SaaS?»<br>• «проверь экран на проблемы»<br><br>Для реального провайдера откройте <b>Settings</b>.</div>\
+          <div class="ai-bubble">Привет! Я <b>NOFIDA AI</b> — оператор дизайна.<br><br>Выберите задачу из кнопок выше или напишите запрос:<br>• «какую библиотеку взять для SaaS?»<br>• «проверь экран на проблемы»<br>• «что в этом файле?»<br><br>Для настройки провайдера откройте <b>Settings</b>.</div>\
         </div>\
       </div>\
     </div>\
@@ -1459,9 +1495,11 @@
     state.els.fab = state.root.getElementById("fab");
     state.els.panel = state.root.getElementById("assistant-panel");
     state.els.transport = state.root.getElementById("transport");
+    state.els.ctxScope = state.root.getElementById("ctx-scope");
     state.els.ctxFile = state.root.getElementById("ctx-file");
     state.els.ctxPage = state.root.getElementById("ctx-page");
     state.els.ctxSel = state.root.getElementById("ctx-sel");
+    state.els.presetRow = state.root.getElementById("preset-row");
     state.els.log = state.root.getElementById("log");
     state.els.form = state.root.getElementById("compose");
     state.els.input = state.root.getElementById("prompt");
@@ -1485,24 +1523,60 @@
   }
 
   function renderPlan(plan) {
+    if (!plan) return null;
+
     var wrap = document.createElement("div");
     wrap.className = "plan";
 
+    // Support both new format (operations[]) and legacy format (items[])
+    var ops = [];
+    if (Array.isArray(plan.operations) && plan.operations.length > 0) {
+      ops = plan.operations.map(function (op) {
+        return {
+          label: op.targetName || op.type || "Operation",
+          detail: op.description || op.rationale || "",
+          confidence: op.confidence
+        };
+      });
+    } else if (Array.isArray(plan.items) && plan.items.length > 0) {
+      ops = plan.items.map(function (item) {
+        return {
+          label: item.issue || item.title || item.screen_name || item.catalog_id || "Item",
+          detail: item.suggestion || item.reason || item.purpose || ""
+        };
+      });
+    }
+
+    var opType = (Array.isArray(plan.operations) && plan.operations[0])
+      ? plan.operations[0].type
+      : (plan.operation || "plan");
+
     var head = document.createElement("div");
     head.className = "plan-head";
-    head.innerHTML = "<span>Preview plan</span><span style='opacity:.72'>" + escapeHtml(plan.operation || "plan") + "</span><span class='ph-arrow'>▾</span>";
+    head.innerHTML = [
+      "<span>Preview plan</span>",
+      "<span style='opacity:.72'>" + escapeHtml(opType) + "</span>",
+      "<span style='margin-left:auto;font-size:9px;opacity:.6'>preview-only · apply=false</span>",
+      "<span class='ph-arrow'>▾</span>"
+    ].join("");
 
     var body = document.createElement("div");
     body.className = "plan-body";
 
-    (plan.items || []).forEach(function (item) {
-      var el = document.createElement("div");
-      el.className = "plan-item";
-      var label = escapeHtml(item.issue || item.title || item.screen_name || item.catalog_id || "Item");
-      var detail = escapeHtml(item.suggestion || item.reason || item.purpose || "");
-      el.innerHTML = "<b>" + label + "</b>" + (detail ? "<span>" + detail + "</span>" : "");
-      body.appendChild(el);
-    });
+    if (ops.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "plan-item";
+      empty.innerHTML = "<b>No operations in this plan</b>";
+      body.appendChild(empty);
+    } else {
+      ops.forEach(function (op) {
+        var el = document.createElement("div");
+        el.className = "plan-item";
+        var conf = op.confidence !== undefined ? " <span style='opacity:.55'>(" + Math.round(op.confidence * 100) + "%)</span>" : "";
+        el.innerHTML = "<b>" + escapeHtml(op.label) + conf + "</b>" + (op.detail ? "<span>" + escapeHtml(op.detail) + "</span>" : "");
+        body.appendChild(el);
+      });
+    }
 
     head.addEventListener("click", function () {
       var open = body.classList.toggle("open");
@@ -1530,7 +1604,7 @@
     bubble.innerHTML = formatAiText(text);
     content.appendChild(bubble);
 
-    if (plan && Array.isArray(plan.items)) content.appendChild(renderPlan(plan));
+    if (plan) { var planEl = renderPlan(plan); if (planEl) content.appendChild(planEl); }
 
     row.appendChild(avatar);
     row.appendChild(content);
@@ -1557,10 +1631,52 @@
 
   function updateCtxStrip(ctx) {
     state._fileContext = ctx;
-    if (!ctx) return;
-    if (ctx.file) state.els.ctxFile.textContent = "📄 " + ctx.file.name;
-    if (ctx.page) state.els.ctxPage.textContent = "Стр: " + ctx.page.name;
-    state.els.ctxSel.textContent = "Выбрано: " + (((ctx.selection || []).length) || 0);
+    var scope = getAIScope();
+
+    // Scope badge
+    if (state.els.ctxScope) {
+      var scopeLabels = {
+        "dashboard": "Dashboard",
+        "editor_file": "Editor",
+        "editor_page": "Editor · Page",
+        "editor_selection": "Editor · Selection"
+      };
+      state.els.ctxScope.textContent = scopeLabels[scope] || scope;
+    }
+
+    if (ctx) {
+      if (ctx.file && state.els.ctxFile) state.els.ctxFile.textContent = ctx.file.name;
+      if (ctx.page && state.els.ctxPage) state.els.ctxPage.textContent = ctx.page.name;
+      if (state.els.ctxSel) {
+        state.els.ctxSel.textContent = ((ctx.selection || []).length || 0) + " выбрано";
+      }
+    }
+
+    updatePresetRow();
+  }
+
+  function updatePresetRow() {
+    if (!state.els.presetRow) return;
+    var presets = getActivePresets();
+    var scope = getAIScope();
+    var isDash = scope === "dashboard";
+
+    var html = [
+      '<div class="preset-label">' + (isDash ? "Dashboard AI" : "Editor AI") + "</div>",
+      '<div class="preset-section">'
+    ];
+    for (var i = 0; i < presets.length; i++) {
+      var p = presets[i];
+      html.push(
+        '<button class="preset-btn" type="button" data-action="preset-task" data-task-type="' +
+        escapeHtml(p.taskType) + '">' +
+        escapeHtml(p.label) +
+        '<small>' + escapeHtml(p.desc) + "</small>" +
+        "</button>"
+      );
+    }
+    html.push("</div>");
+    state.els.presetRow.innerHTML = html.join("");
   }
 
   function requestContext() {
@@ -1570,33 +1686,108 @@
     }).catch(function () {});
   }
 
-  function sendAiMessage(message) {
+  // Handle the structured NofidaAITaskResult envelope returned by /api/nofida/ai/ask
+  function handleTaskResult(data) {
+    if (!data) {
+      appendAiMsg("⚠ NOFIDA AI returned an empty response.", null);
+      return;
+    }
+
+    var status = data.status;
+
+    // Error states: show actionable messages, not raw API errors
+    if (status === "provider_missing") {
+      appendAiMsg(
+        "⚙ No AI provider configured.\n\nOpen Account → NOFIDA AI → API Configuration.",
+        null
+      );
+      return;
+    }
+    if (status === "model_missing") {
+      appendAiMsg(
+        "⚙ No model assigned for this task.\n\nOpen Account → NOFIDA AI → Model Library.",
+        null
+      );
+      return;
+    }
+    if (status === "context_missing") {
+      appendAiMsg(
+        "⚙ Open a file or select a canvas object to use this AI action.",
+        null
+      );
+      return;
+    }
+    if (!data.ok && status === "failed") {
+      appendAiMsg("⚠ " + (data.message || "AI request failed. Check server configuration."), null);
+      return;
+    }
+    if (!data.ok) {
+      appendAiMsg("⚠ " + (data.message || "AI request failed."), null);
+      return;
+    }
+
+    var text = data.resultText || data.answer || "NOFIDA AI returned an empty response.";
+    var plan = data.operationPlan || data.operation_plan || null;
+
+    // Build metadata footer pills
+    var metaParts = [];
+    if (status === "preview_only") metaParts.push("preview-only");
+    if (data.taskType) metaParts.push(data.taskType.replace(/_/g, " "));
+    if (data.model && data.model.providerId) {
+      metaParts.push(data.model.providerId + (data.model.modelId ? " · " + data.model.modelId.split("/").pop() : ""));
+    }
+    if (data.prompt && data.prompt.version) metaParts.push("prompt " + data.prompt.version);
+
+    var row = appendAiMsg(text, plan);
+    if (row && metaParts.length > 0) {
+      var content = row.querySelector(".ai-content");
+      if (content) {
+        var meta = document.createElement("div");
+        meta.className = "ai-meta";
+        metaParts.forEach(function (part) {
+          var pill = document.createElement("span");
+          pill.className = "ai-meta-pill";
+          pill.textContent = part;
+          meta.appendChild(pill);
+        });
+        content.appendChild(meta);
+      }
+    }
+  }
+
+  // Core AI task sender. All AI actions route through here.
+  // taskType: explicit task type from a preset button, or null for free-text
+  // userPrompt: the raw user message
+  function sendAiTask(taskType, userPrompt) {
     if (state._aiLoading) return;
 
-    appendUserMsg(message);
+    var displayLabel = userPrompt || (taskType ? taskType.replace(/_/g, " ") : "");
+    if (displayLabel) appendUserMsg(displayLabel);
     state.els.input.value = "";
     state.els.sendBtn.disabled = true;
     state._aiLoading = true;
 
     var loadingEl = appendLoading();
-    var hubCtx = buildHubContext();
+    var scope = getAIScope();
+    var context = state._fileContext || null;
 
     fetch(AI_ASK_URL, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: message,
-        file_context: state._fileContext || null,
-        hub_context: hubCtx
+        taskType: taskType || null,
+        scope: scope,
+        context: context,
+        userPrompt: userPrompt || ""
       })
     })
-      .then(function (r) { return r.ok ? r.json() : r.json().then(function (e) { throw e; }); })
+      .then(function (r) { return r.json(); })
       .then(function (data) {
         loadingEl.remove();
         state._aiLoading = false;
         state.els.sendBtn.disabled = false;
-        appendAiMsg(data.answer || "NOFIDA AI returned an empty response.", data.operation_plan || null);
+        handleTaskResult(data);
       })
       .catch(function (err) {
         loadingEl.remove();
@@ -1605,6 +1796,11 @@
         var msg = (err && err.message) ? err.message : "Ошибка связи с NOFIDA AI. Проверьте сервер.";
         appendAiMsg("⚠ " + msg, null);
       });
+  }
+
+  // Free-text chat entry point (submit button / Enter key)
+  function sendAiMessage(message) {
+    sendAiTask(null, message);
   }
 
   function loadLibraries() {
@@ -2155,6 +2351,10 @@
     if (action === "remove-fallback") removeFallback(Number(actionTarget.getAttribute("data-fallback-index")));
     if (action === "open-account-ai-settings") openAccountSettingsPage(actionTarget.getAttribute("data-settings-tab") || "api");
     if (action === "close-account-ai-settings") closeAccountSettingsPage();
+    if (action === "preset-task") {
+      var taskType = actionTarget.getAttribute("data-task-type");
+      if (taskType) sendAiTask(taskType, "");
+    }
   }
 
   function handleSharedTab(tabTarget) {
