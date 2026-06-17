@@ -1246,9 +1246,11 @@ export function createAISettingsService(log = () => {}) {
       };
     }
 
+    let anyProviderHasKey = false;
     for (const providerId of PROVIDER_IDS) {
       const record = settings.providers?.[providerId];
       if (!record?.apiKey) continue;
+      anyProviderHasKey = true;
       const model = pickCheapestModel(registryModels, providerId);
       if (!model) continue;
       getProviderRuntime(settings, providerId);
@@ -1262,6 +1264,13 @@ export function createAISettingsService(log = () => {}) {
       };
     }
 
+    if (!anyProviderHasKey) {
+      throw makeConfigError(
+        "missing_provider_key",
+        "No AI provider configured. Open Account → NOFIDA AI → API Configuration.",
+        409,
+      );
+    }
     throw makeConfigError("missing_model_assignment", "No model assigned. Open Settings → Model Library.", 409);
   }
 
