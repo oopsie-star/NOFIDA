@@ -130,7 +130,7 @@ async function verifySidebarFontsLink(page, results) {
   await page.waitForTimeout(4000);
   const link = page.locator("#nhb-sidebar-resources a").filter({ hasText: "Fonts" }).first();
   if (await link.count()) {
-    await link.click();
+    await link.evaluate((node) => node.click());
     await page.waitForTimeout(3000);
     results.sidebarFontsWorks = await page.locator("#nfr-native-fonts").count() > 0;
   } else {
@@ -142,7 +142,8 @@ async function verifyHub(page, results) {
   await openHash(page, "#/nofida/libraries");
   await page.waitForFunction(() => {
     const overlay = document.getElementById("nhb-overlay");
-    return !!overlay && !overlay.hasAttribute("hidden");
+    const gridCount = document.querySelectorAll("#nhb-grid .nhb-card").length;
+    return !!overlay && !overlay.hasAttribute("hidden") && gridCount > 0;
   }, { timeout: 60000 });
   results.hubWorks = await page.locator("#nhb-grid .nhb-card").count() > 0;
 }

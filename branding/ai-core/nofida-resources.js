@@ -71,7 +71,8 @@
     renderToken: 0,
     loadedPreviewFonts: {},
     nativeSyncTimer: null,
-    nativeObserver: null
+    nativeObserver: null,
+    nativeInterval: null
   };
 
   var RESOURCE_CSS = [
@@ -1078,6 +1079,7 @@
       state.nativeObserver = new MutationObserver(scheduleNativeFontsSync);
       state.nativeObserver.observe(document.body, { childList: true, subtree: true });
     }
+    state.nativeInterval = window.setInterval(syncNativeFontsSurface, 1500);
     onHashChange();
 
     window.NofidaResources = {
