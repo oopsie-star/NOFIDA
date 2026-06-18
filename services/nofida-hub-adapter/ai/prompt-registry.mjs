@@ -112,6 +112,7 @@ function appendFileContext(lines, ctx) {
 function appendHubContext(lines, hub) {
   if (!hub || !Array.isArray(hub.matchedLibraries) || hub.matchedLibraries.length === 0) {
     if (hub) lines.push("No relevant NOFIDA Hub libraries were found for this task. Describe what kind of library is needed.");
+    appendResourceContext(lines, hub?.resources);
     return;
   }
   lines.push("NOFIDA Hub catalog (use catalog_id when recommending):");
@@ -123,6 +124,40 @@ function appendHubContext(lines, hub) {
     if (lib.description) lines.push(`    ${lib.description.slice(0, 140)}`);
   }
   if (hub.truncated) lines.push("  (catalog truncated — showing most relevant results only)");
+  lines.push("");
+  appendResourceContext(lines, hub.resources);
+}
+
+function appendResourceContext(lines, resources) {
+  if (!resources) return;
+
+  const fonts = Array.isArray(resources.fonts?.matchedFonts) ? resources.fonts.matchedFonts : [];
+  const media = Array.isArray(resources.media?.matchedMedia) ? resources.media.matchedMedia : [];
+  const patterns = Array.isArray(resources.media?.matchedPatterns) ? resources.media.matchedPatterns : [];
+
+  lines.push("NOFIDA resource context:");
+  lines.push(`  Fonts available: ${resources.totals?.fonts || 0} total, ${resources.totals?.approvedFonts || 0} approved`);
+  fonts.slice(0, 4).forEach((font) => {
+    const cat = font.category ? ` (${font.category})` : "";
+    const status = font.fileStatus ? ` [${font.fileStatus}]` : "";
+    lines.push(`    font ${font.id}: ${font.family}${cat}${status}`);
+  });
+
+  lines.push(`  Media available: ${resources.totals?.media || 0} total, ${resources.totals?.approvedMedia || 0} approved`);
+  media.slice(0, 4).forEach((asset) => {
+    const cat = asset.category ? ` (${asset.category})` : "";
+    lines.push(`    media ${asset.id}: ${asset.title}${cat}`);
+  });
+
+  if (patterns.length > 0) {
+    lines.push("  UI patterns:");
+    patterns.slice(0, 3).forEach((pattern) => {
+      const source = pattern.sourceModel ? ` (${pattern.sourceModel})` : "";
+      lines.push(`    pattern ${pattern.id}: ${pattern.title}${source}`);
+    });
+  }
+
+  if (resources.truncated) lines.push("  (resource context truncated — showing only the most relevant entries)");
   lines.push("");
 }
 

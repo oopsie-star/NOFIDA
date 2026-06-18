@@ -5,6 +5,9 @@ import { URL } from "node:url";
 import { createAISettingsService } from "./ai-service.mjs";
 import { getPromptDefinition, TASK_OPERATION_TYPE, DASHBOARD_ALLOWED_TASKS, EDITOR_REQUIRED_TASKS } from "./ai/prompt-registry.mjs";
 import { packHubContext, loadCatalog } from "./ai/hub-context-packer.mjs";
+import { loadFontCatalog } from "./ai/font-context-packer.mjs";
+import { loadMediaCatalog } from "./ai/media-context-packer.mjs";
+import { packResourceContext } from "./ai/resource-context-packer.mjs";
 import { routeTask } from "./ai/intent-router.mjs";
 
 const HOST = process.env.HOST || "0.0.0.0";
@@ -12,6 +15,14 @@ const PORT = Number(process.env.PORT || 3101);
 const STORE_ROOT = path.resolve(process.env.NOFIDA_LIBRARY_STORE_ROOT || "/srv/library-store");
 const CATALOG_PATH = path.resolve(
   process.env.NOFIDA_HUB_CATALOG_PATH || path.join(STORE_ROOT, "catalog.json"),
+);
+const FONT_STORE_ROOT = path.resolve(process.env.NOFIDA_FONT_STORE_ROOT || "/srv/font-store");
+const FONT_CATALOG_PATH = path.resolve(
+  process.env.NOFIDA_FONT_CATALOG_PATH || path.join(FONT_STORE_ROOT, "catalog.json"),
+);
+const MEDIA_STORE_ROOT = path.resolve(process.env.NOFIDA_MEDIA_STORE_ROOT || "/srv/media-store");
+const MEDIA_CATALOG_PATH = path.resolve(
+  process.env.NOFIDA_MEDIA_CATALOG_PATH || path.join(MEDIA_STORE_ROOT, "catalog.json"),
 );
 const PENPOT_BASE_URL = process.env.PENPOT_BASE_URL || "http://penpot-frontend:8080";
 const HUB_PROJECT_NAME = process.env.NOFIDA_HUB_PROJECT_NAME || "NOFIDA Hub";
@@ -1029,11 +1040,25 @@ function requireSession(req, res, message = "Authenticated session required.") {
 // Refresh by restarting the service (or extend with a TTL in a future patch).
 
 let _catalogCache = null;
+let _fontCatalogCache = null;
+let _mediaCatalogCache = null;
 
 async function getCatalog() {
   if (_catalogCache !== null) return _catalogCache;
   _catalogCache = await loadCatalog(CATALOG_PATH);
   return _catalogCache;
+}
+
+async function getFontCatalog() {
+  if (_fontCatalogCache !== null) return _fontCatalogCache;
+  _fontCatalogCache = await loadFontCatalog(FONT_CATALOG_PATH);
+  return _fontCatalogCache;
+}
+
+async function getMediaCatalog() {
+  if (_mediaCatalogCache !== null) return _mediaCatalogCache;
+  _mediaCatalogCache = await loadMediaCatalog(MEDIA_CATALOG_PATH);
+  return _mediaCatalogCache;
 }
 
 // ── Typed operation plan builder ──────────────────────────────────────────────
@@ -1356,9 +1381,26 @@ async function handleAiAsk(req, res) {
     packedHub = packHubContext({ taskType, userPrompt, catalogItems, installedIds });
   }
 
+  let packedResources = null;
+  try {
+    const [fontCatalogItems, mediaCatalogItems] = await Promise.all([
+      getFontCatalog(),
+      getMediaCatalog(),
+    ]);
+    packedResources = packResourceContext({
+      taskType,
+      userPrompt,
+      fontCatalogItems,
+      mediaCatalogItems,
+    });
+    if (packedHub) packedHub.resources = packedResources;
+  } catch (resourceErr) {
+    log("WARN", "resource context pack failed", { message: resourceErr.message });
+  }
+
   // ── Build system prompt from registry ─────────────────────────────────────
 
-  const systemPrompt = promptDef.buildSystemPrompt(context, packedHub);
+  const systemPrompt = promptDef.buildSystemPrompt(context, packedHub || { resources: packedResources });
 
   // ── Resolve model and call provider ───────────────────────────────────────
 
@@ -1419,6 +1461,7 @@ async function handleAiAsk(req, res) {
     page: Boolean(context?.page),
     selection: Array.isArray(context?.selection) && context.selection.length > 0,
     hubCatalog: Boolean(packedHub && packedHub.matchedLibraries.length > 0),
+    resources: Boolean(packedResources && ((packedResources.fonts?.matchedFonts?.length || 0) > 0 || (packedResources.media?.matchedMedia?.length || 0) > 0 || (packedResources.media?.matchedPatterns?.length || 0) > 0)),
     dashboard: scope === "dashboard",
   };
 
@@ -1445,6 +1488,7 @@ async function handleAiAsk(req, res) {
     resultText: callResult.answer,
     operationPlan,
     usedContext,
+    resourceContext: packedResources,
     model: {
       providerId: callResult.providerId,
       modelId: callResult.modelId,

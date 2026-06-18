@@ -47,6 +47,8 @@ services:
     volumes:
       - penpot_assets:/opt/data/assets:ro
       - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/var/www/app/nofida/libraries:ro
+      - ${NOFIDA_FONT_STORE_ROOT:-./font-store}:/opt/nofida-core/font-store:ro
+      - ${NOFIDA_FONT_STORE_ROOT:-./font-store}:/var/www/app/nofida/font-store:ro
       - ${NOFIDA_MEDIA_STORE_ROOT:-./branding/media-store}:/opt/nofida-core/media-store:ro
       - ${NOFIDA_MEDIA_STORE_ROOT:-./branding/media-store}:/var/www/app/nofida/media-store:ro
     ports:
@@ -70,15 +72,17 @@ services:
   nofida-hub-adapter:
     build:
       context: ./services/nofida-hub-adapter
-    image: nofida/hub-adapter:016b
+    image: nofida/hub-adapter:018b
     restart: always
     volumes:
       - ${NOFIDA_LIBRARY_STORE_ROOT:-./branding/libraries}:/srv/library-store:ro
+      - ${NOFIDA_FONT_STORE_ROOT:-./font-store}:/srv/font-store:ro
       - ${NOFIDA_MEDIA_STORE_ROOT:-./branding/media-store}:/srv/media-store:ro
       - nofida_ai_settings:/var/lib/nofida-hub-adapter
     environment:
       PENPOT_BASE_URL: http://penpot-frontend:8080
       NOFIDA_LIBRARY_STORE_ROOT: /srv/library-store
+      NOFIDA_FONT_STORE_ROOT: /srv/font-store
       NOFIDA_MEDIA_STORE_ROOT: /srv/media-store
       NOFIDA_HUB_IMPORT_CHUNK_SIZE: 26214400
       NOFIDA_HUB_MAX_IMPORT_BYTES: 367001600

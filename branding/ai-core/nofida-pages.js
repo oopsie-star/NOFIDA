@@ -41,7 +41,7 @@
       intro: "Practical NOFIDA help for everyday work: files, libraries, fonts, media, migration prep, AI settings, and support.",
       actions: [
         { label: "Open dashboard", href: "#/dashboard" },
-        { label: "Open Font Hub", href: "#/nofida/fonts" },
+        { label: "Open font catalog", href: "#/nofida/fonts" },
         { label: "Open NOFIDA Hub", href: "#/nofida/libraries" },
         { label: "AI settings", href: "#/settings/options?nofida=ai&tab=api" }
       ],
@@ -72,9 +72,9 @@
         },
         {
           title: "Resource foundations",
-          text: "Use Font Hub for approved typography, Media Bank for same-origin assets, and the Figma migration page to prepare imports without promising 1:1 parity.",
+          text: "Use the Fonts workspace for recommended typography, the font catalog for pairings and license checks, Media Bank for same-origin assets, and the Figma migration page for report-first migration planning.",
           links: [
-            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" },
             { label: "Figma import", href: "#/nofida/import/figma" }
           ]
@@ -111,7 +111,7 @@
       intro: "Compact learning tracks for designers and admins who want to get productive in NOFIDA quickly.",
       actions: [
         { label: "Back to help", href: "#/nofida/help" },
-        { label: "Open Font Hub", href: "#/nofida/fonts" },
+        { label: "Open font catalog", href: "#/nofida/fonts" },
         { label: "Open NOFIDA Hub", href: "#/nofida/libraries" },
         { label: "Figma import", href: "#/nofida/import/figma" },
         { label: "Model setup", href: "#/settings/options?nofida=ai&tab=models" }
@@ -137,7 +137,7 @@
           title: "Choose typography and media early",
           text: "Lock type systems and asset direction before detailed screens so migration work and component decisions do not drift later.",
           links: [
-            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" }
           ]
         },
@@ -170,7 +170,7 @@
           text: "Start with exports, asset extraction, and migration reporting. Treat 1:1 component and prototype fidelity as follow-up engineering work, not a promise.",
           links: [
             { label: "Figma import", href: "#/nofida/import/figma" },
-            { label: "Font Hub", href: "#/nofida/fonts" }
+            { label: "Font catalog", href: "#/nofida/fonts" }
           ]
         }
       ]
@@ -203,10 +203,10 @@
         },
         {
           title: "What users receive",
-          text: "Users stay inside one NOFIDA application for help, learning, Font Hub, Media Bank, NOFIDA Hub, migration prep, and account-level AI configuration.",
+          text: "Users stay inside one NOFIDA application for help, learning, the Fonts workspace and font catalog, Media Bank, NOFIDA Hub, migration prep, and account-level AI configuration.",
           links: [
             { label: "NOFIDA Hub", href: "#/nofida/libraries" },
-            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" }
           ]
         },
@@ -292,9 +292,9 @@
       sections: [
         {
           title: "Current release focus",
-          text: "PATCH 018A adds the first NOFIDA resource foundation: Font Hub, Media Bank, and a Figma migration strategy entry point.",
+          text: "PATCH 018B turns the resource foundation into a product layer: native Fonts guidance, Media Bank inventory, a UI pattern registry, and a report-first Figma migration assistant.",
           links: [
-            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" },
             { label: "Figma import", href: "#/nofida/import/figma" }
           ]
@@ -305,7 +305,7 @@
           links: [
             { label: "Open catalog", href: "#/nofida/libraries" },
             { label: "Repository", href: "#/nofida/repository" },
-            { label: "Font Hub", href: "#/nofida/fonts" }
+            { label: "Font catalog", href: "#/nofida/fonts" }
           ]
         },
         {
@@ -346,9 +346,9 @@
       sections: [
         {
           title: "PATCH 018A",
-          text: "NOFIDA now includes a resource foundation with Font Hub, Media Bank, and a Figma migration assistant entry route backed by same-origin metadata.",
+          text: "NOFIDA now includes a resource product layer with a native-font workflow, the font catalog, Media Bank, UI patterns, and a report-first Figma migration assistant backed by same-origin metadata.",
           links: [
-            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" },
             { label: "Figma import", href: "#/nofida/import/figma" }
           ]
@@ -496,7 +496,7 @@
     "open-source-notices": {
       title: "Open Source Notices",
       badge: "Neutral attribution",
-      intro: "A neutral place for licensing, attribution, and component notices that should stay separate from product marketing navigation.",
+      intro: "A neutral place for licensing, attribution, source-model disclosures, and adapted-resource notices that should stay separate from product marketing navigation.",
       actions: [
         { label: "Repository", href: "#/nofida/repository" },
         { label: "Terms draft", href: "#/nofida/terms" },
@@ -505,7 +505,7 @@
       sections: [
         {
           title: "Base application notice",
-          text: "NOFIDA includes open source components that power the editor and supporting services inside the branded workspace.",
+          text: "NOFIDA includes open source components that power the editor, service layer, and reviewed resource stores inside the branded workspace.",
           links: [
             { label: "Repository", href: "#/nofida/repository" },
             { label: "Release notes", href: "#/nofida/releases" }
@@ -513,7 +513,7 @@
         },
         {
           title: "NOFIDA overlay layer",
-          text: "Brand assets, internal pages, AI settings UI, and the NOFIDA Hub route are part of the NOFIDA-specific integration layer.",
+          text: "Brand assets, internal pages, AI settings UI, the NOFIDA Hub route, and native-resource overlays are part of the NOFIDA-specific integration layer.",
           links: [
             { label: "Help center", href: "#/nofida/help" },
             { label: "Changelog", href: "#/nofida/changelog" }
@@ -521,16 +521,16 @@
         },
         {
           title: "Library and template content",
-          text: "Library files, curated font metadata, and media placeholders may carry their own licenses or review notes and should be checked before broad internal reuse.",
+          text: "Reviewed font files, media assets, UI pattern source models, and imported libraries may carry their own license, attribution, or approval requirements and should be checked before broad reuse.",
           links: [
             { label: "NOFIDA Hub", href: "#/nofida/libraries" },
-            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" }
           ]
         },
         {
-          title: "Legal handoff",
-          text: "Expand this page with full notices, licenses, and attribution language approved by your organization before external distribution.",
+          title: "Resource sources",
+          text: "Current reviewed sources include Google Fonts open-license families for the font store, NOFIDA-authored CC0 SVG media assets, and NOFIDA-authored UI pattern summaries that record shadcn/ui or Radix UI as source models where applicable.",
           links: [
             { label: "Terms draft", href: "#/nofida/terms" },
             { label: "Privacy draft", href: "#/nofida/privacy" }
@@ -538,7 +538,7 @@
         },
         {
           title: "Admin reminder",
-          text: "Re-check versions, bundled assets, and notice requirements whenever the base product line or vendored assets are updated.",
+          text: "Re-check versions, license allowlists, attribution requirements, and approval states whenever the base product line or the reviewed resource inventory changes.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
             { label: "Repository", href: "#/nofida/repository" }

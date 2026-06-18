@@ -1,0 +1,74 @@
+{
+  "version": "018B",
+  "generatedAt": "2026-06-18",
+  "approvedLicenses": [
+    {
+      "id": "OFL-1.1",
+      "kind": "font",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "attributionRequired": false
+    },
+    {
+      "id": "Apache-2.0",
+      "kind": "asset-or-code",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "attributionRequired": true
+    },
+    {
+      "id": "MIT",
+      "kind": "asset-or-code",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "attributionRequired": true
+    },
+    {
+      "id": "CC0-1.0",
+      "kind": "media",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "attributionRequired": false
+    },
+    {
+      "id": "CC-BY-4.0",
+      "kind": "media-or-pattern",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "attributionRequired": true
+    }
+  ],
+  "blockedLicenses": [
+    "unknown",
+    "custom-commercial",
+    "all-rights-reserved",
+    "no-redistribution"
+  ],
+  "reviewStatuses": [
+    "raw_source",
+    "adapted",
+    "needs_review",
+    "approved",
+    "rejected"
+  ],
+  "productUiRule": {
+    "usableStatuses": [
+      "approved"
+    ],
+    "nonUsableCtas": [
+      "Preview",
+      "License review needed",
+      "Not available yet"
+    ]
+  },
+  "notes": [
+    "Resources must preserve source metadata, license links, attribution requirements, and review state.",
+    "Adapted resources must not be presented as clean-room original NOFIDA ownership.",
+    "Only approved resources may expose install, add-to-workspace, or use-in-project actions."
+  ]
+}

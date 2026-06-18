@@ -8,6 +8,7 @@
 import fsp from "node:fs/promises";
 
 const MAX_MEDIA = 10;
+const MAX_PATTERNS = 6;
 const MAX_CHARS = 5200;
 
 const TASK_BOOST_TERMS = {
@@ -16,6 +17,9 @@ const TASK_BOOST_TERMS = {
   design_audit: ["consistency", "icon", "illustration", "background"],
   file_summary: ["screen", "layout", "asset", "hero"],
   screen_plan: ["screen", "hero", "empty", "flow", "state"],
+  screen_planner: ["screen", "hero", "empty", "flow", "state"],
+  media_recommendation: ["media", "thumbnail", "asset", "illustration"],
+  figma_migration_report: ["replacement", "missing", "fallback", "asset"],
   copy_review: ["campaign", "announcement", "editorial", "story"],
   accessibility_review: ["contrast", "clarity", "icon", "background"],
   organize_layers: ["asset", "sticker", "icon", "group"],
@@ -61,6 +65,9 @@ function scoreMedia(item, queryTerms) {
   const mood = normalizeText(item.mood || "");
   const audience = normalizeText(item.audience || "");
   const format = normalizeText(item.format || "");
+  const sourceModel = normalizeText(item.sourceModel || "");
+  const recommendedUse = normalizeText(item.recommendedUse || "");
+  const tokens = Array.isArray(item.tokens) ? item.tokens.map(normalizeText).join(" ") : "";
   const tags = Array.isArray(item.tags) ? item.tags.map(normalizeText).join(" ") : "";
   const useCases = Array.isArray(item.useCases)
     ? item.useCases.map(normalizeText).join(" ")
@@ -74,8 +81,11 @@ function scoreMedia(item, queryTerms) {
     if (category.includes(term)) score += 4;
     if (style.includes(term)) score += 4;
     if (useCases.includes(term)) score += 3;
+    if (recommendedUse.includes(term)) score += 3;
     if (mood.includes(term)) score += 2;
     if (audience.includes(term)) score += 2;
+    if (sourceModel.includes(term)) score += 2;
+    if (tokens.includes(term)) score += 2;
     if (format.includes(term)) score += 1;
   }
   return score;
@@ -85,7 +95,13 @@ export async function loadMediaCatalog(catalogPath) {
   try {
     const raw = await fsp.readFile(catalogPath, "utf8");
     const data = JSON.parse(raw);
-    if (Array.isArray(data.assets)) return data.assets;
+    if (Array.isArray(data.assets) || Array.isArray(data.uiPatterns)) {
+      const assets = Array.isArray(data.assets) ? data.assets.map((item) => ({ ...item, resourceType: "asset" })) : [];
+      const patterns = Array.isArray(data.uiPatterns)
+        ? data.uiPatterns.map((item) => ({ ...item, resourceType: "ui-pattern" }))
+        : [];
+      return [...assets, ...patterns];
+    }
     if (Array.isArray(data.media)) return data.media;
     if (Array.isArray(data)) return data;
     return [];
@@ -105,7 +121,9 @@ export function packMediaContext({
   if (!total) {
     return {
       totalMedia: 0,
+      totalPatterns: 0,
       matchedMedia: [],
+      matchedPatterns: [],
       truncated: false
     };
   }
@@ -119,10 +137,12 @@ export function packMediaContext({
     });
 
   const matchedMedia = [];
+  const matchedPatterns = [];
   let charCount = 0;
   let truncated = false;
 
   for (const { item } of scored) {
+    const isPattern = item.resourceType === "ui-pattern" || item.category === "ui-patterns" || Boolean(item.sourceModel);
     const entry = {
       id: String(item.id || ""),
       title: String(item.title || item.id || "Unknown"),
@@ -134,23 +154,33 @@ export function packMediaContext({
       useCases: Array.isArray(item.useCases) ? item.useCases.slice(0, 4) : undefined,
       format: item.format || undefined,
       license: item.license || undefined,
+      approvalStatus: item.approvalStatus || undefined,
+      resourceType: isPattern ? "ui-pattern" : "asset",
+      sourceModel: item.sourceModel || undefined,
+      recommendedUse: item.recommendedUse || undefined,
+      tokens: Array.isArray(item.tokens) ? item.tokens.slice(0, 6) : undefined,
       internalUrl: item.internalUrl || item.internal_url || undefined,
-      thumbnailUrl: item.thumbnailUrl || item.thumbnail_url || undefined
+      thumbnailUrl: item.thumbnailUrl || item.thumbnail_url || item.thumbnailPath || item.previewPath || undefined
     };
 
     const entryChars = JSON.stringify(entry).length;
-    if (matchedMedia.length >= MAX_MEDIA || (charCount + entryChars > MAX_CHARS && matchedMedia.length > 0)) {
+    const mediaLimitHit = !isPattern && matchedMedia.length >= MAX_MEDIA;
+    const patternLimitHit = isPattern && matchedPatterns.length >= MAX_PATTERNS;
+    if (mediaLimitHit || patternLimitHit || (charCount + entryChars > MAX_CHARS && (matchedMedia.length > 0 || matchedPatterns.length > 0))) {
       truncated = true;
       break;
     }
 
-    matchedMedia.push(entry);
+    if (isPattern) matchedPatterns.push(entry);
+    else matchedMedia.push(entry);
     charCount += entryChars;
   }
 
   return {
-    totalMedia: total,
+    totalMedia: catalogItems.filter((item) => item.resourceType !== "ui-pattern" && item.category !== "ui-patterns" && !item.sourceModel).length,
+    totalPatterns: catalogItems.filter((item) => item.resourceType === "ui-pattern" || item.category === "ui-patterns" || item.sourceModel).length,
     matchedMedia,
+    matchedPatterns,
     truncated
   };
 }

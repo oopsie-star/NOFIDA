@@ -1007,7 +1007,7 @@
       '    </div>',
       '  </div>',
       '  <div class="nhb-resource-row">',
-      '    <a class="nhb-resource-link" href="#/nofida/fonts">Fonts</a>',
+      '    <a class="nhb-resource-link" href="javascript:void(0)" data-act="fonts">Fonts</a>',
       '    <a class="nhb-resource-link" href="#/nofida/media">Media</a>',
       '    <a class="nhb-resource-link" href="#/nofida/import/figma">Figma Import</a>',
       '  </div>',
@@ -1023,6 +1023,13 @@
 
     document.body.appendChild(div);
     S.overlayEl = div;
+
+    div.querySelector(".nhb-resource-row").addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest(".nhb-resource-link") : null;
+      if (!link || link.getAttribute("data-act") !== "fonts") return;
+      ev.preventDefault();
+      openNativeFontsRoute();
+    });
 
     /* ── wire overlay-internal events ── */
     div.querySelector("#nhb-close").addEventListener("click", hideHub);
@@ -1123,6 +1130,16 @@
   function state_teamId_refresh() {
     var tid = getTeamId();
     if (tid) S.teamId = tid;
+  }
+
+  function openNativeFontsRoute() {
+    return resolveTeamId().then(function (tid) {
+      if (!tid) {
+        window.location.hash = "/dashboard";
+        return;
+      }
+      window.location.hash = "/dashboard/team/" + tid + "/fonts";
+    });
   }
 
   /* ============================================================
@@ -1242,7 +1259,7 @@
       "box-sizing:border-box";
 
     [
-      { label: "Fonts", hash: "/nofida/fonts" },
+      { label: "Fonts", hash: "/nofida/fonts", action: "fonts" },
       { label: "Media", hash: "/nofida/media" },
       { label: "Figma", hash: "/nofida/import/figma" }
     ].forEach(function (item) {
@@ -1268,6 +1285,10 @@
       });
       link.addEventListener("click", function (ev) {
         ev.preventDefault();
+        if (item.action === "fonts") {
+          openNativeFontsRoute();
+          return;
+        }
         window.location.hash = item.hash;
       });
       resourceWrap.appendChild(link);
