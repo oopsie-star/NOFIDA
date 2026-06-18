@@ -88,7 +88,8 @@ function fail(label, detail = "") {
 
 async function verifyNativeFonts(page, teamId, results) {
   await openHash(page, `#/dashboard/team/${teamId}/fonts`);
-  await page.waitForTimeout(5000);
+  await page.waitForFunction(() => !!document.getElementById("nfr-native-fonts"), { timeout: 20000 }).catch(() => null);
+  await page.waitForTimeout(2500);
 
   const panel = page.locator("#nfr-native-fonts");
   results.nativeFontsRoute = await panel.count() > 0;
