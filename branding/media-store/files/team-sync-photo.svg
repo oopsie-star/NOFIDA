@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Team Sync Photo Placeholder</title>
+  <desc id="desc">Placeholder photo card for NOFIDA media bank.</desc>
+  <rect width="1600" height="900" rx="48" fill="#0f172a"/>
+  <rect x="90" y="90" width="1420" height="720" rx="36" fill="#1d4ed8" opacity="0.25"/>
+  <circle cx="520" cy="420" r="120" fill="#cbd5e1"/>
+  <circle cx="820" cy="380" r="110" fill="#f8fafc"/>
+  <circle cx="1100" cy="430" r="125" fill="#94a3b8"/>
+  <path d="M360 650c30-120 120-180 210-180s180 60 210 180" fill="#cbd5e1"/>
+  <path d="M660 640c28-110 112-168 190-168s160 58 190 168" fill="#f8fafc"/>
+  <path d="M930 665c34-118 128-178 218-178s182 60 214 178" fill="#94a3b8"/>
+  <text x="120" y="150" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="700">Team Sync</text>
+</svg>

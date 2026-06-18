@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Kinetic Board Motion Placeholder</title>
+  <desc id="desc">Storyboard placeholder for NOFIDA media bank.</desc>
+  <rect width="1600" height="900" rx="48" fill="#0f172a"/>
+  <g stroke="#c4b5fd" stroke-width="8" fill="none">
+    <rect x="180" y="220" width="360" height="220" rx="26"/>
+    <rect x="620" y="220" width="360" height="220" rx="26"/>
+    <rect x="1060" y="220" width="360" height="220" rx="26"/>
+    <rect x="400" y="520" width="360" height="220" rx="26"/>
+    <rect x="840" y="520" width="360" height="220" rx="26"/>
+    <path d="M540 330h80M980 330h80M760 630h80"/>
+  </g>
+  <text x="120" y="150" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="700">Kinetic Board</text>
+</svg>

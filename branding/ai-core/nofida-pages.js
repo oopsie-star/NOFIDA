@@ -38,9 +38,10 @@
     help: {
       title: "Help Center",
       badge: "Internal guide",
-      intro: "Practical NOFIDA help for everyday work: files, libraries, layers, components, AI settings, and support.",
+      intro: "Practical NOFIDA help for everyday work: files, libraries, fonts, media, migration prep, AI settings, and support.",
       actions: [
         { label: "Open dashboard", href: "#/dashboard" },
+        { label: "Open Font Hub", href: "#/nofida/fonts" },
         { label: "Open NOFIDA Hub", href: "#/nofida/libraries" },
         { label: "AI settings", href: "#/settings/options?nofida=ai&tab=api" }
       ],
@@ -67,6 +68,15 @@
           links: [
             { label: "Open catalog", href: "#/nofida/libraries" },
             { label: "Open source notices", href: "#/nofida/open-source-notices" }
+          ]
+        },
+        {
+          title: "Resource foundations",
+          text: "Use Font Hub for approved typography, Media Bank for same-origin assets, and the Figma migration page to prepare imports without promising 1:1 parity.",
+          links: [
+            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Media Bank", href: "#/nofida/media" },
+            { label: "Figma import", href: "#/nofida/import/figma" }
           ]
         },
         {
@@ -101,7 +111,9 @@
       intro: "Compact learning tracks for designers and admins who want to get productive in NOFIDA quickly.",
       actions: [
         { label: "Back to help", href: "#/nofida/help" },
+        { label: "Open Font Hub", href: "#/nofida/fonts" },
         { label: "Open NOFIDA Hub", href: "#/nofida/libraries" },
+        { label: "Figma import", href: "#/nofida/import/figma" },
         { label: "Model setup", href: "#/settings/options?nofida=ai&tab=models" }
       ],
       sections: [
@@ -119,6 +131,14 @@
           links: [
             { label: "NOFIDA Hub", href: "#/nofida/libraries" },
             { label: "Recent updates", href: "#/nofida/releases" }
+          ]
+        },
+        {
+          title: "Choose typography and media early",
+          text: "Lock type systems and asset direction before detailed screens so migration work and component decisions do not drift later.",
+          links: [
+            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Media Bank", href: "#/nofida/media" }
           ]
         },
         {
@@ -143,6 +163,14 @@
           links: [
             { label: "AI settings", href: "#/settings/options?nofida=ai&tab=api" },
             { label: "Privacy draft", href: "#/nofida/privacy" }
+          ]
+        },
+        {
+          title: "Migrate from Figma realistically",
+          text: "Start with exports, asset extraction, and migration reporting. Treat 1:1 component and prototype fidelity as follow-up engineering work, not a promise.",
+          links: [
+            { label: "Figma import", href: "#/nofida/import/figma" },
+            { label: "Font Hub", href: "#/nofida/fonts" }
           ]
         }
       ]
@@ -175,10 +203,11 @@
         },
         {
           title: "What users receive",
-          text: "Users stay inside one NOFIDA application for help, learning, releases, catalog access, and account-level AI configuration.",
+          text: "Users stay inside one NOFIDA application for help, learning, Font Hub, Media Bank, NOFIDA Hub, migration prep, and account-level AI configuration.",
           links: [
             { label: "NOFIDA Hub", href: "#/nofida/libraries" },
-            { label: "Learning center", href: "#/nofida/learn" }
+            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Media Bank", href: "#/nofida/media" }
           ]
         },
         {
@@ -263,18 +292,20 @@
       sections: [
         {
           title: "Current release focus",
-          text: "PATCH 017A replaces remaining outbound product links with internal NOFIDA routes and original in-product page content.",
+          text: "PATCH 018A adds the first NOFIDA resource foundation: Font Hub, Media Bank, and a Figma migration strategy entry point.",
           links: [
-            { label: "Changelog", href: "#/nofida/changelog" },
-            { label: "Help center", href: "#/nofida/help" }
+            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Media Bank", href: "#/nofida/media" },
+            { label: "Figma import", href: "#/nofida/import/figma" }
           ]
         },
         {
           title: "Hub updates",
-          text: "The NOFIDA Hub remains the internal route for libraries, templates, UI kits, and design-system starter assets.",
+          text: "The NOFIDA Hub remains the internal route for libraries, templates, UI kits, and starter assets, now linked to the newer resource surfaces.",
           links: [
             { label: "Open catalog", href: "#/nofida/libraries" },
-            { label: "Repository", href: "#/nofida/repository" }
+            { label: "Repository", href: "#/nofida/repository" },
+            { label: "Font Hub", href: "#/nofida/fonts" }
           ]
         },
         {
@@ -314,6 +345,15 @@
       ],
       sections: [
         {
+          title: "PATCH 018A",
+          text: "NOFIDA now includes a resource foundation with Font Hub, Media Bank, and a Figma migration assistant entry route backed by same-origin metadata.",
+          links: [
+            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Media Bank", href: "#/nofida/media" },
+            { label: "Figma import", href: "#/nofida/import/figma" }
+          ]
+        },
+        {
           title: "PATCH 017A",
           text: "Internal NOFIDA pages now cover help, learn, repository, community, releases, changelog, terms, privacy, and notices.",
           links: [
@@ -343,14 +383,6 @@
           links: [
             { label: "Repository", href: "#/nofida/repository" },
             { label: "Release notes", href: "#/nofida/releases" }
-          ]
-        },
-        {
-          title: "Brand baseline",
-          text: "Same-origin NOFIDA branding, dark product shell, and internal deploy discipline were established around the 2.16.0 base.",
-          links: [
-            { label: "Open source notices", href: "#/nofida/open-source-notices" },
-            { label: "Terms draft", href: "#/nofida/terms" }
           ]
         }
       ]
@@ -489,10 +521,11 @@
         },
         {
           title: "Library and template content",
-          text: "Catalog items may carry their own licenses or review notes and should be checked before broad internal reuse.",
+          text: "Library files, curated font metadata, and media placeholders may carry their own licenses or review notes and should be checked before broad internal reuse.",
           links: [
             { label: "NOFIDA Hub", href: "#/nofida/libraries" },
-            { label: "Learning center", href: "#/nofida/learn" }
+            { label: "Font Hub", href: "#/nofida/fonts" },
+            { label: "Media Bank", href: "#/nofida/media" }
           ]
         },
         {

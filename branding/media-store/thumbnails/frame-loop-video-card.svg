@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+  <rect width="640" height="400" rx="28" fill="#082032"/>
+  <rect x="62" y="74" width="516" height="250" rx="24" fill="#0f172a" stroke="#06b6d4" stroke-width="4"/>
+  <circle cx="320" cy="200" r="40" fill="#06b6d4"/>
+  <path d="M304 176l48 24-48 24z" fill="#082032"/>
+  <text x="34" y="58" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="700">Frame Loop</text>
+</svg>

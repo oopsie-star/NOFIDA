@@ -967,6 +967,11 @@
     ".nhb-open-proj{background:0;border:0;color:" + BRAND.muted + ";font-size:12px;",
       "cursor:pointer;padding:4px 8px;border-radius:8px;text-decoration:underline;font-family:inherit}",
     ".nhb-open-proj:hover{color:" + BRAND.text + "}",
+    ".nhb-resource-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}",
+    ".nhb-resource-link{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;",
+      "border-radius:999px;text-decoration:none;font-size:11px;font-weight:800;color:#dbeafe;",
+      "background:rgba(7,12,24,.72);border:1px solid rgba(37,99,235,.2)}",
+    ".nhb-resource-link:hover{background:rgba(37,99,235,.18);border-color:rgba(37,99,235,.38);color:" + BRAND.text + "}",
     "@media(max-width:640px){.nhb-inner{padding:16px}.nhb-grid{grid-template-columns:1fr}}"
   ].join("");
 
@@ -1000,6 +1005,11 @@
       '        📁 Открыть мои добавленные</button>',
       '      <button class="nhb-close" id="nhb-close" title="Закрыть" aria-label="Закрыть">×</button>',
       '    </div>',
+      '  </div>',
+      '  <div class="nhb-resource-row">',
+      '    <a class="nhb-resource-link" href="#/nofida/fonts">Fonts</a>',
+      '    <a class="nhb-resource-link" href="#/nofida/media">Media</a>',
+      '    <a class="nhb-resource-link" href="#/nofida/import/figma">Figma Import</a>',
       '  </div>',
       '  <div class="nhb-ctrl">',
       '    <input class="nhb-search" id="nhb-search" type="search"',
@@ -1155,7 +1165,7 @@
   function tryInjectSidebar() {
     if (S.sidebarInjected) return;
     if (!isDashboard()) return;
-    if (document.getElementById("nhb-sidebar-btn")) {
+    if (document.getElementById("nhb-sidebar-btn") && document.getElementById("nhb-sidebar-resources")) {
       S.sidebarInjected = true;
       return;
     }
@@ -1224,6 +1234,46 @@
     });
 
     nav.appendChild(btn);
+
+    var resourceWrap = document.createElement("div");
+    resourceWrap.id = "nhb-sidebar-resources";
+    resourceWrap.style.cssText =
+      "display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 0 6px;" +
+      "box-sizing:border-box";
+
+    [
+      { label: "Fonts", hash: "/nofida/fonts" },
+      { label: "Media", hash: "/nofida/media" },
+      { label: "Figma", hash: "/nofida/import/figma" }
+    ].forEach(function (item) {
+      var link = document.createElement("a");
+      link.href = "javascript:void(0)"; /* eslint-disable-line no-script-url */
+      link.textContent = item.label;
+      link.setAttribute("role", "menuitem");
+      link.style.cssText =
+        "display:inline-flex;align-items:center;justify-content:center;" +
+        "min-height:28px;padding:0 10px;border-radius:999px;" +
+        "font-size:11px;font-weight:700;color:#bfdbfe;text-decoration:none;" +
+        "background:rgba(37,99,235,.11);border:1px solid rgba(37,99,235,.16);" +
+        "font-family:" + BRAND.font + ";box-sizing:border-box";
+      link.addEventListener("mouseenter", function () {
+        link.style.background = "rgba(37,99,235,.2)";
+        link.style.borderColor = "rgba(37,99,235,.34)";
+        link.style.color = BRAND.text;
+      });
+      link.addEventListener("mouseleave", function () {
+        link.style.background = "rgba(37,99,235,.11)";
+        link.style.borderColor = "rgba(37,99,235,.16)";
+        link.style.color = "#bfdbfe";
+      });
+      link.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        window.location.hash = item.hash;
+      });
+      resourceWrap.appendChild(link);
+    });
+
+    nav.appendChild(resourceWrap);
   }
 
   /* ============================================================

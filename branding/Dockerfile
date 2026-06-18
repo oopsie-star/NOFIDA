@@ -17,10 +17,12 @@ FROM penpotapp/frontend:${PENPOT_VERSION}
 
 ARG WEBROOT=/var/www/app
 
-# ── Brand + AI Core + internal library catalog, served under /nofida/* ──────
+# ── Brand + AI Core + internal resource catalogs, served under /nofida/* ────
 COPY --chown=penpot:penpot brand/     ${WEBROOT}/nofida/brand/
 COPY --chown=penpot:penpot ai-core/   ${WEBROOT}/nofida/ai-core/
+COPY --chown=penpot:penpot fonts/     ${WEBROOT}/nofida/fonts/
 COPY --chown=penpot:penpot libraries/ ${WEBROOT}/nofida/libraries/
+COPY --chown=penpot:penpot media-store/ ${WEBROOT}/nofida/media-store/
 COPY --chown=penpot:penpot help/      ${WEBROOT}/nofida/help/
 COPY --chmod=755 scripts/patch-frontend.sh /usr/local/bin/patch-frontend.sh
 

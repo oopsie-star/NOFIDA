@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Orbit Mascot Card</title>
+  <desc id="desc">Placeholder mascot card for NOFIDA media bank.</desc>
+  <rect width="1600" height="900" rx="48" fill="#0f172a"/>
+  <circle cx="800" cy="450" r="220" fill="#f59e0b"/>
+  <circle cx="720" cy="400" r="34" fill="#0f172a"/>
+  <circle cx="880" cy="400" r="34" fill="#0f172a"/>
+  <path d="M700 520c48 54 152 54 200 0" fill="none" stroke="#0f172a" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="540" cy="280" r="42" fill="#f8fafc" opacity="0.2"/>
+  <circle cx="1060" cy="260" r="28" fill="#f8fafc" opacity="0.18"/>
+  <circle cx="1120" cy="620" r="54" fill="#f8fafc" opacity="0.12"/>
+  <text x="120" y="150" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="700">Orbit Mascot</text>
+</svg>

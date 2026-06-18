@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Frame Loop Video Placeholder</title>
+  <desc id="desc">Video slate placeholder for NOFIDA media bank.</desc>
+  <rect width="1600" height="900" rx="48" fill="#082032"/>
+  <rect x="170" y="150" width="1260" height="600" rx="40" fill="#0f172a" stroke="#06b6d4" stroke-width="8"/>
+  <circle cx="800" cy="450" r="96" fill="#06b6d4"/>
+  <path d="M760 392l114 58-114 58z" fill="#082032"/>
+  <text x="120" y="110" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="700">Frame Loop</text>
+  <text x="220" y="792" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="32">Demo placeholder • replace with approved training or release footage</text>
+</svg>

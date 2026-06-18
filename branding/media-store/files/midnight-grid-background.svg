@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Midnight Grid Background</title>
+  <desc id="desc">Placeholder background for NOFIDA media bank.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#08111f"/>
+      <stop offset="60%" stop-color="#0f2c4d"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="48" fill="url(#bg)"/>
+  <g stroke="rgba(255,255,255,0.16)" stroke-width="2">
+    <path d="M0 150h1600M0 300h1600M0 450h1600M0 600h1600M0 750h1600"/>
+    <path d="M160 0v900M320 0v900M480 0v900M640 0v900M800 0v900M960 0v900M1120 0v900M1280 0v900M1440 0v900"/>
+  </g>
+  <text x="120" y="150" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="700">Midnight Grid</text>
+</svg>
