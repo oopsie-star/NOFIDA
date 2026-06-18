@@ -29,6 +29,8 @@ async function login(page) {
 async function resolveTeamId(page) {
   const fromUrl = page.url().match(/\/#\/dashboard\/team\/([0-9a-f-]{36})/i)?.[1];
   if (fromUrl) return fromUrl;
+  const fromQuery = page.url().match(/[?&]team-id=([0-9a-f-]{36})/i)?.[1];
+  if (fromQuery) return fromQuery;
   const fromDom = await page.evaluate(() => {
     const anchors = Array.from(document.querySelectorAll("a[href]"));
     const match = anchors
@@ -38,6 +40,21 @@ async function resolveTeamId(page) {
     return match ? match[1] : "";
   });
   if (fromDom) return fromDom;
+  const fromProfile = await page.evaluate(async () => {
+    try {
+      const resp = await fetch("/api/rpc/command/get-profile", {
+        credentials: "include",
+        headers: { Accept: "application/transit+json" }
+      });
+      if (!resp.ok) return "";
+      const text = JSON.stringify(await resp.json());
+      const match = text.match(/default-team-id\",\"~u([0-9a-f-]{36})/i);
+      return match ? match[1] : "";
+    } catch (_error) {
+      return "";
+    }
+  });
+  if (fromProfile) return fromProfile;
   throw new Error("Could not resolve team id");
 }
 
@@ -75,10 +92,10 @@ async function verifyNativeFonts(page, teamId, results) {
 
   const panel = page.locator("#nfr-native-fonts");
   results.nativeFontsRoute = await panel.count() > 0;
-  results.nativeFontsAlert = await page.locator("#nfr-native-fonts .nfr-alert").count() > 0;
-  results.nativeFontsSearch = await page.locator("[data-nfr-filter='nativeFonts:query']").count() > 0;
-  results.nativeFontsCards = await page.locator("#nfr-native-fonts .nfr-card").count();
-  results.nativeFontsLicense = await page.locator("#nfr-native-fonts").textContent();
+  results.nativeFontsAlert = results.nativeFontsRoute && await page.locator("#nfr-native-fonts .nfr-alert").count() > 0;
+  results.nativeFontsSearch = results.nativeFontsRoute && await page.locator("[data-nfr-filter='nativeFonts:query']").count() > 0;
+  results.nativeFontsCards = results.nativeFontsRoute ? await page.locator("#nfr-native-fonts .nfr-card").count() : 0;
+  results.nativeFontsLicense = results.nativeFontsRoute ? await page.locator("#nfr-native-fonts").textContent() : "";
   results.nativeFontsUploadTab = await page.locator("[data-nfr-native-nav='upload']").count() > 0;
   results.nativeFontsMyFontsTab = await page.locator("[data-nfr-native-nav='my-fonts']").count() > 0;
 }
@@ -115,7 +132,7 @@ async function verifySidebarFontsLink(page, results) {
   if (await link.count()) {
     await link.click();
     await page.waitForTimeout(3000);
-    results.sidebarFontsWorks = /\/#\/dashboard\/team\/[0-9a-f-]{36}\/fonts/i.test(page.url());
+    results.sidebarFontsWorks = await page.locator("#nfr-native-fonts").count() > 0;
   } else {
     results.sidebarFontsWorks = false;
   }

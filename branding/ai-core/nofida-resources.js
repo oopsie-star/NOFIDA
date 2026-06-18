@@ -229,6 +229,14 @@
     return /#\/dashboard\/team\/[0-9a-f-]{36}\/fonts(?:[/?#].*)?$/i.test(normalizeHash(hash || window.location.hash || ""));
   }
 
+  function looksLikeNativeFontsSurface() {
+    var text = "";
+    if (document.body && typeof document.body.innerText === "string") {
+      text = document.body.innerText.slice(0, 2400);
+    }
+    return /upload custom fonts|add custom font|custom fonts you upload|загрузить произвольные шрифты|добавить произвольный шрифт|пользовательские шрифты/i.test(text);
+  }
+
   function loadJson(cacheKey, urls) {
     if (state[cacheKey]) return Promise.resolve(state[cacheKey]);
     if (state.pending[cacheKey]) return state.pending[cacheKey];
@@ -1019,7 +1027,7 @@
 
   function syncNativeFontsSurface() {
     rememberTeamId();
-    if (!isNativeFontsHash(window.location.hash || "")) {
+    if (!isNativeFontsHash(window.location.hash || "") && !looksLikeNativeFontsSurface()) {
       removeNativeFontsPanel();
       return;
     }
