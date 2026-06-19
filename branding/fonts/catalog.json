@@ -1,366 +1,2949 @@
 {
-  "version": "018B",
-  "generatedAt": "2026-06-18",
-  "storeRoot": "/opt/nofida-core/font-store",
+  "version": "018C",
+  "generatedAt": "2026-06-19T15:26:34.642Z",
+  "storeRoot": "C:\\Nofida\\font-store",
   "publicBaseUrl": "/nofida/font-store",
-  "catalogSource": "NOFIDA reviewed open-license font catalog for native workspace font selection and upload planning.",
   "selectionBoundary": {
-    "purpose": "Select only relevant font metadata for AI or migration tasks instead of passing the whole catalog blindly.",
-    "filters": ["taskType", "userPrompt", "category", "mood", "useCases", "languageCoverage", "pairingSuggestions"],
+    "purpose": "Select only the most relevant typography metadata for a task instead of sending the whole catalog into an AI context.",
+    "filters": [
+      "taskType",
+      "userPrompt",
+      "category",
+      "mood",
+      "useCases",
+      "languageCoverage",
+      "pairingSuggestions"
+    ],
     "futureAdapter": "services/nofida-hub-adapter/ai/font-context-packer.mjs"
   },
   "fontInstallFeasibility": {
     "automatedInstall": "not_supported_yet",
-    "recommendedNextStep": "Download a reviewed font from the NOFIDA font store, then continue through the native font upload flow until a supported automation path is verified.",
+    "recommendedNextStep": "Download a reviewed font from the NOFIDA store, then add it through the native team font upload flow.",
     "nativeUploadRoutePattern": "#/dashboard/team/:team-id/fonts",
-    "supportedUploadFormats": ["ttf", "otf", "woff", "woff2"],
-    "storageNote": "NOFIDA keeps font provenance, license metadata, and review state. This patch does not write directly to the database."
+    "supportedUploadFormats": [
+      "ttf",
+      "otf",
+      "woff",
+      "woff2"
+    ],
+    "storageNote": "NOFIDA treats uploaded custom fonts as native workspace assets. This patch does not write directly to the database."
   },
+  "licensePolicyVersion": "018B",
   "fonts": [
     {
       "id": "inter",
       "family": "Inter",
       "category": "sans",
-      "mood": ["neutral", "modern", "systemic"],
-      "useCases": ["product UI", "dashboards", "documentation"],
-      "languageCoverage": ["Latin", "Extended Latin", "Cyrillic", "Greek"],
+      "mood": [
+        "neutral",
+        "modern"
+      ],
+      "useCases": [
+        "product UI",
+        "dashboards"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic",
+        "Greek"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["literata", "fraunces", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/inter/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "literata",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/inter/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/inter/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
       "sourceUrl": "https://fonts.google.com/specimen/Inter",
+      "sourceHash": "5682df055e3bc3420ab5065274d8b14caeee02857f0af6c07d0995b8d6271077",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Clear hierarchy for product teams moving quickly.",
-      "recommendedUseCase": "Primary interface text and dense product layouts."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для product UI и dashboards.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Clear hierarchy for fast-moving product teams."
     },
     {
       "id": "manrope",
       "family": "Manrope",
       "category": "rounded",
-      "mood": ["friendly", "clean", "approachable"],
-      "useCases": ["marketing UI", "saas landing pages", "light dashboards"],
-      "languageCoverage": ["Latin", "Extended Latin", "Cyrillic"],
+      "mood": [
+        "friendly",
+        "clean"
+      ],
+      "useCases": [
+        "customer apps",
+        "marketing UI"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["fraunces", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/manrope/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "fraunces",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/manrope/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/manrope/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
       "sourceUrl": "https://fonts.google.com/specimen/Manrope",
+      "sourceHash": "7dd76f10fbfd4aed1662f85b64158cbcb3d305fa5ab355c1e43fcc63d363ff4a",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Rounded forms keep modern interfaces human.",
-      "recommendedUseCase": "Soft product branding with geometric warmth."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для customer apps и marketing UI.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Rounded forms keep modern interfaces human."
     },
     {
       "id": "ibm-plex-sans",
       "family": "IBM Plex Sans",
       "category": "sans",
-      "mood": ["technical", "precise", "editorial"],
-      "useCases": ["enterprise apps", "data products", "design systems"],
-      "languageCoverage": ["Latin", "Extended Latin", "Cyrillic", "Greek"],
+      "mood": [
+        "technical",
+        "precise"
+      ],
+      "useCases": [
+        "enterprise apps",
+        "design systems"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic",
+        "Greek"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["ibm-plex-serif", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/ibm-plex-sans/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "ibm-plex-serif",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/ibm-plex-sans/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/ibm-plex-sans/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/IBM+Plex+Sans",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/IBM%20Plex%20Sans",
+      "sourceHash": "91e881651faf3cc5f625d19ca40b91a2a868e4856b8402b98da1880f01f9cd69",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "A disciplined sans for product infrastructure.",
-      "recommendedUseCase": "Structured systems, audits, and operational tooling."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для enterprise apps и design systems.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "A disciplined sans for product infrastructure."
     },
     {
       "id": "ibm-plex-serif",
       "family": "IBM Plex Serif",
       "category": "serif",
-      "mood": ["scholarly", "steady", "measured"],
-      "useCases": ["long-form reading", "case studies", "data storytelling"],
-      "languageCoverage": ["Latin", "Extended Latin", "Cyrillic", "Greek"],
+      "mood": [
+        "scholarly",
+        "steady"
+      ],
+      "useCases": [
+        "editorial",
+        "reports"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic",
+        "Greek"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["ibm-plex-sans", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/ibm-plex-serif/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "ibm-plex-sans",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/ibm-plex-serif/400-normal-01.woff2",
+        "/nofida/font-store/files/ibm-plex-serif/500-normal-06.woff2",
+        "/nofida/font-store/files/ibm-plex-serif/600-normal-11.woff2",
+        "/nofida/font-store/files/ibm-plex-serif/700-normal-16.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/ibm-plex-serif/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/IBM+Plex+Serif",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/IBM%20Plex%20Serif",
+      "sourceHash": "69c1ff701bcd32e5f060f8300a76c94f87362f71e5897f415448be81d531cdf5",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Readable serif rhythm for reports and essays.",
-      "recommendedUseCase": "Editorial copy with a technical edge."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для editorial и reports.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Readable serif rhythm for research-heavy work."
     },
     {
       "id": "ibm-plex-mono",
       "family": "IBM Plex Mono",
       "category": "mono",
-      "mood": ["code-native", "functional", "precise"],
-      "useCases": ["specs", "token sheets", "terminal-inspired UI"],
-      "languageCoverage": ["Latin", "Extended Latin", "Cyrillic", "Greek"],
+      "mood": [
+        "code-native",
+        "functional"
+      ],
+      "useCases": [
+        "specs",
+        "token sheets"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic",
+        "Greek"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["ibm-plex-sans", "inter"],
-      "localFilePaths": ["/nofida/font-store/files/ibm-plex-mono/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "ibm-plex-sans",
+        "inter"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/ibm-plex-mono/400-normal-01.woff2",
+        "/nofida/font-store/files/ibm-plex-mono/500-normal-06.woff2",
+        "/nofida/font-store/files/ibm-plex-mono/600-normal-11.woff2",
+        "/nofida/font-store/files/ibm-plex-mono/700-normal-16.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/ibm-plex-mono/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/IBM+Plex+Mono",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/IBM%20Plex%20Mono",
+      "sourceHash": "fa42036dede75da4cfc40c94e1a392b5d4d4d6afca3a178929cca79fbc141bd0",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Monospaced detail keeps systems predictable.",
-      "recommendedUseCase": "Technical annotations and developer-facing components."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для specs и token sheets.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Monospaced detail keeps systems predictable."
     },
     {
       "id": "noto-sans",
       "family": "Noto Sans",
       "category": "sans",
-      "mood": ["global", "neutral", "inclusive"],
-      "useCases": ["multilingual products", "cross-region UI", "support tools"],
-      "languageCoverage": ["Latin", "Extended Latin", "Greek", "Cyrillic"],
+      "mood": [
+        "global",
+        "inclusive"
+      ],
+      "useCases": [
+        "multilingual UI",
+        "support tools"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Greek",
+        "Cyrillic"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["noto-serif", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/noto-sans/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "noto-serif",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/noto-sans/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/noto-sans/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Noto+Sans",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Noto%20Sans",
+      "sourceHash": "b721364fd408329b3f166b7742e2ce45a8e3873887cdf7f9b751a02c6455cae1",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Wide language support reduces fallback surprises.",
-      "recommendedUseCase": "International products with broad script coverage needs."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для multilingual UI и support tools.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Wide language support reduces fallback surprises."
     },
     {
       "id": "noto-serif",
       "family": "Noto Serif",
       "category": "serif",
-      "mood": ["global", "serious", "text-first"],
-      "useCases": ["knowledge products", "editorial modules", "international publications"],
-      "languageCoverage": ["Latin", "Extended Latin", "Greek", "Cyrillic"],
+      "mood": [
+        "global",
+        "serious"
+      ],
+      "useCases": [
+        "knowledge products",
+        "publications"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Greek",
+        "Cyrillic"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["noto-sans", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/noto-serif/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "noto-sans",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/noto-serif/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/noto-serif/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Noto+Serif",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Noto%20Serif",
+      "sourceHash": "a14e7cd983e915c9dd05d48ccd1e509686641f7bf77f6bf21e18337be76495f7",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Strong text color for long reading passages.",
-      "recommendedUseCase": "Readable serif companion for multilingual content."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для knowledge products и publications.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "A text-first serif companion for international products."
     },
     {
       "id": "source-sans-3",
       "family": "Source Sans 3",
       "category": "sans",
-      "mood": ["practical", "open", "balanced"],
-      "useCases": ["general UI", "design handoff", "documentation"],
-      "languageCoverage": ["Latin", "Extended Latin", "Greek", "Cyrillic"],
+      "mood": [
+        "practical",
+        "balanced"
+      ],
+      "useCases": [
+        "general UI",
+        "documentation"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Greek",
+        "Cyrillic"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["source-serif-4", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/source-sans-3/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "source-serif-4",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/source-sans-3/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/source-sans-3/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Source+Sans+3",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Source%20Sans%203",
+      "sourceHash": "aa5faa65ebd8fc7e6c3cac53774c09a9b404d324253f7cd26334f9c907a97a39",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "A stable workhorse for interface copy.",
-      "recommendedUseCase": "Versatile base font when neutrality matters more than brand flair."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для general UI и documentation.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "A stable workhorse for interface copy."
     },
     {
       "id": "source-serif-4",
       "family": "Source Serif 4",
       "category": "editorial",
-      "mood": ["literary", "calm", "authoritative"],
-      "useCases": ["editorial layouts", "long-form articles", "case-study pages"],
-      "languageCoverage": ["Latin", "Extended Latin", "Greek", "Cyrillic"],
+      "mood": [
+        "literary",
+        "calm"
+      ],
+      "useCases": [
+        "long-form reading",
+        "case studies"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Greek",
+        "Cyrillic"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["source-sans-3", "space-grotesk"],
-      "localFilePaths": ["/nofida/font-store/files/source-serif-4/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "source-sans-3",
+        "space-grotesk"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/source-serif-4/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/source-serif-4/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Source+Serif+4",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Source%20Serif%204",
+      "sourceHash": "9323e1b2a51798ed7532f1e9e6b03f6fd5984dc8b746b6e7d52c5fc21f47e3be",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Editorial tone without losing product clarity.",
-      "recommendedUseCase": "Content-heavy pages needing elegant reading rhythm."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для long-form reading и case studies.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Editorial tone without losing product clarity."
     },
     {
       "id": "space-grotesk",
       "family": "Space Grotesk",
       "category": "display",
-      "mood": ["bold", "future-facing", "expressive"],
-      "useCases": ["hero moments", "product launches", "AI brand layers"],
-      "languageCoverage": ["Latin", "Extended Latin", "Vietnamese"],
+      "mood": [
+        "bold",
+        "future-facing"
+      ],
+      "useCases": [
+        "hero copy",
+        "product launches"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["inter", "source-serif-4"],
-      "localFilePaths": ["/nofida/font-store/files/space-grotesk/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "inter",
+        "source-serif-4"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/space-grotesk/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/space-grotesk/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Space+Grotesk",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Space%20Grotesk",
+      "sourceHash": "2bff454a187330e2f15d6f0b0612f7bfc95f7b8036a99896abb2d0247488d80a",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Display energy for standout product surfaces.",
-      "recommendedUseCase": "Attention-grabbing titles and expressive product shells."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для hero copy и product launches.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Display energy for standout product surfaces."
     },
     {
       "id": "plus-jakarta-sans",
       "family": "Plus Jakarta Sans",
       "category": "sans",
-      "mood": ["refined", "fresh", "product-led"],
-      "useCases": ["startup brands", "multi-panel dashboards", "customer-facing apps"],
-      "languageCoverage": ["Latin", "Extended Latin", "Vietnamese"],
+      "mood": [
+        "refined",
+        "fresh"
+      ],
+      "useCases": [
+        "startup brands",
+        "customer apps"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["literata", "dm-sans"],
-      "localFilePaths": ["/nofida/font-store/files/plus-jakarta-sans/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "literata",
+        "dm-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/plus-jakarta-sans/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/plus-jakarta-sans/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Plus+Jakarta+Sans",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Plus%20Jakarta%20Sans",
+      "sourceHash": "0a75c56980a34c355f2af4130743341b334ca6f48a355f4ca6054a71b0db281c",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Crisp product tone with softer curves.",
-      "recommendedUseCase": "Contemporary UI with a little more voice than default system fonts."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для startup brands и customer apps.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Crisp product tone with softer curves."
     },
     {
       "id": "dm-sans",
       "family": "DM Sans",
       "category": "sans",
-      "mood": ["compact", "digital", "confident"],
-      "useCases": ["growth pages", "mobile products", "compact dashboards"],
-      "languageCoverage": ["Latin", "Extended Latin"],
+      "mood": [
+        "compact",
+        "digital"
+      ],
+      "useCases": [
+        "mobile products",
+        "growth pages"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["fraunces", "source-serif-4"],
-      "localFilePaths": ["/nofida/font-store/files/dm-sans/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "fraunces",
+        "source-serif-4"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/dm-sans/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/dm-sans/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/DM+Sans",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/DM%20Sans",
+      "sourceHash": "a82e9b339ab560a4ee37a66fab4f3b9b02c154dd5c5052c36a6cf044fa8fe3b3",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Digital cadence for fast-moving product teams.",
-      "recommendedUseCase": "Tight layouts where clarity and energy need to coexist."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для mobile products и growth pages.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Digital cadence for fast-moving product teams."
     },
     {
       "id": "libre-franklin",
       "family": "Libre Franklin",
       "category": "sans",
-      "mood": ["newsroom", "direct", "clear"],
-      "useCases": ["dashboards", "editorial UI", "institutional products"],
-      "languageCoverage": ["Latin", "Extended Latin", "Vietnamese"],
+      "mood": [
+        "newsroom",
+        "direct"
+      ],
+      "useCases": [
+        "editorial UI",
+        "institutional products"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["literata", "ibm-plex-mono"],
-      "localFilePaths": ["/nofida/font-store/files/libre-franklin/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "literata",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/libre-franklin/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/libre-franklin/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
-      "sourceUrl": "https://fonts.google.com/specimen/Libre+Franklin",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Libre%20Franklin",
+      "sourceHash": "782527e467ad30b26a7939f4f96db54bf93745a1006582177eb553528b48285b",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Direct voice for serious digital products.",
-      "recommendedUseCase": "Straightforward interfaces and content systems."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для editorial UI и institutional products.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Direct voice for serious digital products."
     },
     {
       "id": "literata",
       "family": "Literata",
       "category": "editorial",
-      "mood": ["bookish", "warm", "thoughtful"],
-      "useCases": ["reading views", "brand essays", "research-driven products"],
-      "languageCoverage": ["Latin", "Extended Latin", "Vietnamese"],
+      "mood": [
+        "bookish",
+        "warm"
+      ],
+      "useCases": [
+        "reading views",
+        "research products"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["inter", "plus-jakarta-sans"],
-      "localFilePaths": ["/nofida/font-store/files/literata/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "inter",
+        "plus-jakarta-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/literata/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/literata/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
       "sourceUrl": "https://fonts.google.com/specimen/Literata",
+      "sourceHash": "2f0565723773cbd9f3ed7d0dacb784da903ddaad06ca2d189eb1a35e17f527c9",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Warm reading rhythm for deeper narratives.",
-      "recommendedUseCase": "Sophisticated text surfaces that still feel digital-first."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для reading views и research products.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Warm reading rhythm for deeper narratives."
     },
     {
       "id": "fraunces",
       "family": "Fraunces",
       "category": "editorial",
-      "mood": ["dramatic", "premium", "expressive"],
-      "useCases": ["brand statements", "campaign pages", "editorial hero copy"],
-      "languageCoverage": ["Latin", "Extended Latin", "Vietnamese"],
+      "mood": [
+        "dramatic",
+        "premium"
+      ],
+      "useCases": [
+        "brand statements",
+        "campaign pages"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
       "license": "OFL-1.1",
       "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
       "attributionRequired": false,
-      "pairingSuggestions": ["inter", "dm-sans", "manrope"],
-      "localFilePaths": ["/nofida/font-store/files/fraunces/400-normal-01.woff2"],
+      "pairingSuggestions": [
+        "inter",
+        "dm-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/fraunces/400-normal-01.woff2"
+      ],
       "previewFilePath": "/nofida/font-store/files/fraunces/400-normal-01.woff2",
       "fileStatus": "available",
       "approvalStatus": "approved",
       "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
       "sourceUrl": "https://fonts.google.com/specimen/Fraunces",
+      "sourceHash": "81e9a325cf6df5a52df65a7b3731f557a82be23953db0a4334a86295d35b3b22",
       "commercialUseAllowed": true,
       "modificationAllowed": true,
       "redistributionAllowed": true,
-      "previewText": "Personality-rich serif for louder moments.",
-      "recommendedUseCase": "High-contrast brand moments and premium storytelling."
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для brand statements и campaign pages.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Personality-rich serif for louder moments."
+    },
+    {
+      "id": "work-sans",
+      "family": "Work Sans",
+      "category": "sans",
+      "mood": [
+        "operational",
+        "clear"
+      ],
+      "useCases": [
+        "admin tools",
+        "tables"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/work-sans/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/work-sans/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Work%20Sans",
+      "sourceHash": "91ab22dea7363fd24f310c4b1bf3e7b3686c8850d7833824442efec197b5e581",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для admin tools и tables.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Functional typography for dense dashboards."
+    },
+    {
+      "id": "rubik",
+      "family": "Rubik",
+      "category": "rounded",
+      "mood": [
+        "confident",
+        "friendly"
+      ],
+      "useCases": [
+        "commerce UI",
+        "growth surfaces"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic",
+        "Hebrew"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "playfair-display",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/rubik/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/rubik/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Rubik",
+      "sourceHash": "faced8a06eee6c2f465d9e30144fca7b5c727369c6891cc115f02ee14643e287",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для commerce UI и growth surfaces.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Rounded geometry that still reads crisply."
+    },
+    {
+      "id": "archivo",
+      "family": "Archivo",
+      "category": "sans",
+      "mood": [
+        "assertive",
+        "practical"
+      ],
+      "useCases": [
+        "analytics",
+        "command centers"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "pt-serif",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/archivo/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/archivo/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Archivo",
+      "sourceHash": "20a88ee9cedf03875efa9def9497b6b3da999a9b319d619b08706489309be9a5",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для analytics и command centers.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Strong widths for KPI-driven interfaces."
+    },
+    {
+      "id": "bricolage-grotesque",
+      "family": "Bricolage Grotesque",
+      "category": "display",
+      "mood": [
+        "expressive",
+        "contemporary"
+      ],
+      "useCases": [
+        "campaigns",
+        "brand refreshes"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "source-serif-4"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/bricolage-grotesque/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/bricolage-grotesque/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Bricolage%20Grotesque",
+      "sourceHash": "2490601b3a441df53f210b4fd200c83278d431bd4d8ec513cfdf5e5c0e68037f",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для campaigns и brand refreshes.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "A louder grotesque for confident product moments."
+    },
+    {
+      "id": "public-sans",
+      "family": "Public Sans",
+      "category": "sans",
+      "mood": [
+        "civic",
+        "steady"
+      ],
+      "useCases": [
+        "service portals",
+        "forms"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/public-sans/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/public-sans/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Public%20Sans",
+      "sourceHash": "b2c52fb9007e8ddd30252c6944caaaaf74e250d8ddee9f2c75f2174768d13bfb",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для service portals и forms.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Calm clarity for service-oriented interfaces."
+    },
+    {
+      "id": "figtree",
+      "family": "Figtree",
+      "category": "sans",
+      "mood": [
+        "smooth",
+        "accessible"
+      ],
+      "useCases": [
+        "onboarding",
+        "support surfaces"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "fraunces",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/figtree/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/figtree/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Figtree",
+      "sourceHash": "57e185e5fa2dc6207af01cd04b4f05d4c979ccdef86e301ef211a75f83614e03",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для onboarding и support surfaces.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Soft geometry with clean UI rhythm."
+    },
+    {
+      "id": "nunito-sans",
+      "family": "Nunito Sans",
+      "category": "rounded",
+      "mood": [
+        "approachable",
+        "balanced"
+      ],
+      "useCases": [
+        "education",
+        "care flows"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "playfair-display",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/nunito-sans/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/nunito-sans/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Nunito%20Sans",
+      "sourceHash": "fb6a33b9e4be304ec0c4913136e207d734d229586987daab9a45266f9baa1af0",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для education и care flows.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Rounded rhythm for patient, guided flows."
+    },
+    {
+      "id": "outfit",
+      "family": "Outfit",
+      "category": "display",
+      "mood": [
+        "clean",
+        "sharp"
+      ],
+      "useCases": [
+        "launch pages",
+        "AI products"
+      ],
+      "languageCoverage": [
+        "Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "literata",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/outfit/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/outfit/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Outfit",
+      "sourceHash": "672b16ae1b0bd11f1850600196352408c2f2bf4893b012adbe671ebdccae5fe2",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для launch pages и AI products.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Geometric confidence for modern product shells."
+    },
+    {
+      "id": "sora",
+      "family": "Sora",
+      "category": "sans",
+      "mood": [
+        "future",
+        "compact"
+      ],
+      "useCases": [
+        "AI settings",
+        "landing surfaces"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "fraunces",
+        "source-serif-4"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/sora/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/sora/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Sora",
+      "sourceHash": "86d8d4f4a33f3c6940d421b827e72b03ecb7908ed0f03511963265bdbb3c5c49",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для AI settings и landing surfaces.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Compact futuristic voice without losing readability."
+    },
+    {
+      "id": "urbanist",
+      "family": "Urbanist",
+      "category": "sans",
+      "mood": [
+        "sleek",
+        "digital"
+      ],
+      "useCases": [
+        "mobile UI",
+        "consumer apps"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "literata",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/urbanist/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/urbanist/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Urbanist",
+      "sourceHash": "c314a277b7df29f6712bb36fb2736aaf6ddfd4a8eeca1c700684a5014ba39ed3",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для mobile UI и consumer apps.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Sleek product tone for mobile-first teams."
+    },
+    {
+      "id": "karla",
+      "family": "Karla",
+      "category": "sans",
+      "mood": [
+        "honest",
+        "human"
+      ],
+      "useCases": [
+        "forms",
+        "knowledge tools"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/karla/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/karla/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Karla",
+      "sourceHash": "3272c5df73cbd1d9fd98bfb18ff309ddb48ba14e75bbb6146c5e892ec60bc499",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для forms и knowledge tools.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Honest typography for service and support flows."
+    },
+    {
+      "id": "merriweather",
+      "family": "Merriweather",
+      "category": "serif",
+      "mood": [
+        "trustworthy",
+        "readable"
+      ],
+      "useCases": [
+        "knowledge bases",
+        "long-form"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "work-sans",
+        "public-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/merriweather/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/merriweather/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Merriweather",
+      "sourceHash": "651a4f48fcc1445a60466041bc5c5a6156853037b053dbc2498f8b01b9111c00",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для knowledge bases и long-form.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Comfortable long-form reading on dense screens."
+    },
+    {
+      "id": "playfair-display",
+      "family": "Playfair Display",
+      "category": "editorial",
+      "mood": [
+        "luxury",
+        "high-contrast"
+      ],
+      "useCases": [
+        "brand campaigns",
+        "cover sections"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "rubik"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/playfair-display/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/playfair-display/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Playfair%20Display",
+      "sourceHash": "c30a5a165ac75cf8a17a6d9d960aedbec33db44e60427d403323cab1c6dd7cf3",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для brand campaigns и cover sections.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "A high-contrast editorial accent for premium moments."
+    },
+    {
+      "id": "jetbrains-mono",
+      "family": "JetBrains Mono",
+      "category": "mono",
+      "mood": [
+        "developer",
+        "precise"
+      ],
+      "useCases": [
+        "code examples",
+        "audit notes"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "public-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/jetbrains-mono/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/jetbrains-mono/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/JetBrains%20Mono",
+      "sourceHash": "9b25e1d2d2c49707db9a0861173516d0df18b23405dbb3ad18267fcdfbb05d44",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для code examples и audit notes.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Mono detail for specs, prompts, and terminal moments."
+    },
+    {
+      "id": "pt-sans",
+      "family": "PT Sans",
+      "category": "sans",
+      "mood": [
+        "institutional",
+        "stable"
+      ],
+      "useCases": [
+        "public products",
+        "content tools"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "pt-serif",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/pt-sans/400-normal-01.woff2",
+        "/nofida/font-store/files/pt-sans/700-normal-05.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/pt-sans/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/PT%20Sans",
+      "sourceHash": "0cb533d328f93233ae4649ed887122638446b57337e52bafa124bc09227beb4c",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для public products и content tools.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Stable sans for bilingual and operational interfaces."
+    },
+    {
+      "id": "pt-serif",
+      "family": "PT Serif",
+      "category": "serif",
+      "mood": [
+        "editorial",
+        "measured"
+      ],
+      "useCases": [
+        "reports",
+        "case studies"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "pt-sans",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/pt-serif/400-normal-01.woff2",
+        "/nofida/font-store/files/pt-serif/700-normal-05.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/pt-serif/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/PT%20Serif",
+      "sourceHash": "d1e999180cba062d5ffb4f920b7c720ade588468d00fca4870ceca10bfe4ac24",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для reports и case studies.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Measured serif for reports and serious narratives."
+    },
+    {
+      "id": "lora",
+      "family": "Lora",
+      "category": "serif",
+      "mood": [
+        "warm",
+        "readable"
+      ],
+      "useCases": [
+        "articles",
+        "brand stories"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "work-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/lora/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/lora/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Lora",
+      "sourceHash": "a0f0e243d06c642791c92fdad7203cae307fa82789aeacdcf8453c8af63b20e4",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для articles и brand stories.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Warm serif rhythm for clear product storytelling."
+    },
+    {
+      "id": "spectral",
+      "family": "Spectral",
+      "category": "serif",
+      "mood": [
+        "thoughtful",
+        "balanced"
+      ],
+      "useCases": [
+        "knowledge products",
+        "case studies"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "public-sans",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/spectral/400-normal-01.woff2",
+        "/nofida/font-store/files/spectral/500-normal-06.woff2",
+        "/nofida/font-store/files/spectral/600-normal-11.woff2",
+        "/nofida/font-store/files/spectral/700-normal-16.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/spectral/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Spectral",
+      "sourceHash": "a4ff4835b417e46ed834a6c3c386b04b9b00cf3df8a27bfadcc9342c6c771a5c",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для knowledge products и case studies.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Balanced serif that stays crisp in dense layouts."
+    },
+    {
+      "id": "libre-baskerville",
+      "family": "Libre Baskerville",
+      "category": "serif",
+      "mood": [
+        "classic",
+        "steady"
+      ],
+      "useCases": [
+        "presentations",
+        "editorial modules"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "work-sans",
+        "archivo"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/libre-baskerville/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/libre-baskerville/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Libre%20Baskerville",
+      "sourceHash": "9c5e5b5094210388639b7932f2e1165a1ebee3474b55a0eff8b008649eceaa93",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для presentations и editorial modules.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Classic proportions for calm reading surfaces."
+    },
+    {
+      "id": "newsreader",
+      "family": "Newsreader",
+      "category": "editorial",
+      "mood": [
+        "premium",
+        "editorial"
+      ],
+      "useCases": [
+        "cover stories",
+        "thought pieces"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "plus-jakarta-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/newsreader/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/newsreader/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Newsreader",
+      "sourceHash": "48140bab067ae09c7a4eb507b8cb19f6524cc26b830c79bcff5ce8632cd981d1",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для cover stories и thought pieces.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Elegant editorial tone for modern product narratives."
+    },
+    {
+      "id": "dm-serif-display",
+      "family": "DM Serif Display",
+      "category": "editorial",
+      "mood": [
+        "dramatic",
+        "luxury"
+      ],
+      "useCases": [
+        "hero headlines",
+        "campaign cards"
+      ],
+      "languageCoverage": [
+        "Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "manrope",
+        "dm-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/dm-serif-display/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/dm-serif-display/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/DM%20Serif%20Display",
+      "sourceHash": "f915f6f0922978095052cb2f3b987aeb494984e40f68f88e11a2bb335028771e",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для hero headlines и campaign cards.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Display serif with clear personality for brand moments."
+    },
+    {
+      "id": "cormorant-garamond",
+      "family": "Cormorant Garamond",
+      "category": "editorial",
+      "mood": [
+        "literary",
+        "refined"
+      ],
+      "useCases": [
+        "brand decks",
+        "long-form reading"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "libre-franklin"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/cormorant-garamond/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/cormorant-garamond/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Cormorant%20Garamond",
+      "sourceHash": "7b3997bee7d10deb36dfd35f670191f61f10237da6e5355c586429ba0ad51745",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для brand decks и long-form reading.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Refined serif for elegant product narratives."
+    },
+    {
+      "id": "montserrat",
+      "family": "Montserrat",
+      "category": "sans",
+      "mood": [
+        "confident",
+        "urban"
+      ],
+      "useCases": [
+        "marketing UI",
+        "navigation"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "lora",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/montserrat/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/montserrat/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Montserrat",
+      "sourceHash": "10cf3c3937dece1a7599b14bb0d17917282e7957a40ff1dd01e4fa45bceee420",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для marketing UI и navigation.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Popular geometric sans for bold interface labels."
+    },
+    {
+      "id": "raleway",
+      "family": "Raleway",
+      "category": "display",
+      "mood": [
+        "airy",
+        "clean"
+      ],
+      "useCases": [
+        "campaign headers",
+        "landing sections"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "inter"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/raleway/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/raleway/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Raleway",
+      "sourceHash": "2f02b1d47879100c67ea7996220acd1e5a3f7975bbb21a80116bc319e1b67ba6",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для campaign headers и landing sections.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Light-footed display sans for polished banners."
+    },
+    {
+      "id": "assistant",
+      "family": "Assistant",
+      "category": "sans",
+      "mood": [
+        "clean",
+        "service-led"
+      ],
+      "useCases": [
+        "forms",
+        "self-serve products"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Hebrew"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/assistant/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/assistant/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Assistant",
+      "sourceHash": "4f1f3b0cea00a99c5f676cf64ae6deb588de84b1a61c9adfeebb46678b713a23",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для forms и self-serve products.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Straightforward sans for calm task flows."
+    },
+    {
+      "id": "cabin",
+      "family": "Cabin",
+      "category": "sans",
+      "mood": [
+        "human",
+        "practical"
+      ],
+      "useCases": [
+        "knowledge tools",
+        "support apps"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "playfair-display",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/cabin/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/cabin/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Cabin",
+      "sourceHash": "5dc98886b0994ab2de888348aa53bbec22a4066a6a856fbf08edb0038b208465",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для knowledge tools и support apps.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Humanist sans that stays steady in product layouts."
+    },
+    {
+      "id": "mulish",
+      "family": "Mulish",
+      "category": "sans",
+      "mood": [
+        "soft",
+        "efficient"
+      ],
+      "useCases": [
+        "customer portals",
+        "settings"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "newsreader",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/mulish/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/mulish/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Mulish",
+      "sourceHash": "22d41d08be12282f1c6f1327a533590c4bc0982c27d4c4241203839dca90e649",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для customer portals и settings.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Soft sans for approachable operational products."
+    },
+    {
+      "id": "heebo",
+      "family": "Heebo",
+      "category": "sans",
+      "mood": [
+        "direct",
+        "dense"
+      ],
+      "useCases": [
+        "dashboards",
+        "data-heavy apps"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Hebrew"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "lora",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/heebo/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/heebo/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Heebo",
+      "sourceHash": "b753f9f2b2f3a580816902b383303cc7de5bed04bba6afe802d2411a56a5a0ec",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для dashboards и data-heavy apps.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Dense sans built for compact working interfaces."
+    },
+    {
+      "id": "hind",
+      "family": "Hind",
+      "category": "sans",
+      "mood": [
+        "open",
+        "service"
+      ],
+      "useCases": [
+        "support centers",
+        "workflow tools"
+      ],
+      "languageCoverage": [
+        "Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "spectral",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/hind/400-normal-01.woff2",
+        "/nofida/font-store/files/hind/500-normal-04.woff2",
+        "/nofida/font-store/files/hind/600-normal-07.woff2",
+        "/nofida/font-store/files/hind/700-normal-10.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/hind/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Hind",
+      "sourceHash": "9ab7ac1ecb7b076d2f067c422a4a072468a3e61e8a67670c6c322e51f3e851f7",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для support centers и workflow tools.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Simple sans for support and service-facing screens."
+    },
+    {
+      "id": "teko",
+      "family": "Teko",
+      "category": "display",
+      "mood": [
+        "compressed",
+        "energetic"
+      ],
+      "useCases": [
+        "campaign stats",
+        "product launches"
+      ],
+      "languageCoverage": [
+        "Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "source-serif-4"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/teko/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/teko/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Teko",
+      "sourceHash": "56bad47d0c0e023ad699100968e21588fe3087c9dc1eaf6ab14bdf7a0f6110bd",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для campaign stats и product launches.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Condensed display face for assertive data moments."
+    },
+    {
+      "id": "exo-2",
+      "family": "Exo 2",
+      "category": "sans",
+      "mood": [
+        "future",
+        "technical"
+      ],
+      "useCases": [
+        "AI products",
+        "console-style dashboards"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "source-serif-4",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/exo-2/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/exo-2/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Exo%202",
+      "sourceHash": "92af6c4b61c1212b8ba189744d4075f66b801c7fc458784be3b82efa78d28eb8",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для AI products и console-style dashboards.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Technical sans with a forward-looking voice."
+    },
+    {
+      "id": "chivo",
+      "family": "Chivo",
+      "category": "sans",
+      "mood": [
+        "solid",
+        "operational"
+      ],
+      "useCases": [
+        "enterprise products",
+        "procurement tools"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "space-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/chivo/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/chivo/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Chivo",
+      "sourceHash": "ce1bce0334cf5662bfd6d37a7b6a020a2491d91ba3968d5c520ebc02a87efe76",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для enterprise products и procurement tools.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Wide sans that stays stable in enterprise UI."
+    },
+    {
+      "id": "barlow",
+      "family": "Barlow",
+      "category": "sans",
+      "mood": [
+        "industrial",
+        "clear"
+      ],
+      "useCases": [
+        "control rooms",
+        "operations"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "spectral",
+        "space-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/barlow/400-normal-01.woff2",
+        "/nofida/font-store/files/barlow/500-normal-04.woff2",
+        "/nofida/font-store/files/barlow/600-normal-07.woff2",
+        "/nofida/font-store/files/barlow/700-normal-10.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/barlow/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Barlow",
+      "sourceHash": "2e20b108ce5c6818d39f96fc6b8973d1f1f2d4efa028d32b161477bbfc257222",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для control rooms и operations.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Industrial sans for structured control surfaces."
+    },
+    {
+      "id": "barlow-condensed",
+      "family": "Barlow Condensed",
+      "category": "display",
+      "mood": [
+        "compact",
+        "structured"
+      ],
+      "useCases": [
+        "kpi strips",
+        "navigation rails"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "merriweather"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/barlow-condensed/400-normal-01.woff2",
+        "/nofida/font-store/files/barlow-condensed/500-normal-04.woff2",
+        "/nofida/font-store/files/barlow-condensed/600-normal-07.woff2",
+        "/nofida/font-store/files/barlow-condensed/700-normal-10.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/barlow-condensed/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Barlow%20Condensed",
+      "sourceHash": "9bd45fddf0822cd52fda3c40b6206ad94b4abc80d17372a715cc3cab6952b217",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для kpi strips и navigation rails.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Condensed companion for metrics and short labels."
+    },
+    {
+      "id": "space-mono",
+      "family": "Space Mono",
+      "category": "mono",
+      "mood": [
+        "retro-tech",
+        "precise"
+      ],
+      "useCases": [
+        "prompts",
+        "token docs"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "space-grotesk",
+        "public-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/space-mono/400-normal-01.woff2",
+        "/nofida/font-store/files/space-mono/700-normal-04.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/space-mono/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Space%20Mono",
+      "sourceHash": "f566bf99142a7dcc529e20e44bb14f34f7d9e72099439ffe8eed1f8ad6ba4752",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для prompts и token docs.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Mono voice for specs, prompts, and system text."
+    },
+    {
+      "id": "azeret-mono",
+      "family": "Azeret Mono",
+      "category": "mono",
+      "mood": [
+        "engineered",
+        "strict"
+      ],
+      "useCases": [
+        "qa checklists",
+        "developer notes"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "source-serif-4"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/azeret-mono/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/azeret-mono/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Azeret%20Mono",
+      "sourceHash": "2255c3d3112f3af2c7c8ce10e87b899675edd4ec3509583d86bd112760c20233",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для qa checklists и developer notes.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Angular mono for disciplined technical artifacts."
+    },
+    {
+      "id": "inconsolata",
+      "family": "Inconsolata",
+      "category": "mono",
+      "mood": [
+        "developer",
+        "calm"
+      ],
+      "useCases": [
+        "developer docs",
+        "handoff snippets"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "work-sans",
+        "merriweather"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/inconsolata/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/inconsolata/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Inconsolata",
+      "sourceHash": "5177f022ba4cb656b14b0c754531c2d44dcf36747d4fd650cee61990f68a4ab9",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для developer docs и handoff snippets.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Calm mono that reads well in long snippets."
+    },
+    {
+      "id": "red-hat-display",
+      "family": "Red Hat Display",
+      "category": "display",
+      "mood": [
+        "corporate",
+        "strong"
+      ],
+      "useCases": [
+        "product headers",
+        "cards"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "red-hat-text",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/red-hat-display/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/red-hat-display/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Red%20Hat%20Display",
+      "sourceHash": "8662765831620d7eef2ad17f49a141917c9d3d3f464a0f2b17095cbbeaab6688",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для product headers и cards.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Display companion for modern product branding."
+    },
+    {
+      "id": "red-hat-text",
+      "family": "Red Hat Text",
+      "category": "sans",
+      "mood": [
+        "enterprise",
+        "clear"
+      ],
+      "useCases": [
+        "platform UI",
+        "setup flows"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "red-hat-display",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/red-hat-text/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/red-hat-text/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Red%20Hat%20Text",
+      "sourceHash": "97f8a718b25038bbc0d36bf8f69190b28d9abce44a4816b3afad469b7fb9789a",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для platform UI и setup flows.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Enterprise-ready text face for platform products."
+    },
+    {
+      "id": "epilogue",
+      "family": "Epilogue",
+      "category": "sans",
+      "mood": [
+        "sharp",
+        "contemporary"
+      ],
+      "useCases": [
+        "saas sites",
+        "pricing pages"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "newsreader",
+        "space-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/epilogue/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/epilogue/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Epilogue",
+      "sourceHash": "1b754931cab3a3066368a3b4554188ce0ffaf9af4d62ab615a2da75564cb2ee2",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для saas sites и pricing pages.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Sharp sans for clear SaaS product framing."
+    },
+    {
+      "id": "syne",
+      "family": "Syne",
+      "category": "display",
+      "mood": [
+        "bold",
+        "experimental"
+      ],
+      "useCases": [
+        "brand campaigns",
+        "hero statements"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "dm-sans"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/syne/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/syne/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Syne",
+      "sourceHash": "79eee221b106b70766d2a0497e85b2d9d783ffa02754040c8148b4bd25872c4e",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для brand campaigns и hero statements.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Expressive display font for standout brand layers."
+    },
+    {
+      "id": "lexend",
+      "family": "Lexend",
+      "category": "sans",
+      "mood": [
+        "legible",
+        "friendly"
+      ],
+      "useCases": [
+        "education products",
+        "multi-step flows"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "spectral",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/lexend/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/lexend/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Lexend",
+      "sourceHash": "67eb7c0efd9cf48d03e94d3f23ead805751b10036a4b0906b5065911c233d7aa",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для education products и multi-step flows.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "High-legibility sans for guided product journeys."
+    },
+    {
+      "id": "be-vietnam-pro",
+      "family": "Be Vietnam Pro",
+      "category": "sans",
+      "mood": [
+        "precise",
+        "balanced"
+      ],
+      "useCases": [
+        "mobile products",
+        "customer apps"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "lora",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/be-vietnam-pro/400-normal-01.woff2",
+        "/nofida/font-store/files/be-vietnam-pro/500-normal-04.woff2",
+        "/nofida/font-store/files/be-vietnam-pro/600-normal-07.woff2",
+        "/nofida/font-store/files/be-vietnam-pro/700-normal-10.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/be-vietnam-pro/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Be%20Vietnam%20Pro",
+      "sourceHash": "1c8d130205eb1c291e037e69d9e688bce7aa0bc86c69a5ecf84bc71e302d326a",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для mobile products и customer apps.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Balanced sans for compact mobile-first interfaces."
+    },
+    {
+      "id": "archivo-narrow",
+      "family": "Archivo Narrow",
+      "category": "sans",
+      "mood": [
+        "dense",
+        "assertive"
+      ],
+      "useCases": [
+        "tables",
+        "filters",
+        "toolbars"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "pt-serif",
+        "space-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/archivo-narrow/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/archivo-narrow/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Archivo%20Narrow",
+      "sourceHash": "0bc40a8c4b0b3a2a802ef504cccb5f0a4e7ec14f26d6c8301a1af741c6e924a5",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для tables и filters.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Narrow companion for dense admin views."
+    },
+    {
+      "id": "titillium-web",
+      "family": "Titillium Web",
+      "category": "sans",
+      "mood": [
+        "technical",
+        "friendly"
+      ],
+      "useCases": [
+        "software docs",
+        "settings"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "merriweather",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/titillium-web/400-normal-01.woff2",
+        "/nofida/font-store/files/titillium-web/600-normal-03.woff2",
+        "/nofida/font-store/files/titillium-web/700-normal-05.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/titillium-web/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Titillium%20Web",
+      "sourceHash": "9e1c77be8313ba982efd83fdace726bc7bf237d801e31986a5df3b450cf0512e",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для software docs и settings.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Technical sans that still feels approachable."
+    },
+    {
+      "id": "zilla-slab",
+      "family": "Zilla Slab",
+      "category": "serif",
+      "mood": [
+        "open",
+        "editorial"
+      ],
+      "useCases": [
+        "case studies",
+        "support docs"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "inter",
+        "space-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/zilla-slab/400-normal-01.woff2",
+        "/nofida/font-store/files/zilla-slab/500-normal-03.woff2",
+        "/nofida/font-store/files/zilla-slab/600-normal-05.woff2",
+        "/nofida/font-store/files/zilla-slab/700-normal-07.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/zilla-slab/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Zilla%20Slab",
+      "sourceHash": "927fb60850e5fe689e44a80807627a3bd2e8fe4869860225d5b7d391bd032dcb",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для case studies и support docs.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Open slab serif for product content with character."
+    },
+    {
+      "id": "josefin-sans",
+      "family": "Josefin Sans",
+      "category": "display",
+      "mood": [
+        "retro",
+        "light"
+      ],
+      "useCases": [
+        "showcases",
+        "cover slides"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Vietnamese"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "literata",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/josefin-sans/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/josefin-sans/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Josefin%20Sans",
+      "sourceHash": "4e7dc0ef6f3c2c5f3efa6f4d043973de313ea1185067a2c2db9c4000e843b255",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для showcases и cover slides.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Light display sans for memorable headline moments."
+    },
+    {
+      "id": "jost",
+      "family": "Jost",
+      "category": "sans",
+      "mood": [
+        "systemic",
+        "sleek"
+      ],
+      "useCases": [
+        "navigation",
+        "commerce products"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "playfair-display",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/jost/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/jost/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Jost",
+      "sourceHash": "e5c4f0417e6293ecc37ec3a9299679be31aa819501c7563c0de8ea5ec72a2743",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для navigation и commerce products.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Sleek geometric sans for modern product shells."
+    },
+    {
+      "id": "noto-sans-display",
+      "family": "Noto Sans Display",
+      "category": "display",
+      "mood": [
+        "global",
+        "functional"
+      ],
+      "useCases": [
+        "multilingual hero copy",
+        "overview cards"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Greek",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "noto-serif",
+        "space-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/noto-sans-display/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/noto-sans-display/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Noto%20Sans%20Display",
+      "sourceHash": "4fa085620ea59a7db7d28297b6eb8f367e0f8b529385140ad285da9d6ca1b2f9",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для multilingual hero copy и overview cards.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Display-safe Noto companion for multilingual products."
+    },
+    {
+      "id": "commissioner",
+      "family": "Commissioner",
+      "category": "sans",
+      "mood": [
+        "balanced",
+        "institutional"
+      ],
+      "useCases": [
+        "government services",
+        "forms"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin",
+        "Cyrillic"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "newsreader",
+        "jetbrains-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/commissioner/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/commissioner/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Commissioner",
+      "sourceHash": "b850a5aa7ca494e38d67628ac74c4d0146f1981dd69a139b3c616862486fc726",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для government services и forms.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Balanced sans for trustworthy service products."
+    },
+    {
+      "id": "questrial",
+      "family": "Questrial",
+      "category": "sans",
+      "mood": [
+        "clean",
+        "neutral"
+      ],
+      "useCases": [
+        "simple dashboards",
+        "light UI"
+      ],
+      "languageCoverage": [
+        "Latin",
+        "Extended Latin"
+      ],
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "attributionRequired": false,
+      "pairingSuggestions": [
+        "lora",
+        "ibm-plex-mono"
+      ],
+      "localFilePaths": [
+        "/nofida/font-store/files/questrial/400-normal-01.woff2"
+      ],
+      "previewFilePath": "/nofida/font-store/files/questrial/400-normal-01.woff2",
+      "fileStatus": "available",
+      "approvalStatus": "approved",
+      "sourceName": "Google Fonts",
+      "sourceAuthor": "Multiple foundries via Google Fonts",
+      "sourceUrl": "https://fonts.google.com/specimen/Questrial",
+      "sourceHash": "87e2a61522f33564a3e68d11cd8345cc2215fd8622bd2a25467e4b8798b629eb",
+      "commercialUseAllowed": true,
+      "modificationAllowed": true,
+      "redistributionAllowed": true,
+      "reviewStatus": "approved",
+      "recommendedUseCase": "Подходит для simple dashboards и light UI.",
+      "reviewNotes": "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
+      "reviewer": "codex",
+      "approvedAt": "2026-06-19T15:26:34.644Z",
+      "previewText": "Simple neutral sans for lightweight product surfaces."
     }
   ]
 }

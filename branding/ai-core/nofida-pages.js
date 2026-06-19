@@ -72,7 +72,7 @@
         },
         {
           title: "Resource foundations",
-          text: "Use the Fonts workspace for recommended typography, the font catalog for pairings and license checks, Media Bank for same-origin assets, and the Figma migration page for report-first migration planning.",
+          text: "Use the Fonts workspace for recommended typography, the font catalog for pairings and license checks, Media Bank for local assets, and the Figma migration page for a practical transfer plan.",
           links: [
             { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" },
@@ -292,7 +292,7 @@
       sections: [
         {
           title: "Current release focus",
-          text: "PATCH 018B turns the resource foundation into a product layer: native Fonts guidance, Media Bank inventory, a UI pattern registry, and a report-first Figma migration assistant.",
+          text: "PATCH 018B turns the resource foundation into a product layer: native Fonts guidance, Media Bank inventory, a UI pattern registry, and a Figma migration assistant with a transfer plan.",
           links: [
             { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" },
@@ -346,7 +346,7 @@
       sections: [
         {
           title: "PATCH 018A",
-          text: "NOFIDA now includes a resource product layer with a native-font workflow, the font catalog, Media Bank, UI patterns, and a report-first Figma migration assistant backed by same-origin metadata.",
+          text: "NOFIDA now includes a resource product layer with a native-font workflow, the font catalog, Media Bank, UI patterns, and a Figma migration assistant backed by local metadata.",
           links: [
             { label: "Font catalog", href: "#/nofida/fonts" },
             { label: "Media Bank", href: "#/nofida/media" },
@@ -718,7 +718,7 @@
     overlay.querySelector("#nfp-footer-note").textContent =
       pageId === "terms" || pageId === "privacy"
         ? "Placeholder only. Replace after legal review."
-        : "Internal NOFIDA product page.";
+        : "Страница NOFIDA внутри рабочего пространства.";
     overlay.scrollTop = 0;
   }
 

@@ -4,6 +4,8 @@
   if (window.NofidaResources) return;
 
   var OVERLAY_ID = "nfr-overlay";
+  var DETAIL_ID = "nfr-detail-overlay";
+  var TOAST_ID = "nfr-toast";
   var NATIVE_PANEL_ID = "nfr-native-fonts";
   var NATIVE_PANEL_MARKER = "data-nofida-fonts-enhanced";
   var NATIVE_PANEL_REVISION = "data-nofida-render-rev";
@@ -11,6 +13,8 @@
   var NATIVE_UPLOAD_SELECTOR = ".main_ui_dashboard_fonts__dashboard-fonts-upload";
   var NATIVE_INSTALLED_SELECTOR = ".main_ui_dashboard_fonts__dashboard-installed-fonts";
   var NATIVE_CONTENT_SELECTOR = ".main_ui_dashboard__dashboard-content";
+  var FIGMA_STORAGE_KEY = "nofida-figma-draft-018c";
+  var FIGMA_FILE_ACCEPT = ".fig,.zip,.svg,.png,.pdf";
   var FONT_CATALOG_URLS = [
     "/nofida/font-store/catalog.json?v=__NOFIDA_ASSET_TAG__",
     "/nofida/fonts/catalog.json?v=__NOFIDA_ASSET_TAG__"
@@ -26,20 +30,20 @@
   var PAGES = {
     fonts: {
       title: "Шрифты NOFIDA",
-      badge: "Нативный сценарий",
-      intro: "Сначала используйте проверенные шрифты NOFIDA в нативном экране шрифтов. Каталог остается ресурсным центром для поиска, сочетаний, лицензий и загрузки.",
-      notice: "Автоматическая установка в этом патче не включена. Скачайте проверенный шрифт и продолжите через нативную загрузку шрифтов, когда он действительно нужен в рабочем пространстве.",
+      badge: "Типографика",
+      intro: "Выберите проверенный шрифт NOFIDA или загрузите свой. Каталог помогает быстро подобрать семейство, а нативная загрузка остается рабочим способом добавить файл в пространство команды.",
+      notice: "Шрифты можно скачать и добавить через нативную загрузку. Автоматическая установка будет включена после безопасного подключения к системному хранилищу шрифтов.",
       actions: [
         { label: "Открыть экран шрифтов", href: "#/dashboard", action: "native-fonts" },
-        { label: "Открыть Медиа", href: PAGE_ROUTES.media },
+        { label: "Открыть медиабанк", href: PAGE_ROUTES.media },
         { label: "Открыть импорт из Figma", href: PAGE_ROUTES.figma }
       ]
     },
     media: {
-      title: "Медиа NOFIDA",
-      badge: "Проверенный каталог",
-      intro: "Просматривайте same-origin ассеты и UI patterns с учетом статуса согласования, источника и компактных фильтров. Используемыми ресурсами считаются только одобренные позиции.",
-      notice: "Ассеты остаются в локальном хранилище NOFIDA. Без случайных hotlink, скрытого происхождения и попыток отмыть авторство через AI-стилизацию.",
+      title: "Медиабанк NOFIDA",
+      badge: "Проверенные ассеты",
+      intro: "Медиабанк NOFIDA — проверенные ассеты для интерфейсов, презентаций и прототипов. Все материалы хранятся внутри NOFIDA и имеют сведения об источнике и лицензии.",
+      notice: "Вы можете скачать ассет, скопировать ссылку или взять его за основу для проекта. Автоматическое добавление в файл появится отдельно.",
       actions: [
         { label: "Открыть экран шрифтов", href: "#/dashboard", action: "native-fonts" },
         { label: "Открыть импорт из Figma", href: PAGE_ROUTES.figma },
@@ -48,19 +52,22 @@
     },
     figma: {
       title: "Импорт из Figma",
-      badge: "Миграция и адаптация",
-      intro: "Практическая страница планирования миграции: экспорты, замена шрифтов, восстановление ассетов и отчет по рискам. Она не обещает идеальную 1:1 точность компонентов или прототипов.",
-      notice: "Этот маршрут по-прежнему report-first. Он помогает честно подготовить миграцию до появления конвертера.",
+      badge: "План переноса",
+      intro: "NOFIDA сначала анализирует файл и готовит план переноса. Полная точность зависит от структуры исходного проекта, а сложные компоненты, автолэйауты и прототипы могут потребовать ручной проверки.",
+      notice: "Запрос можно сохранить локально, собрать список ассетов и получить предварительный отчет без прямого изменения файлов проекта.",
       actions: [
-        { label: "Открыть экран шрифтов", href: "#/dashboard", action: "native-fonts" },
-        { label: "Открыть Медиа", href: PAGE_ROUTES.media },
-        { label: "Открыть лицензии", href: "#/nofida/open-source-notices" }
+        { label: "Создать отчет миграции", href: PAGE_ROUTES.figma, action: "focus-figma-report" },
+        { label: "Открыть медиабанк", href: PAGE_ROUTES.media },
+        { label: "Подобрать шрифты", href: PAGE_ROUTES.fonts }
       ]
     }
   };
 
   var state = {
     overlayEl: null,
+    detailEl: null,
+    toastEl: null,
+    toastTimer: null,
     lastAppHash: "#/dashboard",
     currentPageId: "",
     teamId: "",
@@ -73,7 +80,7 @@
     filters: {
       fonts: { query: "", category: "all" },
       nativeFonts: { query: "", category: "all" },
-      media: { query: "", category: "all", license: "all" }
+      media: { query: "", category: "all", style: "all", mood: "all", license: "all" }
     },
     renderToken: 0,
     loadedPreviewFonts: {},
@@ -82,36 +89,42 @@
     nativeObserverRoot: null,
     nativeRenderLock: false,
     nativeSectionKey: "",
-    nativePanelKey: ""
+    nativePanelKey: "",
+    detail: { kind: "", id: "", source: "" },
+    svgCache: {},
+    figmaDraft: loadFigmaDraft(),
+    figmaReport: null,
+    figmaStage: { status: "", message: "", count: 0, updatedAt: "" }
   };
 
   var RESOURCE_CSS = [
-    "#nfr-overlay{position:fixed;inset:0;z-index:2147483440;overflow-y:auto;color:#e5edf7;",
-      "font-family:Inter,\"Segoe UI\",system-ui,sans-serif;",
-      "background:linear-gradient(180deg,rgba(5,9,18,.96),rgba(8,15,28,.98))}",
-    "#nfr-overlay[hidden]{display:none!important}",
+    "#nfr-overlay,#nfr-detail-overlay{color:#e5edf7;font-family:Inter,\"Segoe UI\",system-ui,sans-serif}",
+    "#nfr-overlay{position:fixed;inset:0;z-index:2147483440;overflow-y:auto;background:linear-gradient(180deg,rgba(5,9,18,.96),rgba(8,15,28,.98))}",
+    "#nfr-overlay[hidden],#nfr-detail-overlay[hidden],#nfr-toast[hidden]{display:none!important}",
     "#nfr-dynamic-fonts{display:none}",
+    "#nfr-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483605;padding:10px 14px;border-radius:999px;border:1px solid rgba(96,165,250,.24);background:rgba(9,15,26,.96);color:#eff6ff;font-size:12px;font-weight:700;box-shadow:0 18px 40px rgba(0,0,0,.34)}",
     ".nfr-shell{max-width:1240px;margin:0 auto;padding:18px 18px 56px}",
     ".nfr-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:14px}",
     ".nfr-topcopy{display:flex;flex-direction:column;gap:6px}",
     ".nfr-breadcrumb{margin:0;color:#8fa4c2;font-size:12px;font-weight:700;line-height:1.4}",
     ".nfr-surface-pill{display:inline-flex;align-items:center;width:fit-content;min-height:24px;padding:0 9px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
-    ".nfr-back,.nfr-btn,.nfr-copy-btn,.nfr-filter-select,.nfr-filter-search,.nfr-tab,.nfr-link-btn{font:inherit}",
-    ".nfr-back,.nfr-tab,.nfr-copy-btn{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer}",
-    ".nfr-back:hover,.nfr-tab:hover,.nfr-copy-btn:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
+    ".nfr-back,.nfr-btn,.nfr-copy-btn,.nfr-filter-select,.nfr-filter-search,.nfr-tab,.nfr-link-btn,.nfr-icon-btn,.nfr-disabled-btn{font:inherit}",
+    ".nfr-back,.nfr-tab,.nfr-copy-btn,.nfr-icon-btn{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer}",
+    ".nfr-back:hover,.nfr-tab:hover,.nfr-copy-btn:hover,.nfr-icon-btn:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
+    ".nfr-disabled-btn{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:999px;border:1px dashed rgba(120,142,170,.24);background:#0d1524;color:#7f93b1;font-size:11px;font-weight:700;cursor:not-allowed;text-decoration:none}",
     ".nfr-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}",
-    ".nfr-nav-panel,.nfr-hero,.nfr-panel,.nfr-card,.nfr-native-panel{border:1px solid rgba(90,112,140,.22);background:rgba(11,18,32,.88);box-shadow:0 16px 36px rgba(0,0,0,.26)}",
+    ".nfr-nav-panel,.nfr-hero,.nfr-panel,.nfr-card,.nfr-native-panel,.nfr-detail-card{border:1px solid rgba(90,112,140,.22);background:rgba(11,18,32,.88);box-shadow:0 16px 36px rgba(0,0,0,.26)}",
     ".nfr-nav-panel{position:sticky;top:14px;border-radius:18px;padding:14px}",
     ".nfr-nav-kicker,.nfr-label{margin:0 0 8px;color:#93a8c7;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}",
     ".nfr-nav-list{display:flex;flex-direction:column;gap:8px}",
     ".nfr-nav-link{display:block;padding:9px 10px;border-radius:12px;border:1px solid transparent;color:#a9b9cf;text-decoration:none;font-size:13px;line-height:1.35}",
     ".nfr-nav-link:hover,.nfr-nav-link.active{background:#12203a;border-color:rgba(96,165,250,.28);color:#fff}",
     ".nfr-main{display:flex;flex-direction:column;gap:14px}",
-    ".nfr-hero{border-radius:20px;padding:16px 18px 15px}",
+    ".nfr-hero{border-radius:20px;padding:15px 18px 14px}",
     ".nfr-hero-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
     ".nfr-badge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(59,130,246,.14);color:#bfdbfe;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}",
     ".nfr-hero h1{margin:0;font-size:24px;line-height:1.08;letter-spacing:-.03em}",
-    ".nfr-intro{margin:10px 0 0;color:#c9d5e3;font-size:13px;line-height:1.55;max-width:900px}",
+    ".nfr-intro{margin:10px 0 0;color:#c9d5e3;font-size:13px;line-height:1.55;max-width:920px}",
     ".nfr-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}",
     ".nfr-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border-radius:999px;text-decoration:none;font-size:12px;font-weight:700}",
     ".nfr-btn-primary{background:#2563eb;border:1px solid #2563eb;color:#fff}",
@@ -121,34 +134,36 @@
     ".nfr-stack{display:flex;flex-direction:column;gap:14px}",
     ".nfr-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}",
     ".nfr-stat{border-radius:14px;padding:12px;background:#0d1524;border:1px solid rgba(90,112,140,.18)}",
-    ".nfr-stat-value{display:block;font-size:22px;font-weight:700;line-height:1.05;color:#fff}",
+    ".nfr-stat-value{display:block;font-size:21px;font-weight:700;line-height:1.05;color:#fff}",
     ".nfr-stat-label{display:block;margin-top:6px;color:#a9b9cf;font-size:12px;line-height:1.45}",
-    ".nfr-panel,.nfr-native-panel{border-radius:18px;padding:14px}",
-    ".nfr-panel h2,.nfr-native-panel h2,.nfr-card h3,.nfr-pattern-card h3{margin:0;font-size:18px;line-height:1.25;color:#fff}",
-    ".nfr-panel-copy{margin:8px 0 0;color:#c9d5e3;font-size:13px;line-height:1.58}",
+    ".nfr-panel,.nfr-native-panel,.nfr-detail-card{border-radius:18px;padding:14px}",
+    ".nfr-panel h2,.nfr-native-panel h2,.nfr-card h3,.nfr-pattern-card h3,.nfr-detail-card h2{margin:0;font-size:18px;line-height:1.25;color:#fff}",
+    ".nfr-panel-copy,.nfr-detail-copy{margin:8px 0 0;color:#c9d5e3;font-size:13px;line-height:1.58}",
     ".nfr-list{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}",
     ".nfr-list li{padding:10px 12px;border-radius:12px;background:#0d1524;border:1px solid rgba(90,112,140,.16);font-size:12px;line-height:1.55;color:#d7e2f0}",
-    ".nfr-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 180px 160px;gap:8px;align-items:center}",
-    ".nfr-filter-search,.nfr-filter-select{width:100%;min-height:36px;border-radius:12px;border:1px solid rgba(90,112,140,.24);background:#0d1524;color:#e5edf7;padding:0 12px;font-size:12px}",
+    ".nfr-toolbar{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(0,170px));gap:8px;align-items:center}",
+    ".nfr-filter-search,.nfr-filter-select,.nfr-textarea,.nfr-input{width:100%;min-height:36px;border-radius:12px;border:1px solid rgba(90,112,140,.24);background:#0d1524;color:#e5edf7;padding:0 12px;font-size:12px;box-sizing:border-box}",
+    ".nfr-textarea{min-height:110px;padding:10px 12px;resize:vertical}",
     ".nfr-grid,.nfr-pattern-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}",
     ".nfr-card,.nfr-pattern-card{display:flex;flex-direction:column;gap:10px;border-radius:18px;padding:14px}",
     ".nfr-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}",
     ".nfr-card-copy{margin:0;color:#c9d5e3;font-size:12px;line-height:1.55}",
-    ".nfr-pill-row,.nfr-tag-row,.nfr-card-actions,.nfr-native-tabs{display:flex;flex-wrap:wrap;gap:6px}",
+    ".nfr-pill-row,.nfr-tag-row,.nfr-card-actions,.nfr-native-tabs,.nfr-action-row,.nfr-file-list{display:flex;flex-wrap:wrap;gap:6px}",
     ".nfr-pill,.nfr-tag{display:inline-flex;align-items:center;min-height:24px;padding:0 8px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:#0d1524;color:#bfd3eb;font-size:11px;font-weight:700}",
     ".nfr-pill.good{border-color:rgba(34,197,94,.24);color:#c9f3d1;background:rgba(22,82,44,.26)}",
     ".nfr-pill.warn{border-color:rgba(245,158,11,.26);color:#f8d28c;background:rgba(96,55,16,.18)}",
-    ".nfr-preview{padding:14px 16px;border-radius:14px;border:1px solid rgba(90,112,140,.18);background:linear-gradient(135deg,rgba(255,255,255,.03),rgba(148,163,184,.04));color:#fff;font-size:22px;line-height:1.28}",
+    ".nfr-preview{padding:14px 16px;border-radius:14px;border:1px solid rgba(90,112,140,.18);background:linear-gradient(135deg,rgba(255,255,255,.03),rgba(148,163,184,.04));color:#fff;font-size:21px;line-height:1.28}",
     ".nfr-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}",
     ".nfr-meta-block{padding:10px 12px;border-radius:12px;background:#0d1524;border:1px solid rgba(90,112,140,.16)}",
     ".nfr-meta-block strong{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9fb7d9}",
     ".nfr-meta-block span{display:block;margin-top:6px;color:#dce7f5;font-size:12px;line-height:1.45}",
-    ".nfr-media-thumb,.nfr-pattern-thumb{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px;border:1px solid rgba(90,112,140,.16);background:#08111f}",
+    ".nfr-media-thumb,.nfr-pattern-thumb,.nfr-detail-thumb{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px;border:1px solid rgba(90,112,140,.16);background:#08111f}",
     ".nfr-link-btn{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:999px;border:1px solid rgba(96,165,250,.24);background:#0d1524;color:#e5edf7;font-size:11px;font-weight:700;text-decoration:none}",
     ".nfr-link-btn:hover{border-color:rgba(96,165,250,.42);color:#fff}",
     ".nfr-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}",
     ".nfr-section-title{margin:0;font-size:16px;line-height:1.25;color:#fff}",
-    ".nfr-empty,.nfr-error{padding:16px;border-radius:14px;background:#0d1524;border:1px solid rgba(90,112,140,.18);font-size:13px;line-height:1.6;color:#c9d5e3}",
+    ".nfr-empty,.nfr-error,.nfr-note{padding:16px;border-radius:14px;background:#0d1524;border:1px solid rgba(90,112,140,.18);font-size:13px;line-height:1.6;color:#c9d5e3}",
+    ".nfr-note{padding:12px 14px}",
     ".nfr-native-panel{margin:0 0 16px}",
     ".nfr-native-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}",
     ".nfr-native-copy{max-width:760px;color:#c9d5e3;font-size:12px;line-height:1.5;margin:6px 0 0}",
@@ -156,7 +171,7 @@
     ".nfr-native-panel-compact .nfr-native-head{align-items:center}",
     ".nfr-native-panel-compact h2{font-size:16px;line-height:1.25}",
     ".nfr-native-section{display:flex;flex-direction:column;gap:12px}",
-    ".nfr-native-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 160px auto;gap:8px;align-items:center}",
+    ".nfr-native-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 180px auto;gap:8px;align-items:center}",
     ".nfr-native-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}",
     ".nfr-native-card{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px solid rgba(90,112,140,.16);background:#0d1524}",
     ".nfr-native-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}",
@@ -166,16 +181,83 @@
     ".nfr-native-meta{display:flex;flex-wrap:wrap;gap:6px}",
     ".nfr-native-meta span{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:#0b1220;color:#bfd3eb;font-size:10px;font-weight:700}",
     ".nfr-native-actions{display:flex;flex-wrap:wrap;gap:6px}",
-    ".nfr-native-actions .nfr-link-btn,.nfr-native-actions .nfr-copy-btn{min-height:30px;padding:0 10px;font-size:11px}",
+    ".nfr-native-actions .nfr-link-btn,.nfr-native-actions .nfr-copy-btn,.nfr-native-actions .nfr-icon-btn{min-height:30px;padding:0 10px;font-size:11px}",
     ".nfr-native-empty{padding:12px;border-radius:12px;border:1px dashed rgba(90,112,140,.18);background:#0d1524;color:#c9d5e3;font-size:12px;line-height:1.5}",
     ".nfr-footer-note{margin:2px 0 0;color:#8fa4c2;font-size:11px}",
-    ".nfr-flow-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}",
-    ".nfr-flow-card{padding:12px;border-radius:14px;background:#0d1524;border:1px solid rgba(90,112,140,.16)}",
-    ".nfr-flow-card h3{margin:0 0 6px;font-size:14px;color:#fff}",
-    ".nfr-flow-card p{margin:0;color:#c9d5e3;font-size:12px;line-height:1.55}",
-    "@media (max-width:1080px){.nfr-layout{grid-template-columns:1fr}.nfr-nav-panel{position:static}.nfr-toolbar{grid-template-columns:1fr 1fr}.nfr-toolbar .nfr-filter-select:last-child{grid-column:1/-1}}",
-    "@media (max-width:720px){.nfr-shell{padding:14px 12px 44px}.nfr-topbar{flex-direction:column;align-items:stretch}.nfr-toolbar,.nfr-meta,.nfr-native-toolbar{grid-template-columns:1fr}.nfr-back,.nfr-btn,.nfr-link-btn,.nfr-copy-btn,.nfr-tab{width:100%}.nfr-hero h1{font-size:22px}}"
+    ".nfr-detail-shell{position:fixed;inset:0;z-index:2147483600;background:rgba(6,10,18,.7);display:flex;align-items:stretch;justify-content:flex-end;padding:20px;box-sizing:border-box}",
+    ".nfr-detail-card{width:min(520px,100%);margin-left:auto;overflow-y:auto;display:flex;flex-direction:column;gap:12px}",
+    ".nfr-detail-topbar{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}",
+    ".nfr-detail-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}",
+    ".nfr-detail-actions{display:flex;flex-wrap:wrap;gap:8px}",
+    ".nfr-detail-close{min-width:40px}",
+    ".nfr-usage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}",
+    ".nfr-form-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:12px}",
+    ".nfr-form-panel{display:flex;flex-direction:column;gap:12px}",
+    ".nfr-field{display:flex;flex-direction:column;gap:6px}",
+    ".nfr-field label{color:#dce7f5;font-size:12px;font-weight:700}",
+    ".nfr-helper{margin:0;color:#8fa4c2;font-size:11px;line-height:1.45}",
+    ".nfr-toggle{display:flex;align-items:center;gap:8px}",
+    ".nfr-toggle input{width:16px;height:16px}",
+    ".nfr-dropzone{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:14px;border-radius:14px;border:1px dashed rgba(96,165,250,.28);background:rgba(13,21,36,.7);cursor:pointer}",
+    ".nfr-dropzone strong{font-size:13px;color:#fff}",
+    ".nfr-dropzone span{font-size:12px;color:#c9d5e3;line-height:1.5}",
+    ".nfr-dropzone:hover{border-color:rgba(96,165,250,.48);background:rgba(18,32,58,.76)}",
+    ".nfr-hidden-input{position:absolute;left:-9999px;opacity:0;pointer-events:none}",
+    ".nfr-file-chip{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 9px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:#0d1524;color:#dce7f5;font-size:11px;font-weight:700}",
+    ".nfr-report{display:flex;flex-direction:column;gap:12px}",
+    ".nfr-report-block{padding:12px;border-radius:14px;background:#0d1524;border:1px solid rgba(90,112,140,.16)}",
+    ".nfr-report-block h3{margin:0 0 8px;font-size:14px;line-height:1.3;color:#fff}",
+    ".nfr-report-block p,.nfr-report-block li{margin:0;color:#c9d5e3;font-size:12px;line-height:1.58}",
+    ".nfr-report-block ul{display:grid;gap:6px;margin:10px 0 0;padding-left:18px}",
+    ".nfr-divider{height:1px;background:rgba(90,112,140,.18)}",
+    ".nfr-status-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
+    "@media (max-width:1180px){.nfr-toolbar{grid-template-columns:minmax(0,1fr) 1fr 1fr}.nfr-toolbar .nfr-filter-select:nth-child(4),.nfr-toolbar .nfr-filter-select:nth-child(5){grid-column:auto}.nfr-form-grid{grid-template-columns:1fr}.nfr-detail-card{width:min(620px,100%)}}",
+    "@media (max-width:1080px){.nfr-layout{grid-template-columns:1fr}.nfr-nav-panel{position:static}.nfr-toolbar{grid-template-columns:1fr 1fr}.nfr-toolbar .nfr-filter-select:last-child{grid-column:1/-1}.nfr-native-toolbar{grid-template-columns:1fr}.nfr-detail-shell{padding:12px}}",
+    "@media (max-width:720px){.nfr-shell{padding:14px 12px 44px}.nfr-topbar{flex-direction:column;align-items:stretch}.nfr-toolbar,.nfr-meta,.nfr-detail-meta{grid-template-columns:1fr}.nfr-back,.nfr-btn,.nfr-link-btn,.nfr-copy-btn,.nfr-tab,.nfr-icon-btn,.nfr-disabled-btn{width:100%}.nfr-hero h1{font-size:22px}.nfr-detail-shell{align-items:flex-end}.nfr-detail-card{width:100%;max-height:100%}}"
   ].join("");
+
+  function loadFigmaDraft() {
+    try {
+      var raw = window.localStorage.getItem(FIGMA_STORAGE_KEY);
+      if (!raw) {
+        return {
+          url: "",
+          token: "",
+          connectLater: true,
+          notes: "",
+          files: [],
+          savedAt: ""
+        };
+      }
+      var parsed = JSON.parse(raw) || {};
+      return {
+        url: parsed.url || "",
+        token: parsed.token || "",
+        connectLater: parsed.connectLater !== false,
+        notes: parsed.notes || "",
+        files: Array.isArray(parsed.files) ? parsed.files : [],
+        savedAt: parsed.savedAt || ""
+      };
+    } catch (_error) {
+      return {
+        url: "",
+        token: "",
+        connectLater: true,
+        notes: "",
+        files: [],
+        savedAt: ""
+      };
+    }
+  }
+
+  function saveFigmaDraft() {
+    try {
+      state.figmaDraft.savedAt = new Date().toISOString();
+      window.localStorage.setItem(FIGMA_STORAGE_KEY, JSON.stringify(state.figmaDraft));
+    } catch (_error) {
+      /* noop */
+    }
+  }
 
   function onReady(fn) {
     function afterPaint() {
@@ -212,6 +294,12 @@
     var hash = window.location.hash || "";
     var queryIndex = hash.indexOf("?");
     return queryIndex >= 0 ? hash.slice(0, queryIndex) : hash;
+  }
+
+  function getHashParams(hash) {
+    var current = normalizeHash(hash || window.location.hash || "");
+    var queryIndex = current.indexOf("?");
+    return new URLSearchParams(queryIndex >= 0 ? current.slice(queryIndex + 1) : "");
   }
 
   function getPageIdFromHash(hash) {
@@ -294,6 +382,109 @@
     return !!document.querySelector("#dashboard-fonts-title, " + NATIVE_CONTAINER_SELECTOR);
   }
 
+  function showToast(message) {
+    if (!message) return;
+    var toast = ensureToast();
+    toast.textContent = message;
+    toast.removeAttribute("hidden");
+    if (state.toastTimer) window.clearTimeout(state.toastTimer);
+    state.toastTimer = window.setTimeout(function () {
+      toast.setAttribute("hidden", "");
+      toast.textContent = "";
+      state.toastTimer = null;
+    }, 1800);
+  }
+
+  function ensureToast() {
+    if (state.toastEl) return state.toastEl;
+    var toast = document.createElement("div");
+    toast.id = TOAST_ID;
+    toast.setAttribute("hidden", "");
+    document.body.appendChild(toast);
+    state.toastEl = toast;
+    return toast;
+  }
+
+  function copyText(value, successText, fallbackLabel) {
+    var text = String(value || "");
+    if (!text) return Promise.resolve(false);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () {
+        showToast(successText || "Скопировано");
+        return true;
+      }).catch(function () {
+        window.prompt(fallbackLabel || "Скопируйте значение", text);
+        return false;
+      });
+    }
+    window.prompt(fallbackLabel || "Скопируйте значение", text);
+    return Promise.resolve(false);
+  }
+
+  function absoluteUrl(value) {
+    var current = String(value || "");
+    if (!current) return "";
+    return current.indexOf("http") === 0 ? current : window.location.origin + current;
+  }
+
+  function arrayify(value) {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (!value && value !== 0) return [];
+    return [value];
+  }
+
+  function unique(values) {
+    return values.filter(function (value, index, source) {
+      return value && source.indexOf(value) === index;
+    });
+  }
+
+  function titleCaseStatus(value, fallback) {
+    var normalized = String(value || fallback || "").toLowerCase();
+    if (!normalized) return "";
+    if (normalized === "approved") return "Проверено";
+    if (normalized === "available") return "Доступно";
+    if (normalized === "planned") return "Планируется";
+    if (normalized === "installed") return "Добавлено";
+    if (normalized === "review") return "Проверяется";
+    if (normalized === "reviewed") return "Проверено";
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1).replace(/_/g, " ");
+  }
+
+  function humanInstallState(value) {
+    var normalized = String(value || "").toLowerCase();
+    if (normalized === "available") return "Доступен";
+    if (normalized === "installed") return "Добавлен";
+    if (normalized === "planned") return "Подготовка";
+    if (normalized === "upload_required") return "Загрузите вручную";
+    if (normalized === "needs_review") return "Проверка";
+    if (normalized === "not_supported_yet") return "Через нативную загрузку";
+    return titleCaseStatus(value, "Проверка");
+  }
+
+  function humanBooleanLabel(value, good, warn) {
+    return value ? good : warn;
+  }
+
+  function buildFontDetailNote(font) {
+    var parts = ["Проверенное семейство с открытой лицензией."];
+    parts.push(font.commercialUseAllowed ? "Разрешено для коммерческого использования." : "Перед коммерческим использованием проверьте условия лицензии.");
+    parts.push("Скачайте файл и добавьте его через нативную загрузку, если шрифт нужен в рабочем пространстве.");
+    return parts.join(" ");
+  }
+
+  function buildAssetDetailNote(asset) {
+    var parts = ["Локальный ассет NOFIDA со сведениями об источнике и лицензии."];
+    parts.push(asset.attributionRequired ? "Для публикации сохраните атрибуцию." : "Атрибуция не требуется.");
+    parts.push(asset.commercialUseAllowed ? "Разрешено для коммерческого использования." : "Перед коммерческим использованием проверьте условия лицензии.");
+    return parts.join(" ");
+  }
+
+  function buildPatternDetailNote(pattern) {
+    var sourceModel = pattern.sourceModel ? " Основа: " + pattern.sourceModel + "." : "";
+    return "Компактный ориентир для экранов NOFIDA." + sourceModel + " Используйте структуру и токены как отправную точку, затем адаптируйте под свой сценарий.";
+  }
+
   function loadJson(cacheKey, urls) {
     if (state[cacheKey]) return Promise.resolve(state[cacheKey]);
     if (state.pending[cacheKey]) return state.pending[cacheKey];
@@ -318,43 +509,26 @@
     return state.pending[cacheKey];
   }
 
-  function arrayify(value) {
-    if (Array.isArray(value)) return value.filter(Boolean);
-    if (!value && value !== 0) return [];
-    return [value];
-  }
-
-  function humanInstallState(value) {
-    if (!value) return "Needs review";
-    var normalized = String(value).toLowerCase();
-    if (normalized === "available") return "Available";
-    if (normalized === "installed") return "Installed";
-    if (normalized === "planned") return "Planned";
-    if (normalized === "upload_required") return "Upload required";
-    if (normalized === "needs_review") return "Needs review";
-    if (normalized === "not_supported_yet") return "Native upload required";
-    return String(value).replace(/_/g, " ");
-  }
-
   function normalizeFontCatalog(catalog) {
-    var audit = catalog.fontInstallFeasibility || catalog.penpotAudit || {};
+    var audit = catalog.fontInstallFeasibility || {};
     var fonts = (Array.isArray(catalog.fonts) ? catalog.fonts : []).map(function (font) {
       var previewFilePath = font.previewFilePath || font.preview_file_path || "";
       var localFilePaths = arrayify(font.localFilePaths || font.local_file_paths);
       return {
         id: font.id || font.family || "",
-        family: font.family || font.id || "Untitled family",
+        family: font.family || font.id || "Без названия",
         category: font.category || "sans",
         mood: arrayify(font.mood),
         useCases: arrayify(font.useCases || font.recommendedUseCase),
         languageCoverage: arrayify(font.languageCoverage),
-        license: font.license || "Review",
+        license: font.license || "Проверка",
         licenseUrl: font.licenseUrl || "",
         attributionRequired: Boolean(font.attributionRequired),
         pairingSuggestions: arrayify(font.pairingSuggestions),
         fileStatus: font.fileStatus || (localFilePaths.length ? "available" : "planned"),
         approvalStatus: font.approvalStatus || "approved",
         sourceName: font.sourceName || "NOFIDA",
+        sourceAuthor: font.sourceAuthor || "",
         sourceUrl: font.sourceUrl || "",
         previewText: font.previewText || font.family || "",
         previewFilePath: previewFilePath || localFilePaths[0] || "",
@@ -362,16 +536,18 @@
         recommendedUseCase: font.recommendedUseCase || arrayify(font.useCases)[0] || "",
         commercialUseAllowed: font.commercialUseAllowed !== false,
         modificationAllowed: font.modificationAllowed !== false,
-        redistributionAllowed: font.redistributionAllowed !== false
+        redistributionAllowed: font.redistributionAllowed !== false,
+        reviewNotes: font.reviewNotes || "",
+        approvedAt: font.approvedAt || ""
       };
     });
 
     return {
       fonts: fonts,
       storeRoot: catalog.storeRoot || "/opt/nofida-core/font-store",
-      uploadFormats: arrayify(audit.supportedUploadFormats || audit.customUploadFormats || ["ttf", "otf", "woff", "woff2"]),
-      automatedInstall: audit.automatedInstall || audit.globalInstallFeasibility || "not_supported_yet",
-      recommendedNextStep: audit.recommendedNextStep || "Download a reviewed font and use the native font upload flow when the font is not already in the workspace.",
+      uploadFormats: arrayify(audit.supportedUploadFormats || ["ttf", "otf", "woff", "woff2"]),
+      automatedInstall: audit.automatedInstall || "not_supported_yet",
+      recommendedNextStep: audit.recommendedNextStep || "Скачайте проверенный файл и добавьте его через нативную загрузку.",
       nativeUploadRoutePattern: audit.nativeUploadRoutePattern || "#/dashboard/team/:team-id/fonts",
       selectionBoundary: catalog.selectionBoundary || null
     };
@@ -381,7 +557,7 @@
     var assets = (Array.isArray(catalog.assets) ? catalog.assets : []).map(function (asset) {
       return {
         id: asset.id || asset.title || "",
-        title: asset.title || asset.id || "Untitled asset",
+        title: asset.title || asset.id || "Без названия",
         category: asset.category || "media",
         style: asset.style || "",
         mood: asset.mood || "",
@@ -391,6 +567,7 @@
         license: asset.license || "review",
         licenseUrl: asset.licenseUrl || "",
         sourceName: asset.sourceName || asset.source || "NOFIDA",
+        sourceAuthor: asset.sourceAuthor || "",
         sourceUrl: asset.sourceUrl || "",
         internalUrl: asset.localFilePath || asset.internalUrl || asset.internal_url || "",
         thumbnailUrl: asset.thumbnailPath || asset.thumbnailUrl || asset.thumbnail_url || asset.localFilePath || "",
@@ -400,14 +577,17 @@
         attributionRequired: Boolean(asset.attributionRequired),
         commercialUseAllowed: asset.commercialUseAllowed !== false,
         modificationAllowed: asset.modificationAllowed !== false,
-        redistributionAllowed: asset.redistributionAllowed !== false
+        redistributionAllowed: asset.redistributionAllowed !== false,
+        reviewNotes: asset.reviewNotes || "",
+        approvedAt: asset.approvedAt || "",
+        supportsProjectInsert: asset.supportsProjectInsert === true
       };
     });
 
     var uiPatterns = (Array.isArray(catalog.uiPatterns) ? catalog.uiPatterns : []).map(function (pattern) {
       return {
         id: pattern.id || pattern.title || "",
-        title: pattern.title || pattern.id || "Untitled pattern",
+        title: pattern.title || pattern.id || "Без названия",
         category: "ui-patterns",
         sourceModel: pattern.sourceModel || "",
         sourceName: pattern.sourceName || pattern.sourceModel || "NOFIDA",
@@ -485,10 +665,10 @@
     var nav = getNav();
     if (!nav) {
       var items = [
-        { id: "libraries", label: "Libraries", href: "#/nofida/libraries" },
-        { id: "fonts", label: "Font Catalog", href: PAGE_ROUTES.fonts },
-        { id: "media", label: "Media Bank", href: PAGE_ROUTES.media },
-        { id: "figma", label: "Figma Migration", href: PAGE_ROUTES.figma }
+        { id: "libraries", label: "Библиотеки", href: "#/nofida/libraries" },
+        { id: "fonts", label: "Шрифты", href: PAGE_ROUTES.fonts },
+        { id: "media", label: "Медиабанк", href: PAGE_ROUTES.media },
+        { id: "figma", label: "Импорт из Figma", href: PAGE_ROUTES.figma }
       ];
       return items.map(function (item) {
         var classes = ["nfr-nav-link"];
@@ -511,21 +691,22 @@
     return [
       '<div class="nfr-meta-block">',
       '  <strong>' + escapeHtml(label) + "</strong>",
-      '  <span>' + escapeHtml(value) + "</span>",
+      '  <span>' + escapeHtml(value || "—") + "</span>",
       "</div>"
     ].join("");
   }
 
-  function renderAuditList(title, items) {
+  function renderNotePanel(label, title, copy, list) {
     return [
       '<section class="nfr-panel">',
-      '  <p class="nfr-label">Operational notes</p>',
+      '  <p class="nfr-label">' + escapeHtml(label) + "</p>",
       '  <h2>' + escapeHtml(title) + "</h2>",
-      '  <ul class="nfr-list">',
-      (items || []).map(function (item) {
-        return "<li>" + escapeHtml(item) + "</li>";
-      }).join(""),
-      "  </ul>",
+      copy ? '<p class="nfr-panel-copy">' + escapeHtml(copy) + "</p>" : "",
+      Array.isArray(list) && list.length ? [
+        '  <ul class="nfr-list">',
+        list.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join(""),
+        "  </ul>"
+      ].join("") : "",
       "</section>"
     ].join("");
   }
@@ -545,99 +726,11 @@
     return haystack.indexOf(query) >= 0;
   }
 
-  function renderFontCard(font, isNativeSurface) {
-    var fontFamily = font.runtimeFontFamily || font.family || "Inter";
-    var previewStyle = "font-family:'" + String(fontFamily).replace(/'/g, "\\'") + "',Inter,\"Segoe UI\",system-ui,sans-serif";
-    var downloadUrl = font.previewFilePath || (font.localFilePaths || [])[0] || "";
-    var canDownload = font.approvalStatus === "approved" && !!downloadUrl;
-    return [
-      '<article class="nfr-card">',
-      '  <div class="nfr-card-top">',
-      "    <div>",
-      '      <p class="nfr-label">Font family</p>',
-      '      <h3>' + escapeHtml(font.family) + "</h3>",
-      "    </div>",
-      '    <div class="nfr-pill-row">',
-      '      <span class="nfr-pill">' + escapeHtml(font.category) + "</span>",
-      '      <span class="nfr-pill good">' + escapeHtml(font.license) + "</span>",
-      '      <span class="nfr-pill ' + (font.approvalStatus === "approved" ? "good" : "warn") + '">' + escapeHtml(font.approvalStatus) + "</span>",
-      "    </div>",
-      "  </div>",
-      '  <div class="nfr-preview" style="' + escapeHtml(previewStyle) + '">' + escapeHtml(font.previewText || font.family) + "</div>",
-      '  <p class="nfr-card-copy">' + escapeHtml(font.recommendedUseCase || "Reviewed open-license family for NOFIDA.") + "</p>",
-      '  <div class="nfr-meta">',
-      renderMetaBlock("Language coverage", arrayify(font.languageCoverage).join(", ")),
-      renderMetaBlock("File status", humanInstallState(font.fileStatus)),
-      renderMetaBlock("Pairing", arrayify(font.pairingSuggestions).join(", ")),
-      renderMetaBlock("Mood", arrayify(font.mood).join(", ")),
-      "  </div>",
-      '  <div class="nfr-tag-row">',
-      arrayify(font.useCases).map(function (tag) {
-        return '<span class="nfr-tag">' + escapeHtml(tag) + "</span>";
-      }).join(""),
-      "  </div>",
-      '  <div class="nfr-card-actions">',
-      canDownload
-        ? '<a class="nfr-link-btn" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noreferrer">Download font</a>'
-        : '<span class="nfr-pill warn">Download pending</span>',
-      isNativeSurface
-        ? '<button class="nfr-copy-btn" type="button" data-nfr-native-nav="upload">Open upload</button>'
-        : '<a class="nfr-link-btn" href="' + escapeHtml(nativeFontsHash()) + '" data-nfr-action="native-fonts">Open native Fonts</a>',
-      "  </div>",
-      "</article>"
-    ].join("");
-  }
-
-  function renderFontExplorer(target, normalized, filterKey, isNativeSurface) {
-    var filterState = state.filters[filterKey];
-    var categories = ["all"].concat(normalized.fonts.map(function (font) { return font.category; }).filter(function (value, index, arr) {
-      return value && arr.indexOf(value) === index;
-    }));
-    var matches = normalized.fonts.filter(function (font) {
-      return fontMatches(font, filterState);
-    });
-
-    ensurePreviewFonts(matches.slice(0, 12));
-    matches.forEach(function (font) {
-      if (!font.runtimeFontFamily) font.runtimeFontFamily = "NOFIDA-" + font.id;
-    });
-
-    target.innerHTML = [
-      '<section class="nfr-panel">',
-      '  <div class="nfr-section-head">',
-      '    <div>',
-      '      <p class="nfr-label">Reviewed inventory</p>',
-      '      <h2 class="nfr-section-title">' + escapeHtml(isNativeSurface ? "Рекомендованные шрифты NOFIDA" : "Проверенный каталог шрифтов") + "</h2>",
-      "    </div>",
-      '    <div class="nfr-pill-row">',
-      '      <span class="nfr-pill">' + escapeHtml(String(matches.length)) + " shown</span>",
-      '      <span class="nfr-pill ' + (normalized.automatedInstall === "supported" ? "good" : "warn") + '">' + escapeHtml(humanInstallState(normalized.automatedInstall)) + "</span>",
-      "    </div>",
-      "  </div>",
-      '  <p class="nfr-panel-copy">Installation uses the native font upload flow until automated installation is verified. NOFIDA does not fake installed state.</p>',
-      '  <div class="nfr-toolbar">',
-      '    <input class="nfr-filter-search" data-nfr-filter="' + escapeHtml(filterKey) + ':query" type="search" placeholder="Search family, use case, mood, coverage..." value="' + escapeHtml(filterState.query || "") + '"/>',
-      '    <select class="nfr-filter-select" data-nfr-filter="' + escapeHtml(filterKey) + ':category">',
-      categories.map(function (category) {
-        return '<option value="' + escapeHtml(category) + '"' + (filterState.category === category ? " selected" : "") + ">" + escapeHtml(category === "all" ? "All categories" : category) + "</option>";
-      }).join(""),
-      "    </select>",
-      '    <select class="nfr-filter-select" disabled><option>' + escapeHtml("Native upload: " + normalized.uploadFormats.join(" / ").toUpperCase()) + "</option></select>",
-      "  </div>",
-      "  <div class=\"nfr-grid\">",
-      matches.length ? matches.map(function (font) { return renderFontCard(font, isNativeSurface); }).join("") : '<div class="nfr-empty">По этому запросу пока нет подходящих шрифтов.</div>',
-      "  </div>",
-      "</section>"
-    ].join("");
-
-    bindActionHandlers(target);
-    bindFilterHandlers(target, normalized, filterKey, isNativeSurface ? "font-native" : "font-overlay");
-    bindNativeTabHandlers(target);
-  }
-
   function assetMatches(asset, filterState) {
     var query = String(filterState.query || "").toLowerCase().trim();
     if (filterState.category !== "all" && asset.category !== filterState.category) return false;
+    if (filterState.style !== "all" && asset.style !== filterState.style) return false;
+    if (filterState.mood !== "all" && asset.mood !== filterState.mood) return false;
     if (filterState.license !== "all" && asset.license !== filterState.license) return false;
     if (!query) return true;
     var haystack = [
@@ -649,6 +742,51 @@
       asset.sourceName
     ].concat(asset.useCases || [], asset.tags || []).join(" ").toLowerCase();
     return haystack.indexOf(query) >= 0;
+  }
+
+  function renderFontCard(font, isNativeSurface) {
+    var fontFamily = font.runtimeFontFamily || font.family || "Inter";
+    var previewStyle = "font-family:'" + String(fontFamily).replace(/'/g, "\\'") + "',Inter,\"Segoe UI\",system-ui,sans-serif";
+    var downloadUrl = font.previewFilePath || (font.localFilePaths || [])[0] || "";
+    var canDownload = font.approvalStatus === "approved" && !!downloadUrl;
+    return [
+      '<article class="nfr-card">',
+      '  <div class="nfr-card-top">',
+      "    <div>",
+      '      <p class="nfr-label">Семейство</p>',
+      '      <h3>' + escapeHtml(font.family) + "</h3>",
+      "    </div>",
+      '    <div class="nfr-pill-row">',
+      '      <span class="nfr-pill">' + escapeHtml(font.category) + "</span>",
+      '      <span class="nfr-pill good">' + escapeHtml(font.license) + "</span>",
+      '      <span class="nfr-pill ' + (font.approvalStatus === "approved" ? "good" : "warn") + '">' + escapeHtml(titleCaseStatus(font.approvalStatus, "Проверка")) + "</span>",
+      "    </div>",
+      "  </div>",
+      '  <div class="nfr-preview" style="' + escapeHtml(previewStyle) + '">' + escapeHtml(font.previewText || font.family) + "</div>",
+      '  <p class="nfr-card-copy">' + escapeHtml(font.recommendedUseCase || "Проверенное семейство для продуктовых интерфейсов и макетов.") + "</p>",
+      '  <div class="nfr-meta">',
+      renderMetaBlock("Языки", arrayify(font.languageCoverage).join(", ")),
+      renderMetaBlock("Статус файла", humanInstallState(font.fileStatus)),
+      renderMetaBlock("Сочетания", arrayify(font.pairingSuggestions).slice(0, 3).join(", ")),
+      renderMetaBlock("Характер", arrayify(font.mood).slice(0, 3).join(", ")),
+      "  </div>",
+      '  <div class="nfr-tag-row">',
+      arrayify(font.useCases).map(function (tag) {
+        return '<span class="nfr-tag">' + escapeHtml(tag) + "</span>";
+      }).join(""),
+      "  </div>",
+      '  <div class="nfr-card-actions">',
+      canDownload
+        ? '<a class="nfr-link-btn" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noreferrer">Скачать</a>'
+        : '<span class="nfr-pill warn">Скачивание недоступно</span>',
+      isNativeSurface
+        ? '<button class="nfr-copy-btn" type="button" data-nfr-native-nav="upload">Открыть загрузку</button>'
+        : '<a class="nfr-link-btn" href="' + escapeHtml(nativeFontsHash()) + '" data-nfr-action="native-fonts">Открыть загрузку</a>',
+      '<button class="nfr-copy-btn" type="button" data-copy-name="' + escapeHtml(font.family) + '">Копировать название</button>',
+      '<button class="nfr-icon-btn" type="button" data-nfr-detail-kind="font" data-nfr-detail-id="' + escapeHtml(font.id) + '" data-nfr-detail-source="' + escapeHtml(isNativeSurface ? "native" : "overlay") + '">Подробнее</button>',
+      "  </div>",
+      "</article>"
+    ].join("");
   }
 
   function renderMediaCard(asset) {
@@ -664,23 +802,30 @@
       '    <div class="nfr-pill-row">',
       '      <span class="nfr-pill">' + escapeHtml(asset.format) + "</span>",
       '      <span class="nfr-pill good">' + escapeHtml(asset.license) + "</span>",
-      '      <span class="nfr-pill ' + (usable ? "good" : "warn") + '">' + escapeHtml(asset.approvalStatus) + "</span>",
+      '      <span class="nfr-pill ' + (usable ? "good" : "warn") + '">' + escapeHtml(titleCaseStatus(asset.approvalStatus, "Проверка")) + "</span>",
       "    </div>",
       "  </div>",
       '  <p class="nfr-card-copy">' + escapeHtml([asset.style, asset.mood, asset.audience].filter(Boolean).join(" · ")) + "</p>",
       '  <div class="nfr-meta">',
-      renderMetaBlock("Use cases", arrayify(asset.useCases).join(", ")),
-      renderMetaBlock("Source", asset.sourceName),
-      renderMetaBlock("Colors", arrayify(asset.dominantColors).join(", ")),
-      renderMetaBlock("Tags", arrayify(asset.tags).join(", ")),
+      renderMetaBlock("Сценарии", arrayify(asset.useCases).slice(0, 3).join(", ")),
+      renderMetaBlock("Источник", asset.sourceName),
+      renderMetaBlock("Цвета", arrayify(asset.dominantColors).slice(0, 3).join(", ")),
+      renderMetaBlock("Теги", arrayify(asset.tags).slice(0, 4).join(", ")),
       "  </div>",
       '  <div class="nfr-card-actions">',
       usable && asset.internalUrl
-        ? '<a class="nfr-link-btn" href="' + escapeHtml(asset.internalUrl) + '" target="_blank" rel="noreferrer">Download</a>'
-        : '<span class="nfr-pill warn">License review needed</span>',
+        ? '<a class="nfr-link-btn" href="' + escapeHtml(asset.internalUrl) + '" target="_blank" rel="noreferrer">Скачать</a>'
+        : '<span class="nfr-pill warn">Пока без выдачи</span>',
       usable && asset.internalUrl
-        ? '<button class="nfr-copy-btn" type="button" data-copy-url="' + escapeHtml(asset.internalUrl) + '">Copy internal link</button>'
+        ? '<button class="nfr-copy-btn" type="button" data-copy-url="' + escapeHtml(asset.internalUrl) + '">Копировать ссылку</button>'
         : "",
+      usable && asset.internalUrl && /\.svg(?:$|\?)/i.test(asset.internalUrl)
+        ? '<button class="nfr-copy-btn" type="button" data-copy-svg="' + escapeHtml(asset.internalUrl) + '">Скопировать SVG</button>'
+        : "",
+      '<button class="nfr-icon-btn" type="button" data-nfr-detail-kind="media" data-nfr-detail-id="' + escapeHtml(asset.id) + '">Открыть детали</button>',
+      asset.supportsProjectInsert
+        ? '<a class="nfr-link-btn" href="' + escapeHtml(asset.internalUrl) + '" target="_blank" rel="noreferrer">Использовать в проекте</a>'
+        : '<button class="nfr-disabled-btn" type="button" data-nfr-disabled-msg="Автоматическое добавление в файл будет подключено позже." title="Автоматическое добавление в файл будет подключено позже.">Использовать в проекте</button>',
       "  </div>",
       "</article>"
     ].join("");
@@ -692,7 +837,7 @@
       pattern.previewPath ? '<img class="nfr-pattern-thumb" src="' + escapeHtml(pattern.previewPath) + '" alt="' + escapeHtml(pattern.title) + '"/>' : "",
       '  <div class="nfr-card-top">',
       "    <div>",
-      '      <p class="nfr-label">UI pattern</p>',
+      '      <p class="nfr-label">UI-паттерн</p>',
       '      <h3>' + escapeHtml(pattern.title) + "</h3>",
       "    </div>",
       '    <div class="nfr-pill-row">',
@@ -700,28 +845,76 @@
       '      <span class="nfr-pill good">' + escapeHtml(pattern.license || "MIT") + "</span>",
       "    </div>",
       "  </div>",
-      '  <p class="nfr-card-copy">' + escapeHtml(pattern.originalDescription || pattern.recommendedUse || "") + "</p>",
+      '  <p class="nfr-card-copy">' + escapeHtml(pattern.recommendedUse || "") + "</p>",
       '  <div class="nfr-meta">',
-      renderMetaBlock("Recommended use", pattern.recommendedUse || ""),
-      renderMetaBlock("Approval", pattern.approvalStatus || "approved"),
+      renderMetaBlock("Источник", pattern.sourceName || pattern.sourceModel || "NOFIDA"),
+      renderMetaBlock("Статус", titleCaseStatus(pattern.approvalStatus, "Проверено")),
       "  </div>",
       '  <div class="nfr-tag-row">',
       arrayify(pattern.tokens).map(function (token) {
         return '<span class="nfr-tag">' + escapeHtml(token) + "</span>";
       }).join(""),
       "  </div>",
+      '  <div class="nfr-card-actions">',
+      '<button class="nfr-icon-btn" type="button" data-nfr-detail-kind="pattern" data-nfr-detail-id="' + escapeHtml(pattern.id) + '">Открыть детали</button>',
+      "  </div>",
       "</article>"
     ].join("");
   }
 
+  function renderFontExplorer(target, normalized, filterKey, isNativeSurface) {
+    var filterState = state.filters[filterKey];
+    var categories = ["all"].concat(unique(normalized.fonts.map(function (font) { return font.category; })));
+    var matches = normalized.fonts.filter(function (font) {
+      return fontMatches(font, filterState);
+    });
+
+    ensurePreviewFonts(matches.slice(0, 14));
+    matches.forEach(function (font) {
+      if (!font.runtimeFontFamily) font.runtimeFontFamily = "NOFIDA-" + font.id;
+    });
+
+    target.innerHTML = [
+      '<section class="nfr-panel">',
+      '  <div class="nfr-section-head">',
+      '    <div>',
+      '      <p class="nfr-label">Каталог</p>',
+      '      <h2 class="nfr-section-title">' + escapeHtml(isNativeSurface ? "Рекомендованные шрифты" : "Проверенный каталог шрифтов") + "</h2>",
+      "    </div>",
+      '    <div class="nfr-pill-row">',
+      '      <span class="nfr-pill">' + escapeHtml(String(matches.length)) + " семейст.</span>",
+      '      <span class="nfr-pill warn">' + escapeHtml(humanInstallState(normalized.automatedInstall)) + "</span>",
+      "    </div>",
+      "  </div>",
+      '  <p class="nfr-panel-copy">Выберите проверенный шрифт NOFIDA или загрузите свой. Шрифты можно скачать и добавить через нативную загрузку.</p>',
+      '  <div class="nfr-toolbar">',
+      '    <input class="nfr-filter-search" data-nfr-filter="' + escapeHtml(filterKey) + ':query" type="search" placeholder="Найти семейство, сценарий, язык или настроение..." value="' + escapeHtml(filterState.query || "") + '"/>',
+      '    <select class="nfr-filter-select" data-nfr-filter="' + escapeHtml(filterKey) + ':category">',
+      categories.map(function (category) {
+        return '<option value="' + escapeHtml(category) + '"' + (filterState.category === category ? " selected" : "") + ">" + escapeHtml(category === "all" ? "Все категории" : category) + "</option>";
+      }).join(""),
+      "    </select>",
+      '    <select class="nfr-filter-select" disabled><option>' + escapeHtml("Загрузка: " + normalized.uploadFormats.join(" / ").toUpperCase()) + "</option></select>",
+      '    <select class="nfr-filter-select" disabled><option>' + escapeHtml("Источник и лицензия: доступны в деталях") + "</option></select>",
+      '    <select class="nfr-filter-select" disabled><option>' + escapeHtml("Автоматическая установка позже") + "</option></select>",
+      "  </div>",
+      '  <div class="nfr-grid">',
+      matches.length ? matches.map(function (font) { return renderFontCard(font, isNativeSurface); }).join("") : '<div class="nfr-empty">По этому запросу пока нет подходящих шрифтов.</div>',
+      "  </div>",
+      "</section>"
+    ].join("");
+
+    bindActionHandlers(target);
+    bindFilterHandlers(target, normalized, filterKey, isNativeSurface ? "font-native" : "font-overlay");
+    bindNativeTabHandlers(target);
+  }
+
   function renderMediaExplorer(target, normalized) {
     var filterState = state.filters.media;
-    var categories = ["all"].concat(normalized.assets.map(function (asset) { return asset.category; }).filter(function (value, index, arr) {
-      return value && arr.indexOf(value) === index;
-    }));
-    var licenses = ["all"].concat(normalized.assets.map(function (asset) { return asset.license; }).filter(function (value, index, arr) {
-      return value && arr.indexOf(value) === index;
-    }));
+    var categories = ["all"].concat(unique(normalized.assets.map(function (asset) { return asset.category; })));
+    var styles = ["all"].concat(unique(normalized.assets.map(function (asset) { return asset.style; })));
+    var moods = ["all"].concat(unique(normalized.assets.map(function (asset) { return asset.mood; })));
+    var licenses = ["all"].concat(unique(normalized.assets.map(function (asset) { return asset.license; })));
     var assets = normalized.assets.filter(function (asset) {
       return assetMatches(asset, filterState);
     });
@@ -730,36 +923,47 @@
       '<section class="nfr-panel">',
       '  <div class="nfr-section-head">',
       '    <div>',
-      '      <p class="nfr-label">Approved media inventory</p>',
-      '      <h2 class="nfr-section-title">Search the NOFIDA media store</h2>',
+      '      <p class="nfr-label">Медиабанк</p>',
+      '      <h2 class="nfr-section-title">Поиск ассетов и паттернов</h2>',
       "    </div>",
       '    <div class="nfr-pill-row">',
-      '      <span class="nfr-pill">' + escapeHtml(String(assets.length)) + " shown</span>",
-      '      <span class="nfr-pill">' + escapeHtml(String(normalized.uiPatterns.length)) + " UI patterns</span>",
+      '      <span class="nfr-pill">' + escapeHtml(String(assets.length)) + " ассет.</span>",
+      '      <span class="nfr-pill">' + escapeHtml(String(normalized.uiPatterns.length)) + " UI-паттерн.</span>",
       "    </div>",
       "  </div>",
+      '  <p class="nfr-panel-copy">Все материалы хранятся внутри NOFIDA и имеют сведения об источнике и лицензии. Вы можете скачать ассет или использовать его как основу для проекта.</p>',
       '  <div class="nfr-toolbar">',
-      '    <input class="nfr-filter-search" data-nfr-filter="media:query" type="search" placeholder="Search category, tag, mood, source..." value="' + escapeHtml(filterState.query || "") + '"/>',
+      '    <input class="nfr-filter-search" data-nfr-filter="media:query" type="search" placeholder="Найти категорию, тег, источник или сценарий..." value="' + escapeHtml(filterState.query || "") + '"/>',
       '    <select class="nfr-filter-select" data-nfr-filter="media:category">',
       categories.map(function (category) {
-        return '<option value="' + escapeHtml(category) + '"' + (filterState.category === category ? " selected" : "") + ">" + escapeHtml(category === "all" ? "All categories" : category) + "</option>";
+        return '<option value="' + escapeHtml(category) + '"' + (filterState.category === category ? " selected" : "") + ">" + escapeHtml(category === "all" ? "Все категории" : category) + "</option>";
+      }).join(""),
+      "    </select>",
+      '    <select class="nfr-filter-select" data-nfr-filter="media:style">',
+      styles.map(function (style) {
+        return '<option value="' + escapeHtml(style) + '"' + (filterState.style === style ? " selected" : "") + ">" + escapeHtml(style === "all" ? "Все стили" : style) + "</option>";
+      }).join(""),
+      "    </select>",
+      '    <select class="nfr-filter-select" data-nfr-filter="media:mood">',
+      moods.map(function (mood) {
+        return '<option value="' + escapeHtml(mood) + '"' + (filterState.mood === mood ? " selected" : "") + ">" + escapeHtml(mood === "all" ? "Все настроения" : mood) + "</option>";
       }).join(""),
       "    </select>",
       '    <select class="nfr-filter-select" data-nfr-filter="media:license">',
       licenses.map(function (license) {
-        return '<option value="' + escapeHtml(license) + '"' + (filterState.license === license ? " selected" : "") + ">" + escapeHtml(license === "all" ? "All licenses" : license) + "</option>";
+        return '<option value="' + escapeHtml(license) + '"' + (filterState.license === license ? " selected" : "") + ">" + escapeHtml(license === "all" ? "Все лицензии" : license) + "</option>";
       }).join(""),
       "    </select>",
       "  </div>",
-      "  <div class=\"nfr-grid\">",
-      assets.length ? assets.map(renderMediaCard).join("") : '<div class="nfr-empty">No media matches this filter set yet.</div>',
+      '  <div class="nfr-grid">',
+      assets.length ? assets.map(renderMediaCard).join("") : '<div class="nfr-empty">По этим фильтрам пока ничего не найдено.</div>',
       "  </div>",
       "</section>",
       normalized.uiPatterns.length ? [
         '<section class="nfr-panel">',
-        '  <p class="nfr-label">UI Patterns</p>',
-        '  <h2>Pattern registry</h2>',
-        '  <p class="nfr-panel-copy">shadcn/ui and Radix UI are treated as source models for interaction patterns, not as copied docs or media packs.</p>',
+        '  <p class="nfr-label">UI-паттерны</p>',
+        "  <h2>Компактный реестр интерфейсных решений</h2>",
+        '  <p class="nfr-panel-copy">Паттерны помогают быстро выбрать направление для onboarding, empty state, настроек и плотных рабочих экранов.</p>',
         '  <div class="nfr-pattern-grid">',
         normalized.uiPatterns.map(renderPatternCard).join(""),
         "  </div>",
@@ -768,7 +972,7 @@
     ].join("");
 
     bindFilterHandlers(target, normalized, "media", "media");
-    bindCopyButtons(target);
+    bindActionHandlers(target);
   }
 
   function renderFontBody(catalog) {
@@ -777,15 +981,20 @@
     return [
       '<div class="nfr-stack">',
       renderStats([
-        { value: String(normalized.fonts.length), label: "Reviewed open-license families" },
-        { value: String(approvedCount), label: "Approved for product use" },
-        { value: normalized.uploadFormats.join(" / ").toUpperCase(), label: "Native upload formats" }
+        { value: String(normalized.fonts.length), label: "Проверенные семейства" },
+        { value: String(approvedCount), label: "Готовы к использованию" },
+        { value: normalized.uploadFormats.join(" / ").toUpperCase(), label: "Форматы нативной загрузки" }
       ]),
-      renderAuditList("Native font workflow", [
-        "Рекомендованные шрифты NOFIDA должны отображаться перед пользовательскими загрузками в нативном экране шрифтов.",
-        "Download a reviewed font, then continue through the native upload flow until automation is verified.",
-        "Do not fake installed state, server-wide rollout, or success messages that are not backed by the product."
-      ]),
+      renderNotePanel(
+        "Как использовать",
+        "Стабильный сценарий со шрифтами",
+        "Основной рабочий путь остается нативным: выберите семейство, скачайте файл и загрузите его в пространство команды.",
+        [
+          "Выберите проверенный шрифт NOFIDA или загрузите свой.",
+          "Шрифты можно скачать и добавить через нативную загрузку.",
+          "Автоматическая установка будет включена после безопасного подключения к системному хранилищу шрифтов."
+        ]
+      ),
       '<div id="nfr-font-explorer"></div>',
       "</div>"
     ].join("");
@@ -796,49 +1005,149 @@
     return [
       '<div class="nfr-stack">',
       renderStats([
-        { value: String(normalized.assets.length), label: "Same-origin assets" },
-        { value: String(normalized.uiPatterns.length), label: "UI pattern entries" },
-        { value: String(normalized.storeRoot), label: "Canonical store root" }
+        { value: String(normalized.assets.length), label: "Локальные ассеты" },
+        { value: String(normalized.assets.filter(function (asset) { return !!asset.thumbnailUrl; }).length), label: "Миниатюры" },
+        { value: String(normalized.uiPatterns.length), label: "UI-паттерны" }
       ]),
-      renderAuditList("Resource factory rules", [
-        "Each resource keeps source, license, attribution, and approval state.",
-        "Only approved resources expose product-ready actions.",
-        "Adapted resources remain attributable to their source model where required."
-      ]),
+      renderNotePanel(
+        "Что внутри",
+        "Проверенный набор для интерфейсов и презентаций",
+        "Медиабанк собран для быстрых продуктовых сценариев: иконки, иллюстрации, фоны, empty states и интерфейсные заготовки.",
+        [
+          "Все материалы хранятся внутри NOFIDA и имеют сведения об источнике и лицензии.",
+          "Кнопки на карточках ведут только к локальным действиям: скачать, скопировать ссылку, скопировать SVG и открыть детали.",
+          "Автоматическое добавление в файл будет подключено позже."
+        ]
+      ),
       '<div id="nfr-media-explorer"></div>',
       "</div>"
     ].join("");
   }
 
   function renderFigmaBody() {
+    var draft = state.figmaDraft;
+    var report = state.figmaReport;
+    var stage = state.figmaStage;
     return [
       '<div class="nfr-stack">',
       renderStats([
-        { value: "Exports first", label: "Start with .penpot, .zip, SVG, PNG, PDF, and packaged assets" },
-        { value: "Report before convert", label: "Pages, frames, assets, fonts, and risks are audited up front" },
-        { value: "No 1:1 promise", label: "Prototype fidelity and component parity remain follow-up engineering work" }
+        { value: "URL + файлы", label: "Ссылка, экспорт и пакет ассетов собираются в одном запросе" },
+        { value: "План переноса", label: "Сначала анализируются страницы, шрифты, ассеты и риски" },
+        { value: "Без ложной 1:1 гарантии", label: "Сложные компоненты и прототипы отмечаются в отчете отдельно" }
       ]),
       '<section class="nfr-panel">',
-      '  <p class="nfr-label">Сценарий миграции</p>',
-      "  <h2>Рекомендуемый путь</h2>",
-      '  <div class="nfr-flow-grid">',
-      '    <article class="nfr-flow-card"><h3>1. Intake</h3><p>Collect export bundles, image assets, archive files, and future connector placeholders in one package.</p></article>',
-      '    <article class="nfr-flow-card"><h3>2. Inventory</h3><p>Count pages, frames, components, assets, and fonts before any transformation is attempted.</p></article>',
-      '    <article class="nfr-flow-card"><h3>3. Replace</h3><p>Match fonts, libraries, and media against reviewed NOFIDA resources and flag gaps honestly.</p></article>',
-      '    <article class="nfr-flow-card"><h3>4. Report</h3><p>Produce a migration report with missing fonts, suggested NOFIDA replacements, risk level, and manual steps.</p></article>',
+      '  <div class="nfr-section-head">',
+      '    <div>',
+      '      <p class="nfr-label">Помощник миграции</p>',
+      '      <h2 class="nfr-section-title">Подготовьте перенос из Figma</h2>',
+      "    </div>",
+      '    <div class="nfr-pill-row">',
+      draft.savedAt ? '<span class="nfr-pill">Сохранено: ' + escapeHtml(formatSavedAt(draft.savedAt)) + "</span>" : "",
+      stage.updatedAt ? '<span class="nfr-pill good">Черновик обновлен</span>' : "",
+      "    </div>",
+      "  </div>",
+      '  <p class="nfr-panel-copy">NOFIDA сначала анализирует файл и готовит план переноса. Полная точность зависит от структуры исходного проекта.</p>',
+      '  <div class="nfr-form-grid">',
+      '    <div class="nfr-form-panel">',
+      '      <div class="nfr-field">',
+      '        <label for="nfr-figma-url">Ссылка на файл Figma</label>',
+      '        <input id="nfr-figma-url" class="nfr-input" type="url" placeholder="https://www.figma.com/file/..." value="' + escapeHtml(draft.url || "") + '"/>',
+      '        <p class="nfr-helper">Можно оставить поле пустым, если у вас есть только экспорт.</p>',
+      "      </div>",
+      '      <div class="nfr-field">',
+      '        <label for="nfr-figma-token">Токен доступа Figma</label>',
+      '        <input id="nfr-figma-token" class="nfr-input" type="password" placeholder="Введите токен или продолжите позже" value="' + escapeHtml(draft.token || "") + '"' + (draft.connectLater ? " disabled" : "") + '/>',
+      '        <label class="nfr-toggle"><input id="nfr-figma-later" type="checkbox"' + (draft.connectLater ? " checked" : "") + '/><span>Подключить позже</span></label>',
+      '        <p class="nfr-helper">Если токена пока нет, помощник все равно соберет предварительный план по URL, файлам и заметкам.</p>',
+      "      </div>",
+      '      <div class="nfr-field">',
+      '        <label>Файлы и экспорт</label>',
+      '        <label class="nfr-dropzone" for="nfr-figma-files">',
+      '          <strong>Добавить .fig, .zip, .svg, .png, .pdf или пакет ассетов</strong>',
+      '          <span>Файлы не отправляются в проект. Здесь формируется локальный запрос на анализ и список материалов для переноса.</span>',
+      "        </label>",
+      '        <input id="nfr-figma-files" class="nfr-hidden-input" type="file" accept="' + escapeHtml(FIGMA_FILE_ACCEPT) + '" multiple/>',
+      draft.files.length ? '<div class="nfr-file-list">' + draft.files.map(renderFigmaFileChip).join("") + "</div>" : '<div class="nfr-note">Файлы еще не выбраны.</div>',
+      "      </div>",
+      '      <div class="nfr-field">',
+      '        <label for="nfr-figma-notes">Заметки</label>',
+      '        <textarea id="nfr-figma-notes" class="nfr-textarea" placeholder="Что важно сохранить: страницы, бренд, сложные компоненты, ключевые ассеты, сроки...">' + escapeHtml(draft.notes || "") + '</textarea>',
+      '        <p class="nfr-helper">Сложные компоненты, автолэйауты и прототипы могут потребовать ручной проверки.</p>',
+      "      </div>",
+      '      <div class="nfr-action-row">',
+      '        <button id="nfr-figma-submit" class="nfr-btn nfr-btn-primary" type="button">Создать отчёт миграции</button>',
+      '        <button id="nfr-figma-stage" class="nfr-btn nfr-btn-secondary" type="button">Импортировать ассеты</button>',
+      '        <button id="nfr-figma-guide" class="nfr-btn nfr-btn-secondary" type="button">Скачать инструкцию</button>',
+      '        <a class="nfr-btn nfr-btn-secondary" href="' + escapeHtml(PAGE_ROUTES.media) + '" data-nofida-route="' + escapeHtml(PAGE_ROUTES.media) + '">Открыть медиабанк</a>',
+      '        <a class="nfr-btn nfr-btn-secondary" href="' + escapeHtml(PAGE_ROUTES.fonts) + '" data-nofida-route="' + escapeHtml(PAGE_ROUTES.fonts) + '">Подобрать шрифты</a>',
+      "      </div>",
+      stage.message ? '<div class="nfr-note">' + escapeHtml(stage.message) + "</div>" : "",
+      "    </div>",
+      '    <div class="nfr-form-panel" id="nfr-figma-report-anchor">',
+      renderFigmaReport(report),
+      "    </div>",
       "  </div>",
       "</section>",
-      '<section class="nfr-panel">',
-      '  <p class="nfr-label">Migration report preview</p>',
-      "  <h2>What the report should show</h2>",
-      '  <ul class="nfr-list">',
-      "    <li>Pages, frames, and component counts</li>",
-      "    <li>Assets discovered, plus reusable NOFIDA replacements</li>",
-      "    <li>Fonts found, missing fonts, and suggested NOFIDA families</li>",
-      "    <li>Suggested libraries, media substitutions, and risk level</li>",
-      "    <li>Manual follow-up steps instead of false automation claims</li>",
-      "  </ul>",
-      "</section>"
+      "</div>"
+    ].join("");
+  }
+
+  function renderFigmaFileChip(file) {
+    return '<span class="nfr-file-chip">' + escapeHtml(file.name) + " · " + escapeHtml(file.extension.toUpperCase()) + "</span>";
+  }
+
+  function formatSavedAt(value) {
+    try {
+      return new Date(value).toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch (_error) {
+      return value;
+    }
+  }
+
+  function renderFigmaReport(report) {
+    if (!report) {
+      return [
+        '<div class="nfr-report">',
+        '  <div class="nfr-report-block">',
+        "    <h3>Что появится в отчете</h3>",
+        "    <p>После анализа здесь появится краткий план переноса: источник, ожидаемый состав страниц и ассетов, шрифты, медиарекомендации и ручные шаги.</p>",
+        "  </div>",
+        '  <div class="nfr-report-block">',
+        "    <h3>Сейчас можно подготовить</h3>",
+        '    <ul><li>Ссылку на файл или экспорт</li><li>Пакет SVG, PNG, PDF или ZIP</li><li>Заметки о бренде, шрифтах и сложных экранах</li></ul>',
+        "  </div>",
+        "</div>"
+      ].join("");
+    }
+
+    return [
+      '<div class="nfr-report">',
+      '  <div class="nfr-report-block">',
+      "    <h3>Сводка</h3>",
+      "    <p>" + escapeHtml(report.summary) + "</p>",
+      "  </div>",
+      '  <div class="nfr-report-block">',
+      "    <h3>Источник и состав</h3>",
+      '    <ul>' + report.sourceFacts.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("") + "</ul>",
+      "  </div>",
+      '  <div class="nfr-report-block">',
+      "    <h3>Шрифты NOFIDA</h3>",
+      '    <ul>' + report.fontSuggestions.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("") + "</ul>",
+      "  </div>",
+      '  <div class="nfr-report-block">',
+      "    <h3>Библиотеки и медиакатегории</h3>",
+      '    <ul>' + report.resourceSuggestions.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("") + "</ul>",
+      "  </div>",
+      '  <div class="nfr-report-block">',
+      "    <h3>Следующие шаги</h3>",
+      '    <ul>' + report.nextSteps.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("") + "</ul>",
+      "  </div>",
+      "</div>"
     ].join("");
   }
 
@@ -851,8 +1160,120 @@
   }
 
   function bindActionHandlers(root) {
-    Array.prototype.forEach.call(root.querySelectorAll("[data-nfr-action='native-fonts']"), function (node) {
-      node.addEventListener("click", openNativeFonts);
+    if (!root || root.getAttribute("data-nfr-bound") === "true") return;
+    root.setAttribute("data-nfr-bound", "true");
+    root.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      var nativeLink = target.closest("[data-nfr-action='native-fonts']");
+      if (nativeLink) {
+        event.preventDefault();
+        openNativeFonts(event);
+        return;
+      }
+
+      var focusFigma = target.closest("[data-nfr-action='focus-figma-report']");
+      if (focusFigma) {
+        event.preventDefault();
+        if (state.currentPageId !== "figma") {
+          window.location.hash = PAGE_ROUTES.figma.slice(1);
+          return;
+        }
+        var anchor = state.overlayEl && state.overlayEl.querySelector("#nfr-figma-report-anchor");
+        if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      var copyName = target.closest("[data-copy-name]");
+      if (copyName) {
+        event.preventDefault();
+        copyText(copyName.getAttribute("data-copy-name"), "Название скопировано", "Скопируйте название");
+        return;
+      }
+
+      var copyUrl = target.closest("[data-copy-url]");
+      if (copyUrl) {
+        event.preventDefault();
+        copyText(absoluteUrl(copyUrl.getAttribute("data-copy-url")), "Ссылка скопирована", "Скопируйте ссылку");
+        return;
+      }
+
+      var copySvg = target.closest("[data-copy-svg]");
+      if (copySvg) {
+        event.preventDefault();
+        copySvgContent(copySvg.getAttribute("data-copy-svg"));
+        return;
+      }
+
+      var detail = target.closest("[data-nfr-detail-kind]");
+      if (detail) {
+        event.preventDefault();
+        openDetails(
+          detail.getAttribute("data-nfr-detail-kind") || "",
+          detail.getAttribute("data-nfr-detail-id") || "",
+          detail.getAttribute("data-nfr-detail-source") || ""
+        );
+        return;
+      }
+
+      var disabled = target.closest("[data-nfr-disabled-msg]");
+      if (disabled) {
+        event.preventDefault();
+        showToast(disabled.getAttribute("data-nfr-disabled-msg") || "Действие появится позже");
+        return;
+      }
+
+      if (state.currentPageId === "figma") {
+        if (target.id === "nfr-figma-submit") {
+          event.preventDefault();
+          handleFigmaSubmit();
+          return;
+        }
+        if (target.id === "nfr-figma-stage") {
+          event.preventDefault();
+          handleFigmaStage();
+          return;
+        }
+        if (target.id === "nfr-figma-guide") {
+          event.preventDefault();
+          downloadFigmaGuide();
+        }
+      }
+    }, true);
+
+    root.addEventListener("change", function (event) {
+      if (state.currentPageId !== "figma") return;
+      var target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.id === "nfr-figma-later") {
+        state.figmaDraft.connectLater = !!target.checked;
+        if (state.figmaDraft.connectLater) state.figmaDraft.token = "";
+        saveFigmaDraft();
+        rerenderFigma();
+        return;
+      }
+      if (target.id === "nfr-figma-files") {
+        handleFigmaFiles(target.files || []);
+      }
+    });
+
+    root.addEventListener("input", function (event) {
+      if (state.currentPageId !== "figma") return;
+      var target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.id === "nfr-figma-url") {
+        state.figmaDraft.url = target.value;
+        saveFigmaDraft();
+      }
+      if (target.id === "nfr-figma-token") {
+        state.figmaDraft.token = target.value;
+        saveFigmaDraft();
+      }
+      if (target.id === "nfr-figma-notes") {
+        state.figmaDraft.notes = target.value;
+        saveFigmaDraft();
+      }
     });
   }
 
@@ -877,18 +1298,396 @@
     });
   }
 
-  function bindCopyButtons(root) {
-    Array.prototype.forEach.call(root.querySelectorAll("[data-copy-url]"), function (node) {
+  function ensureDetailOverlay() {
+    if (state.detailEl) return state.detailEl;
+    var detail = document.createElement("div");
+    detail.id = DETAIL_ID;
+    detail.setAttribute("hidden", "");
+    detail.innerHTML = '<div class="nfr-detail-shell"><section class="nfr-detail-card" id="nfr-detail-card"></section></div>';
+    detail.addEventListener("click", function (event) {
+      if (event.target === detail || event.target === detail.querySelector(".nfr-detail-shell")) {
+        closeDetails();
+      }
+      var closeButton = event.target instanceof HTMLElement ? event.target.closest("[data-nfr-detail-close]") : null;
+      if (closeButton) closeDetails();
+    });
+    document.body.appendChild(detail);
+    bindActionHandlers(detail);
+    bindNativeTabHandlers(detail);
+    state.detailEl = detail;
+    return detail;
+  }
+
+  function getNormalizedFontState() {
+    return state.fontCatalog ? normalizeFontCatalog(state.fontCatalog) : null;
+  }
+
+  function getNormalizedMediaState() {
+    return state.mediaCatalog ? normalizeMediaCatalog(state.mediaCatalog) : null;
+  }
+
+  function findFontById(fontId) {
+    var normalized = getNormalizedFontState();
+    if (!normalized) return null;
+    return normalized.fonts.find(function (font) { return font.id === fontId; }) || null;
+  }
+
+  function findAssetById(assetId) {
+    var normalized = getNormalizedMediaState();
+    if (!normalized) return null;
+    return normalized.assets.find(function (asset) { return asset.id === assetId; }) || null;
+  }
+
+  function findPatternById(patternId) {
+    var normalized = getNormalizedMediaState();
+    if (!normalized) return null;
+    return normalized.uiPatterns.find(function (pattern) { return pattern.id === patternId; }) || null;
+  }
+
+  function openDetails(kind, id, source) {
+    if (!kind || !id) return;
+    state.detail = { kind: kind, id: id, source: source || "" };
+    var overlay = ensureDetailOverlay();
+    var card = overlay.querySelector("#nfr-detail-card");
+    card.innerHTML = renderDetailBody(kind, id);
+    overlay.removeAttribute("hidden");
+  }
+
+  function closeDetails() {
+    if (!state.detailEl) return;
+    state.detailEl.setAttribute("hidden", "");
+    state.detail = { kind: "", id: "", source: "" };
+  }
+
+  function renderDetailBody(kind, id) {
+    if (kind === "font") {
+      var font = findFontById(id);
+      if (!font) return renderError("Не удалось открыть детали шрифта.");
+      ensurePreviewFonts([font]);
+      if (!font.runtimeFontFamily) font.runtimeFontFamily = "NOFIDA-" + font.id;
+      var previewStyle = "font-family:'" + String(font.runtimeFontFamily).replace(/'/g, "\\'") + "',Inter,\"Segoe UI\",system-ui,sans-serif";
+      var downloadUrl = font.previewFilePath || (font.localFilePaths || [])[0] || "";
+      return [
+        '<div class="nfr-detail-topbar">',
+        '  <div><p class="nfr-label">Шрифт</p><h2>' + escapeHtml(font.family) + '</h2><p class="nfr-detail-copy">' + escapeHtml(font.recommendedUseCase || "Проверенное семейство для интерфейсов, отчетов и презентаций.") + "</p></div>",
+        '  <button class="nfr-back nfr-detail-close" type="button" data-nfr-detail-close="true">Закрыть</button>',
+        "</div>",
+        '<div class="nfr-preview" style="' + escapeHtml(previewStyle) + '">' + escapeHtml(font.previewText || font.family) + "</div>",
+        '<div class="nfr-detail-actions">',
+        downloadUrl ? '<a class="nfr-link-btn" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noreferrer">Скачать</a>' : '<span class="nfr-pill warn">Без файла</span>',
+        state.detail.source === "native"
+          ? '<button class="nfr-copy-btn" type="button" data-nfr-native-nav="upload">Открыть загрузку</button>'
+          : '<a class="nfr-link-btn" href="' + escapeHtml(nativeFontsHash()) + '" data-nfr-action="native-fonts">Открыть загрузку</a>',
+        '<button class="nfr-copy-btn" type="button" data-copy-name="' + escapeHtml(font.family) + '">Копировать название</button>',
+        "</div>",
+        '<div class="nfr-detail-meta">',
+        renderMetaBlock("Категория", font.category),
+        renderMetaBlock("Лицензия", font.license),
+        renderMetaBlock("Языки", arrayify(font.languageCoverage).join(", ")),
+        renderMetaBlock("Сочетания", arrayify(font.pairingSuggestions).join(", ")),
+        renderMetaBlock("Источник", font.sourceName + (font.sourceAuthor ? " · " + font.sourceAuthor : "")),
+        renderMetaBlock("Коммерческое использование", humanBooleanLabel(font.commercialUseAllowed, "Разрешено", "Проверить")),
+        "</div>",
+        '<div class="nfr-note">' + escapeHtml(buildFontDetailNote(font)) + "</div>",
+        '<div class="nfr-tag-row">' + arrayify(font.useCases).map(function (item) { return '<span class="nfr-tag">' + escapeHtml(item) + "</span>"; }).join("") + "</div>"
+      ].join("");
+    }
+
+    if (kind === "media") {
+      var asset = findAssetById(id);
+      if (!asset) return renderError("Не удалось открыть детали ассета.");
+      return [
+        '<div class="nfr-detail-topbar">',
+        '  <div><p class="nfr-label">' + escapeHtml(asset.category) + '</p><h2>' + escapeHtml(asset.title) + '</h2><p class="nfr-detail-copy">' + escapeHtml([asset.style, asset.mood, asset.audience].filter(Boolean).join(" · ")) + "</p></div>",
+        '  <button class="nfr-back nfr-detail-close" type="button" data-nfr-detail-close="true">Закрыть</button>',
+        "</div>",
+        asset.thumbnailUrl ? '<img class="nfr-detail-thumb" src="' + escapeHtml(asset.thumbnailUrl) + '" alt="' + escapeHtml(asset.title) + '"/>' : "",
+        '<div class="nfr-detail-actions">',
+        asset.internalUrl ? '<a class="nfr-link-btn" href="' + escapeHtml(asset.internalUrl) + '" target="_blank" rel="noreferrer">Скачать</a>' : "",
+        asset.internalUrl ? '<button class="nfr-copy-btn" type="button" data-copy-url="' + escapeHtml(asset.internalUrl) + '">Копировать ссылку</button>' : "",
+        asset.internalUrl && /\.svg(?:$|\?)/i.test(asset.internalUrl) ? '<button class="nfr-copy-btn" type="button" data-copy-svg="' + escapeHtml(asset.internalUrl) + '">Скопировать SVG</button>' : "",
+        asset.supportsProjectInsert
+          ? '<a class="nfr-link-btn" href="' + escapeHtml(asset.internalUrl) + '" target="_blank" rel="noreferrer">Использовать в проекте</a>'
+          : '<button class="nfr-disabled-btn" type="button" data-nfr-disabled-msg="Автоматическое добавление в файл будет подключено позже.">Использовать в проекте</button>',
+        "</div>",
+        '<div class="nfr-detail-meta">',
+        renderMetaBlock("Лицензия", asset.license),
+        renderMetaBlock("Источник", asset.sourceName + (asset.sourceAuthor ? " · " + asset.sourceAuthor : "")),
+        renderMetaBlock("Сценарии", arrayify(asset.useCases).join(", ")),
+        renderMetaBlock("Теги", arrayify(asset.tags).join(", ")),
+        renderMetaBlock("Атрибуция", humanBooleanLabel(!asset.attributionRequired, "Не требуется", "Требуется атрибуция")),
+        renderMetaBlock("Коммерческое использование", humanBooleanLabel(asset.commercialUseAllowed, "Разрешено", "Проверить")),
+        "</div>",
+        '<div class="nfr-note">' + escapeHtml(buildAssetDetailNote(asset)) + "</div>",
+        '<div class="nfr-tag-row">' + arrayify(asset.dominantColors).map(function (item) { return '<span class="nfr-tag">' + escapeHtml(item) + "</span>"; }).join("") + "</div>"
+      ].join("");
+    }
+
+    var pattern = findPatternById(id);
+    if (!pattern) return renderError("Не удалось открыть детали паттерна.");
+    return [
+      '<div class="nfr-detail-topbar">',
+      '  <div><p class="nfr-label">UI-паттерн</p><h2>' + escapeHtml(pattern.title) + '</h2><p class="nfr-detail-copy">' + escapeHtml(pattern.recommendedUse || "") + "</p></div>",
+      '  <button class="nfr-back nfr-detail-close" type="button" data-nfr-detail-close="true">Закрыть</button>',
+      "</div>",
+      pattern.previewPath ? '<img class="nfr-detail-thumb" src="' + escapeHtml(pattern.previewPath) + '" alt="' + escapeHtml(pattern.title) + '"/>' : "",
+      '<div class="nfr-detail-meta">',
+      renderMetaBlock("Источник", pattern.sourceName || pattern.sourceModel || "NOFIDA"),
+      renderMetaBlock("Основа", pattern.sourceModel || "NOFIDA"),
+      renderMetaBlock("Лицензия", pattern.license || "MIT"),
+      renderMetaBlock("Статус", titleCaseStatus(pattern.approvalStatus, "Проверено")),
+      "</div>",
+      '<div class="nfr-note">' + escapeHtml(buildPatternDetailNote(pattern)) + "</div>",
+      '<div class="nfr-tag-row">' + arrayify(pattern.tokens).map(function (token) { return '<span class="nfr-tag">' + escapeHtml(token) + "</span>"; }).join("") + "</div>"
+    ].join("");
+  }
+
+  function copySvgContent(path) {
+    var target = String(path || "");
+    if (!target) return;
+    if (state.svgCache[target]) {
+      copyText(state.svgCache[target], "SVG скопирован", "Скопируйте SVG");
+      return;
+    }
+    fetch(target, { credentials: "same-origin", cache: "no-store" }).then(function (response) {
+      if (!response.ok) throw new Error("svg-unavailable");
+      return response.text();
+    }).then(function (text) {
+      state.svgCache[target] = text;
+      return copyText(text, "SVG скопирован", "Скопируйте SVG");
+    }).catch(function () {
+      showToast("Не удалось получить SVG");
+    });
+  }
+
+  function handleFigmaFiles(fileList) {
+    var files = Array.prototype.map.call(fileList || [], function (file) {
+      var extension = String(file.name || "").split(".").pop().toLowerCase();
+      return {
+        name: file.name || "file",
+        size: Number(file.size || 0),
+        type: file.type || "",
+        extension: extension || "file"
+      };
+    }).filter(function (file) {
+      return ["fig", "zip", "svg", "png", "pdf"].indexOf(file.extension) >= 0;
+    });
+
+    state.figmaDraft.files = files;
+    saveFigmaDraft();
+    if (files.length === 0) {
+      showToast("Поддерживаются .fig, .zip, .svg, .png и .pdf");
+    }
+    rerenderFigma();
+  }
+
+  function validateFigmaDraft() {
+    var draft = state.figmaDraft;
+    if (!draft.url && (!Array.isArray(draft.files) || draft.files.length === 0) && !draft.notes) {
+      return "Добавьте ссылку, файл экспорта или заметки для отчета.";
+    }
+    if (draft.url && !/^https?:\/\/.+/i.test(draft.url)) {
+      return "Проверьте ссылку на файл Figma.";
+    }
+    if (!draft.connectLater && !draft.token) {
+      return "Введите personal access token или включите режим \"Подключить позже\".";
+    }
+    return "";
+  }
+
+  function deriveSourceType(draft) {
+    if (draft.url) return "Figma URL";
+    var extensions = unique((draft.files || []).map(function (file) { return file.extension; }));
+    if (extensions.indexOf("fig") >= 0) return ".fig export";
+    if (extensions.indexOf("zip") >= 0) return "ZIP package";
+    if (extensions.indexOf("pdf") >= 0) return "PDF export";
+    if (extensions.indexOf("svg") >= 0 || extensions.indexOf("png") >= 0) return "Asset export";
+    return "Manual brief";
+  }
+
+  function scoreFonts(text, fonts) {
+    var query = String(text || "").toLowerCase();
+    var scored = fonts.map(function (font) {
+      var haystack = [
+        font.family,
+        font.category,
+        font.recommendedUseCase
+      ].concat(font.useCases || [], font.mood || [], font.languageCoverage || []).join(" ").toLowerCase();
+      var score = 0;
+      query.split(/[^a-zA-Z0-9а-яА-Я]+/).filter(Boolean).forEach(function (token) {
+        if (haystack.indexOf(token) >= 0) score += 2;
+      });
+      if (/dashboard|analytics|admin|panel|enterprise|таблиц|дашборд/.test(query) && /inter|ibm plex sans|public sans|work sans/i.test(font.family)) score += 3;
+      if (/brand|hero|campaign|marketing|презент|лендинг/.test(query) && /fraunces|manrope|space grotesk|outfit|plus jakarta sans/i.test(font.family)) score += 3;
+      if (/docs|article|report|long|research|отчет|статья/.test(query) && /source serif|literata|merriweather|noto serif/i.test(font.family)) score += 3;
+      if (/code|dev|token|audit|spec|код|спец/.test(query) && /mono/i.test(font.family)) score += 3;
+      return { font: font, score: score };
+    }).sort(function (left, right) {
+      return right.score - left.score || left.font.family.localeCompare(right.font.family);
+    });
+
+    var chosen = scored.filter(function (item) { return item.score > 0; }).slice(0, 4).map(function (item) { return item.font; });
+    if (chosen.length >= 3) return chosen;
+    return fonts.slice(0, 5);
+  }
+
+  function buildMigrationReport() {
+    var draft = state.figmaDraft;
+    var fontCatalog = getNormalizedFontState();
+    var text = [draft.url, draft.notes].concat((draft.files || []).map(function (file) { return file.name; })).join(" ");
+    var extensions = unique((draft.files || []).map(function (file) { return file.extension; }));
+    var assetsCount = (draft.files || []).filter(function (file) { return ["svg", "png", "pdf"].indexOf(file.extension) >= 0; }).length;
+    var zipCount = (draft.files || []).filter(function (file) { return file.extension === "zip"; }).length;
+    var figCount = (draft.files || []).filter(function (file) { return file.extension === "fig"; }).length;
+    var chosenFonts = fontCatalog ? scoreFonts(text, fontCatalog.fonts) : [];
+    var sourceType = deriveSourceType(draft);
+    var pageHint = figCount ? "Вероятны многостраничные экраны и компоненты из одного экспорта." : (draft.url ? "Есть шанс восстановить структуру страниц по ссылке и заметкам." : "Структуру страниц лучше уточнить после просмотра экспорта.");
+    var mediaHints = [];
+    if (/empty|onboarding|пуст|онборд/i.test(text)) mediaHints.push("Empty states и onboarding-паттерны");
+    if (/dashboard|analytics|admin|table|дашборд|аналит/i.test(text)) mediaHints.push("Иконки, плотные UI-паттерны и системные таблицы");
+    if (/brand|campaign|launch|маркет|презент|лендинг/i.test(text)) mediaHints.push("Иллюстрации, фоны и стикеры для брендовых экранов");
+    if (assetsCount > 0) mediaHints.push("Локальные SVG и PNG как основа для медиабанка");
+    if (mediaHints.length === 0) mediaHints = ["Иконки для базовой навигации", "Иллюстрации и empty states", "Фоны и UI-паттерны"];
+
+    var sourceFacts = [
+      "Источник: " + sourceType + ".",
+      draft.url ? "Ссылка указана и будет использоваться для сверки структуры файла." : "Без ссылки: отчет строится по экспорту и заметкам.",
+      draft.connectLater ? "Подключение к API можно добавить позже." : "Токен подготовлен для следующего шага анализа.",
+      draft.files.length ? "Файлы в запросе: " + draft.files.length + " (" + extensions.join(", ").toUpperCase() + ")." : "Файлы пока не приложены.",
+      assetsCount ? "Экспорт ассетов: " + assetsCount + " файл(ов)." : "Ассеты лучше собрать отдельным пакетом SVG, PNG или ZIP.",
+      pageHint
+    ];
+
+    var fontSuggestions = chosenFonts.slice(0, 4).map(function (font) {
+      return font.family + " — " + (font.recommendedUseCase || "проверенное семейство для переноса интерфейсов.");
+    });
+    if (!fontSuggestions.length) {
+      fontSuggestions = [
+        "Inter — базовый выбор для продуктовых экранов и панелей.",
+        "Manrope — мягкий вариант для брендовых и клиентских интерфейсов.",
+        "Source Serif 4 — для длинных текстов и содержательных блоков."
+      ];
+    }
+
+    var resourceSuggestions = [
+      "Библиотеки NOFIDA: начать с готовых UI-компонентов и системных иконок.",
+      "Медиакатегории: " + mediaHints.join(", ") + ".",
+      zipCount ? "Пакет ассетов уже приложен: удобно разобрать и распределить в медиабанк по категориям." : "Если есть пакет ассетов, добавьте ZIP для быстрой сверки имен и форматов."
+    ];
+
+    var nextSteps = [
+      "Проверить страницы, компоненты и текстовые стили после открытия экспорта.",
+      "Сверить нестандартные шрифты и заменить их на близкие семейства NOFIDA перед ручной доводкой.",
+      "Разложить SVG, PNG и PDF по категориям медиабанка, чтобы команда быстрее переиспользовала материалы.",
+      "Отдельно проверить сложные компоненты, автолэйауты и интерактивные переходы."
+    ];
+
+    return {
+      createdAt: new Date().toISOString(),
+      summary: "Подготовлен предварительный план переноса для " + sourceType + ". Отчет фиксирует источник, состав материалов, подходящие шрифты NOFIDA и список ручных шагов без обещания точного 1:1 импорта.",
+      sourceFacts: sourceFacts,
+      fontSuggestions: fontSuggestions,
+      resourceSuggestions: resourceSuggestions,
+      nextSteps: nextSteps
+    };
+  }
+
+  function handleFigmaSubmit() {
+    var validationError = validateFigmaDraft();
+    if (validationError) {
+      showToast(validationError);
+      return;
+    }
+    state.figmaReport = buildMigrationReport();
+    saveFigmaDraft();
+    state.figmaStage = {
+      status: "report",
+      message: "Отчет подготовлен и сохранен в локальном черновике.",
+      count: state.figmaDraft.files.length,
+      updatedAt: new Date().toISOString()
+    };
+    rerenderFigma();
+    showToast("Отчет миграции готов");
+  }
+
+  function handleFigmaStage() {
+    if (!state.figmaDraft.files.length) {
+      showToast("Сначала добавьте экспорт или пакет ассетов");
+      return;
+    }
+    saveFigmaDraft();
+    state.figmaStage = {
+      status: "staged",
+      message: "Ассеты добавлены в локальный запрос миграции: " + state.figmaDraft.files.length + " файл(ов).",
+      count: state.figmaDraft.files.length,
+      updatedAt: new Date().toISOString()
+    };
+    rerenderFigma();
+    showToast("Ассеты добавлены в запрос");
+  }
+
+  function buildFigmaGuideText() {
+    var draft = state.figmaDraft;
+    var report = state.figmaReport || buildMigrationReport();
+    return [
+      "План переноса NOFIDA",
+      "",
+      "Тип источника: " + deriveSourceType(draft),
+      "Ссылка: " + (draft.url || "не указана"),
+      "Подключить позже: " + (draft.connectLater ? "да" : "нет"),
+      "Файлы: " + (draft.files.length ? draft.files.map(function (file) { return file.name; }).join(", ") : "не добавлены"),
+      "",
+      "Кратко:",
+      report.summary,
+      "",
+      "Источник и состав материалов:",
+      report.sourceFacts.map(function (item) { return "- " + item; }).join("\n"),
+      "",
+      "Подходящие шрифты:",
+      report.fontSuggestions.map(function (item) { return "- " + item; }).join("\n"),
+      "",
+      "Рекомендации по ресурсам:",
+      report.resourceSuggestions.map(function (item) { return "- " + item; }).join("\n"),
+      "",
+      "Следующие шаги:",
+      report.nextSteps.map(function (item) { return "- " + item; }).join("\n"),
+      "",
+      "Заметки:",
+      draft.notes || "—"
+    ].join("\n");
+  }
+
+  function downloadFigmaGuide() {
+    var validationError = validateFigmaDraft();
+    if (validationError && !state.figmaReport) {
+      showToast(validationError);
+      return;
+    }
+    var text = buildFigmaGuideText();
+    var blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    var href = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = href;
+    link.download = "nofida-migration-guide.txt";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
+    showToast("Инструкция скачана");
+  }
+
+  function rerenderFigma() {
+    if (!state.overlayEl || state.currentPageId !== "figma") return;
+    var content = state.overlayEl.querySelector("#nfr-content");
+    if (!content) return;
+    content.innerHTML = renderFigmaBody();
+    bindActionHandlers(content);
+  }
+
+  function bindNativeTabHandlers(root) {
+    Array.prototype.forEach.call(root.querySelectorAll("[data-nfr-native-nav]"), function (node) {
       node.addEventListener("click", function () {
-        var value = String(node.getAttribute("data-copy-url") || "");
-        var absolute = value.indexOf("http") === 0 ? value : window.location.origin + value;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(absolute);
-          node.textContent = "Copied";
-          window.setTimeout(function () { node.textContent = "Copy internal link"; }, 1200);
-          return;
-        }
-        window.prompt("Copy internal asset link", absolute);
+        scrollToNativeFontSection(String(node.getAttribute("data-nfr-native-nav") || ""));
       });
     });
   }
@@ -910,184 +1709,11 @@
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function bindNativeTabHandlers(root) {
-    Array.prototype.forEach.call(root.querySelectorAll("[data-nfr-native-nav]"), function (node) {
-      node.addEventListener("click", function () {
-        scrollToNativeFontSection(String(node.getAttribute("data-nfr-native-nav") || ""));
-      });
-    });
-  }
-
-  function renderBody(pageId, token) {
-    var content = state.overlayEl.querySelector("#nfr-content");
-
-    if (pageId === "figma") {
-      content.innerHTML = renderFigmaBody();
-      return;
-    }
-
-    if (pageId === "fonts") {
-      content.innerHTML = renderLoading("Загружаем каталог шрифтов NOFIDA...");
-      loadJson("fontCatalog", FONT_CATALOG_URLS).then(function (catalog) {
-        if (state.renderToken !== token || state.currentPageId !== pageId) return;
-        content.innerHTML = renderFontBody(catalog);
-        renderFontExplorer(content.querySelector("#nfr-font-explorer"), normalizeFontCatalog(catalog), "fonts", false);
-      }).catch(function (error) {
-        if (state.renderToken !== token || state.currentPageId !== pageId) return;
-        content.innerHTML = renderError("Не удалось загрузить каталог шрифтов. " + error.message);
-      });
-      return;
-    }
-
-    if (pageId === "media") {
-      content.innerHTML = renderLoading("Загружаем медиатеку NOFIDA...");
-      loadJson("mediaCatalog", MEDIA_CATALOG_URL).then(function (catalog) {
-        if (state.renderToken !== token || state.currentPageId !== pageId) return;
-        content.innerHTML = renderMediaBody(catalog);
-        renderMediaExplorer(content.querySelector("#nfr-media-explorer"), normalizeMediaCatalog(catalog));
-      }).catch(function (error) {
-        if (state.renderToken !== token || state.currentPageId !== pageId) return;
-        content.innerHTML = renderError("Не удалось загрузить медиатеку. " + error.message);
-      });
-    }
-  }
-
-  function ensureOverlay() {
-    if (state.overlayEl) return state.overlayEl;
-
-    var style = document.createElement("style");
-    style.id = "nfr-styles";
-    style.textContent = RESOURCE_CSS;
-    document.head.appendChild(style);
-
-    var overlay = document.createElement("div");
-    overlay.id = OVERLAY_ID;
-    overlay.setAttribute("hidden", "");
-    overlay.innerHTML = [
-      '<div class="nfr-shell">',
-      '  <div class="nfr-topbar">',
-      '    <div class="nfr-topcopy">',
-      '      <p class="nfr-breadcrumb" id="nfr-breadcrumb">Панель / Ресурсы</p>',
-      '      <span class="nfr-surface-pill">Панель</span>',
-      "    </div>",
-      '    <button class="nfr-back" id="nfr-back" type="button">Назад к проектам</button>',
-      "  </div>",
-      '  <div class="nfr-layout">',
-      '    <aside class="nfr-nav-panel">',
-      '      <p class="nfr-nav-kicker">Ресурсы</p>',
-      '      <div class="nfr-nav-list" id="nfr-nav"></div>',
-      "    </aside>",
-      '    <main class="nfr-main" aria-live="polite">',
-      '      <section class="nfr-hero">',
-      '        <div class="nfr-hero-head">',
-      '          <span class="nfr-badge" id="nfr-badge">Resource page</span>',
-      '          <h1 id="nfr-title">Ресурсы NOFIDA</h1>',
-      "        </div>",
-      '        <p class="nfr-intro" id="nfr-intro"></p>',
-      '        <div id="nfr-actions"></div>',
-      '        <div class="nfr-notice" id="nfr-notice"></div>',
-      "      </section>",
-      '      <section id="nfr-content"></section>',
-      '      <p class="nfr-footer-note" id="nfr-footer-note">Internal NOFIDA resource page.</p>',
-      "    </main>",
-      "  </div>",
-      "</div>"
-    ].join("");
-
-    document.body.appendChild(overlay);
-    overlay.querySelector("#nfr-back").addEventListener("click", closeToPrevious);
-    state.overlayEl = overlay;
-    return overlay;
-  }
-
-  function renderPage(pageId) {
-    var page = PAGES[pageId];
-    if (!page) return;
-
-    var overlay = ensureOverlay();
-    var token = Date.now();
-    state.renderToken = token;
-    state.currentPageId = pageId;
-
-    overlay.querySelector("#nfr-nav").innerHTML = renderNav(pageId);
-    overlay.querySelector("#nfr-breadcrumb").textContent = getBreadcrumb(pageId);
-    overlay.querySelector("#nfr-badge").textContent = page.badge;
-    overlay.querySelector("#nfr-title").textContent = page.title;
-    overlay.querySelector("#nfr-intro").textContent = page.intro;
-    overlay.querySelector("#nfr-actions").innerHTML = renderActions(page.actions || []);
-    overlay.querySelector("#nfr-notice").textContent = page.notice || "";
-    overlay.querySelector("#nfr-back").textContent = getBackInfo(pageId).label;
-    overlay.querySelector("#nfr-footer-note").textContent =
-      pageId === "figma"
-        ? "Навигация миграции остается report-first без ложного обещания 1:1 импорта."
-        : "Внутренняя страница ресурсов NOFIDA.";
-
-    bindActionHandlers(overlay.querySelector("#nfr-actions"));
-    renderBody(pageId, token);
-    overlay.scrollTop = 0;
-  }
-
-  function showPage(pageId) {
-    var overlay = ensureOverlay();
-    renderPage(pageId);
-    overlay.removeAttribute("hidden");
-    document.body.style.overflow = "hidden";
-  }
-
-  function hidePages() {
-    if (!state.overlayEl) return;
-    state.overlayEl.setAttribute("hidden", "");
-    document.body.style.overflow = "";
-  }
-
-  function closeToPrevious() {
-    var nav = getNav();
-    var currentHash = getPageHash(state.currentPageId || "fonts");
-    if (nav) {
-      nav.goBack(currentHash);
-      return;
-    }
-    var back = normalizeHash(state.lastAppHash || "#/dashboard");
-    if (isResourceHash(back)) back = "#/dashboard";
-    window.location.hash = back.slice(1);
-  }
-
-  function getNativeFontsMount() {
-    var content = document.querySelector(NATIVE_CONTENT_SELECTOR);
-    var section = content ? content.querySelector(NATIVE_CONTAINER_SELECTOR) : document.querySelector(NATIVE_CONTAINER_SELECTOR);
-    if (!content || !section || !content.contains(section)) return null;
-
-    var upload = section.querySelector(NATIVE_UPLOAD_SELECTOR);
-    var installed = section.querySelector(NATIVE_INSTALLED_SELECTOR);
-    if (!upload && !installed) return null;
-
-    return {
-      content: content,
-      section: section,
-      upload: upload,
-      installed: installed
-    };
-  }
-
-  function removeNativeFontsPanel() {
-    state.nativeSectionKey = "";
-    state.nativePanelKey = "";
-    var panel = document.getElementById(NATIVE_PANEL_ID);
-    if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
-    var mount = getNativeFontsMount();
-    if (mount && mount.section) mount.section.removeAttribute(NATIVE_PANEL_MARKER);
-  }
-
-  function panelRevision(panel) {
-    return String(Number(panel.getAttribute(NATIVE_PANEL_REVISION) || "0") + 1);
-  }
-
   function renderNativeFontCard(font) {
     var fontFamily = font.runtimeFontFamily || font.family || "Inter";
     var previewStyle = "font-family:'" + String(fontFamily).replace(/'/g, "\\'") + "',Inter,\"Segoe UI\",system-ui,sans-serif";
     var downloadUrl = font.previewFilePath || (font.localFilePaths || [])[0] || "";
     var canDownload = font.approvalStatus === "approved" && !!downloadUrl;
-    var detailsRoute = PAGE_ROUTES.fonts + "?font=" + encodeURIComponent(font.id || font.family || "");
     return [
       '<article class="nfr-native-card">',
       '  <div class="nfr-native-card-top">',
@@ -1095,7 +1721,7 @@
       '      <h3>' + escapeHtml(font.family) + "</h3>",
       '      <p>' + escapeHtml(font.recommendedUseCase || "Проверенное семейство для рабочих интерфейсов NOFIDA.") + "</p>",
       "    </div>",
-      '    <span class="nfr-pill ' + (font.approvalStatus === "approved" ? "good" : "warn") + '">' + escapeHtml(font.approvalStatus) + "</span>",
+      '    <span class="nfr-pill ' + (font.approvalStatus === "approved" ? "good" : "warn") + '">' + escapeHtml(titleCaseStatus(font.approvalStatus, "Проверка")) + "</span>",
       "  </div>",
       '  <div class="nfr-native-preview" style="' + escapeHtml(previewStyle) + '">' + escapeHtml(font.previewText || "Aa Бб 123") + "</div>",
       '  <div class="nfr-native-meta">',
@@ -1108,7 +1734,8 @@
         ? '<a class="nfr-link-btn" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noreferrer">Скачать</a>'
         : '<span class="nfr-pill warn">Скачивание недоступно</span>',
       '<button class="nfr-copy-btn" type="button" data-nfr-native-nav="upload">Открыть загрузку</button>',
-      '<a class="nfr-link-btn" href="' + escapeHtml(detailsRoute) + '" data-nofida-route="' + escapeHtml(PAGE_ROUTES.fonts) + '">Подробнее</a>',
+      '<button class="nfr-copy-btn" type="button" data-copy-name="' + escapeHtml(font.family) + '">Копировать название</button>',
+      '<button class="nfr-icon-btn" type="button" data-nfr-detail-kind="font" data-nfr-detail-id="' + escapeHtml(font.id) + '" data-nfr-detail-source="native">Подробнее</button>',
       "  </div>",
       "</article>"
     ].join("");
@@ -1116,9 +1743,7 @@
 
   function renderNativeFontExplorer(target, normalized) {
     var filterState = state.filters.nativeFonts;
-    var categories = ["all"].concat(normalized.fonts.map(function (font) { return font.category; }).filter(function (value, index, arr) {
-      return value && arr.indexOf(value) === index;
-    }));
+    var categories = ["all"].concat(unique(normalized.fonts.map(function (font) { return font.category; })));
     var matches = normalized.fonts.filter(function (font) {
       return fontMatches(font, filterState);
     });
@@ -1189,11 +1814,11 @@
       '<div class="nfr-native-head">',
       '  <div>',
       '    <p class="nfr-label">Типографика</p>',
-      "    <h2>Рекомендованные NOFIDA</h2>",
-      '    <p class="nfr-native-copy">Компактная подборка проверенных шрифтов NOFIDA. Полный каталог доступен отдельно, а нативная загрузка ниже остается основным способом добавить шрифт в рабочее пространство.</p>',
+      "    <h2>Рекомендованные шрифты</h2>",
+      '    <p class="nfr-native-copy">Выберите проверенный шрифт NOFIDA или загрузите свой. Шрифты можно скачать и добавить через нативную загрузку. Автоматическая установка будет включена после безопасного подключения к системному хранилищу шрифтов.</p>',
       "  </div>",
       '  <div class="nfr-native-tabs">',
-      '    <button class="nfr-tab" type="button" data-nfr-native-nav="recommended">Рекомендованные NOFIDA</button>',
+      '    <button class="nfr-tab" type="button" data-nfr-native-nav="recommended">Рекомендованные шрифты</button>',
       '    <button class="nfr-tab" type="button" data-nfr-native-nav="upload">Загрузить свой шрифт</button>',
       '    <button class="nfr-tab" type="button" data-nfr-native-nav="my-fonts">Мои шрифты</button>',
       "  </div>",
@@ -1205,8 +1830,188 @@
     state.nativeSectionKey = sectionKey;
     state.nativePanelKey = renderKey;
 
+    bindActionHandlers(panel);
     bindNativeTabHandlers(panel);
     renderNativeFontExplorer(panel.querySelector("#nfr-native-font-explorer"), normalized);
+  }
+
+  function renderBody(pageId, token) {
+    var content = state.overlayEl.querySelector("#nfr-content");
+
+    if (pageId === "figma") {
+      content.innerHTML = renderFigmaBody();
+      bindActionHandlers(content);
+      prefetchResourceCatalogs();
+      return;
+    }
+
+    if (pageId === "fonts") {
+      content.innerHTML = renderLoading("Загружаем каталог шрифтов NOFIDA...");
+      loadJson("fontCatalog", FONT_CATALOG_URLS).then(function (catalog) {
+        if (state.renderToken !== token || state.currentPageId !== pageId) return;
+        content.innerHTML = renderFontBody(catalog);
+        renderFontExplorer(content.querySelector("#nfr-font-explorer"), normalizeFontCatalog(catalog), "fonts", false);
+        bindActionHandlers(content);
+      }).catch(function (error) {
+        if (state.renderToken !== token || state.currentPageId !== pageId) return;
+        content.innerHTML = renderError("Не удалось загрузить каталог шрифтов. " + error.message);
+      });
+      return;
+    }
+
+    if (pageId === "media") {
+      content.innerHTML = renderLoading("Загружаем медиабанк NOFIDA...");
+      loadJson("mediaCatalog", MEDIA_CATALOG_URL).then(function (catalog) {
+        if (state.renderToken !== token || state.currentPageId !== pageId) return;
+        content.innerHTML = renderMediaBody(catalog);
+        renderMediaExplorer(content.querySelector("#nfr-media-explorer"), normalizeMediaCatalog(catalog));
+        bindActionHandlers(content);
+      }).catch(function (error) {
+        if (state.renderToken !== token || state.currentPageId !== pageId) return;
+        content.innerHTML = renderError("Не удалось загрузить медиабанк. " + error.message);
+      });
+    }
+  }
+
+  function prefetchResourceCatalogs() {
+    loadJson("fontCatalog", FONT_CATALOG_URLS).catch(function () { return null; });
+    loadJson("mediaCatalog", MEDIA_CATALOG_URL).catch(function () { return null; });
+  }
+
+  function ensureOverlay() {
+    if (state.overlayEl) return state.overlayEl;
+
+    if (!document.getElementById("nfr-styles")) {
+      var style = document.createElement("style");
+      style.id = "nfr-styles";
+      style.textContent = RESOURCE_CSS;
+      document.head.appendChild(style);
+    }
+
+    ensureToast();
+    ensureDetailOverlay();
+
+    var overlay = document.createElement("div");
+    overlay.id = OVERLAY_ID;
+    overlay.setAttribute("hidden", "");
+    overlay.innerHTML = [
+      '<div class="nfr-shell">',
+      '  <div class="nfr-topbar">',
+      '    <div class="nfr-topcopy">',
+      '      <p class="nfr-breadcrumb" id="nfr-breadcrumb">Панель / Ресурсы</p>',
+      '      <span class="nfr-surface-pill">Панель</span>',
+      "    </div>",
+      '    <button class="nfr-back" id="nfr-back" type="button">Назад к проектам</button>',
+      "  </div>",
+      '  <div class="nfr-layout">',
+      '    <aside class="nfr-nav-panel">',
+      '      <p class="nfr-nav-kicker">Ресурсы</p>',
+      '      <div class="nfr-nav-list" id="nfr-nav"></div>',
+      "    </aside>",
+      '    <main class="nfr-main" aria-live="polite">',
+      '      <section class="nfr-hero">',
+      '        <div class="nfr-hero-head">',
+      '          <span class="nfr-badge" id="nfr-badge">Ресурсы</span>',
+      '          <h1 id="nfr-title">Ресурсы NOFIDA</h1>',
+      "        </div>",
+      '        <p class="nfr-intro" id="nfr-intro"></p>',
+      '        <div id="nfr-actions"></div>',
+      '        <div class="nfr-notice" id="nfr-notice"></div>',
+      "      </section>",
+      '      <section id="nfr-content"></section>',
+      '      <p class="nfr-footer-note" id="nfr-footer-note">Ресурсы NOFIDA доступны внутри рабочего пространства.</p>',
+      "    </main>",
+      "  </div>",
+      "</div>"
+    ].join("");
+
+    document.body.appendChild(overlay);
+    overlay.querySelector("#nfr-back").addEventListener("click", closeToPrevious);
+    state.overlayEl = overlay;
+    return overlay;
+  }
+
+  function renderPage(pageId) {
+    var page = PAGES[pageId];
+    if (!page) return;
+
+    var overlay = ensureOverlay();
+    var token = Date.now();
+    state.renderToken = token;
+    state.currentPageId = pageId;
+
+    overlay.querySelector("#nfr-nav").innerHTML = renderNav(pageId);
+    overlay.querySelector("#nfr-breadcrumb").textContent = getBreadcrumb(pageId);
+    overlay.querySelector("#nfr-badge").textContent = page.badge;
+    overlay.querySelector("#nfr-title").textContent = page.title;
+    overlay.querySelector("#nfr-intro").textContent = page.intro;
+    overlay.querySelector("#nfr-actions").innerHTML = renderActions(page.actions || []);
+    overlay.querySelector("#nfr-notice").textContent = page.notice || "";
+    overlay.querySelector("#nfr-back").textContent = getBackInfo(pageId).label;
+    overlay.querySelector("#nfr-footer-note").textContent =
+      pageId === "figma"
+        ? "План переноса формируется локально и не меняет файлы проекта автоматически."
+        : "Ресурсы NOFIDA доступны внутри рабочего пространства.";
+
+    bindActionHandlers(overlay.querySelector("#nfr-actions"));
+    renderBody(pageId, token);
+    overlay.scrollTop = 0;
+  }
+
+  function showPage(pageId) {
+    var overlay = ensureOverlay();
+    renderPage(pageId);
+    overlay.removeAttribute("hidden");
+    document.body.style.overflow = "hidden";
+  }
+
+  function hidePages() {
+    if (!state.overlayEl) return;
+    state.overlayEl.setAttribute("hidden", "");
+    closeDetails();
+    document.body.style.overflow = "";
+  }
+
+  function closeToPrevious() {
+    var nav = getNav();
+    var currentHash = getPageHash(state.currentPageId || "fonts");
+    if (nav) {
+      nav.goBack(currentHash);
+      return;
+    }
+    var back = normalizeHash(state.lastAppHash || "#/dashboard");
+    if (isResourceHash(back)) back = "#/dashboard";
+    window.location.hash = back.slice(1);
+  }
+
+  function getNativeFontsMount() {
+    var content = document.querySelector(NATIVE_CONTENT_SELECTOR);
+    var section = content ? content.querySelector(NATIVE_CONTAINER_SELECTOR) : document.querySelector(NATIVE_CONTAINER_SELECTOR);
+    if (!content || !section || !content.contains(section)) return null;
+
+    var upload = section.querySelector(NATIVE_UPLOAD_SELECTOR);
+    var installed = section.querySelector(NATIVE_INSTALLED_SELECTOR);
+    if (!upload && !installed) return null;
+
+    return {
+      content: content,
+      section: section,
+      upload: upload,
+      installed: installed
+    };
+  }
+
+  function removeNativeFontsPanel() {
+    state.nativeSectionKey = "";
+    state.nativePanelKey = "";
+    var panel = document.getElementById(NATIVE_PANEL_ID);
+    if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+    var mount = getNativeFontsMount();
+    if (mount && mount.section) mount.section.removeAttribute(NATIVE_PANEL_MARKER);
+  }
+
+  function panelRevision(panel) {
+    return String(Number(panel.getAttribute(NATIVE_PANEL_REVISION) || "0") + 1);
   }
 
   function syncNativeFontsSurface() {
@@ -1305,6 +2110,10 @@
 
   function onKeyDown(event) {
     if (event.key !== "Escape") return;
+    if (state.detailEl && !state.detailEl.hasAttribute("hidden")) {
+      closeDetails();
+      return;
+    }
     if (!state.overlayEl || state.overlayEl.hasAttribute("hidden")) return;
     closeToPrevious();
   }

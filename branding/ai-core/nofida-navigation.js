@@ -525,7 +525,7 @@
       return;
     }
 
-    var nextRoot = document.getElementById("app") || document.body;
+    var nextRoot = document.getElementById("app");
     if (!nextRoot) {
       stopObserver();
       return;

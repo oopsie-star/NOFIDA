@@ -8,6 +8,7 @@ import process from "node:process";
 const DEFAULT_TARGET = path.resolve(process.env.NOFIDA_FONT_STORE_ROOT || "font-store");
 const PUBLIC_BASE_URL = process.env.NOFIDA_FONT_PUBLIC_BASE_URL || "/nofida/font-store";
 const LICENSE_POLICY_PATH = path.resolve("branding/resource-factory/license-policy.json");
+const FALLBACK_CATALOG_PATH = path.resolve("branding/fonts/catalog.json");
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
 const FONT_WEIGHTS = "400;500;600;700";
@@ -56,7 +57,42 @@ const FONT_SPECS = [
   fontSpec("playfair-display", "Playfair Display", "editorial", ["luxury", "high-contrast"], ["brand campaigns", "cover sections"], ["Latin", "Extended Latin", "Cyrillic"], ["inter", "rubik"], "A high-contrast editorial accent for premium moments."),
   fontSpec("jetbrains-mono", "JetBrains Mono", "mono", ["developer", "precise"], ["code examples", "audit notes"], ["Latin", "Extended Latin", "Cyrillic"], ["inter", "public-sans"], "Mono detail for specs, prompts, and terminal moments."),
   fontSpec("pt-sans", "PT Sans", "sans", ["institutional", "stable"], ["public products", "content tools"], ["Latin", "Cyrillic"], ["pt-serif", "jetbrains-mono"], "Stable sans for bilingual and operational interfaces."),
-  fontSpec("pt-serif", "PT Serif", "serif", ["editorial", "measured"], ["reports", "case studies"], ["Latin", "Cyrillic"], ["pt-sans", "ibm-plex-mono"], "Measured serif for reports and serious narratives.")
+  fontSpec("pt-serif", "PT Serif", "serif", ["editorial", "measured"], ["reports", "case studies"], ["Latin", "Cyrillic"], ["pt-sans", "ibm-plex-mono"], "Measured serif for reports and serious narratives."),
+  fontSpec("lora", "Lora", "serif", ["warm", "readable"], ["articles", "brand stories"], ["Latin", "Extended Latin", "Cyrillic"], ["inter", "work-sans"], "Warm serif rhythm for clear product storytelling."),
+  fontSpec("spectral", "Spectral", "serif", ["thoughtful", "balanced"], ["knowledge products", "case studies"], ["Latin", "Extended Latin", "Vietnamese"], ["public-sans", "jetbrains-mono"], "Balanced serif that stays crisp in dense layouts."),
+  fontSpec("libre-baskerville", "Libre Baskerville", "serif", ["classic", "steady"], ["presentations", "editorial modules"], ["Latin", "Extended Latin"], ["work-sans", "archivo"], "Classic proportions for calm reading surfaces."),
+  fontSpec("newsreader", "Newsreader", "editorial", ["premium", "editorial"], ["cover stories", "thought pieces"], ["Latin", "Extended Latin", "Vietnamese"], ["inter", "plus-jakarta-sans"], "Elegant editorial tone for modern product narratives."),
+  fontSpec("dm-serif-display", "DM Serif Display", "editorial", ["dramatic", "luxury"], ["hero headlines", "campaign cards"], ["Latin"], ["manrope", "dm-sans"], "Display serif with clear personality for brand moments."),
+  fontSpec("cormorant-garamond", "Cormorant Garamond", "editorial", ["literary", "refined"], ["brand decks", "long-form reading"], ["Latin", "Extended Latin", "Vietnamese"], ["inter", "libre-franklin"], "Refined serif for elegant product narratives."),
+  fontSpec("montserrat", "Montserrat", "sans", ["confident", "urban"], ["marketing UI", "navigation"], ["Latin", "Extended Latin", "Vietnamese"], ["lora", "jetbrains-mono"], "Popular geometric sans for bold interface labels."),
+  fontSpec("raleway", "Raleway", "display", ["airy", "clean"], ["campaign headers", "landing sections"], ["Latin", "Extended Latin"], ["merriweather", "inter"], "Light-footed display sans for polished banners."),
+  fontSpec("assistant", "Assistant", "sans", ["clean", "service-led"], ["forms", "self-serve products"], ["Latin", "Hebrew"], ["merriweather", "jetbrains-mono"], "Straightforward sans for calm task flows."),
+  fontSpec("cabin", "Cabin", "sans", ["human", "practical"], ["knowledge tools", "support apps"], ["Latin", "Extended Latin"], ["playfair-display", "ibm-plex-mono"], "Humanist sans that stays steady in product layouts."),
+  fontSpec("mulish", "Mulish", "sans", ["soft", "efficient"], ["customer portals", "settings"], ["Latin", "Extended Latin", "Vietnamese"], ["newsreader", "jetbrains-mono"], "Soft sans for approachable operational products."),
+  fontSpec("heebo", "Heebo", "sans", ["direct", "dense"], ["dashboards", "data-heavy apps"], ["Latin", "Hebrew"], ["lora", "ibm-plex-mono"], "Dense sans built for compact working interfaces."),
+  fontSpec("hind", "Hind", "sans", ["open", "service"], ["support centers", "workflow tools"], ["Latin"], ["spectral", "ibm-plex-mono"], "Simple sans for support and service-facing screens."),
+  fontSpec("teko", "Teko", "display", ["compressed", "energetic"], ["campaign stats", "product launches"], ["Latin"], ["inter", "source-serif-4"], "Condensed display face for assertive data moments."),
+  fontSpec("exo-2", "Exo 2", "sans", ["future", "technical"], ["AI products", "console-style dashboards"], ["Latin", "Extended Latin", "Vietnamese"], ["source-serif-4", "jetbrains-mono"], "Technical sans with a forward-looking voice."),
+  fontSpec("chivo", "Chivo", "sans", ["solid", "operational"], ["enterprise products", "procurement tools"], ["Latin", "Extended Latin", "Vietnamese"], ["merriweather", "space-mono"], "Wide sans that stays stable in enterprise UI."),
+  fontSpec("barlow", "Barlow", "sans", ["industrial", "clear"], ["control rooms", "operations"], ["Latin", "Extended Latin", "Vietnamese"], ["spectral", "space-mono"], "Industrial sans for structured control surfaces."),
+  fontSpec("barlow-condensed", "Barlow Condensed", "display", ["compact", "structured"], ["kpi strips", "navigation rails"], ["Latin", "Extended Latin", "Vietnamese"], ["inter", "merriweather"], "Condensed companion for metrics and short labels."),
+  fontSpec("space-mono", "Space Mono", "mono", ["retro-tech", "precise"], ["prompts", "token docs"], ["Latin", "Extended Latin", "Vietnamese"], ["space-grotesk", "public-sans"], "Mono voice for specs, prompts, and system text."),
+  fontSpec("azeret-mono", "Azeret Mono", "mono", ["engineered", "strict"], ["qa checklists", "developer notes"], ["Latin", "Extended Latin", "Vietnamese"], ["inter", "source-serif-4"], "Angular mono for disciplined technical artifacts."),
+  fontSpec("inconsolata", "Inconsolata", "mono", ["developer", "calm"], ["developer docs", "handoff snippets"], ["Latin", "Extended Latin"], ["work-sans", "merriweather"], "Calm mono that reads well in long snippets."),
+  fontSpec("red-hat-display", "Red Hat Display", "display", ["corporate", "strong"], ["product headers", "cards"], ["Latin", "Extended Latin"], ["red-hat-text", "jetbrains-mono"], "Display companion for modern product branding."),
+  fontSpec("red-hat-text", "Red Hat Text", "sans", ["enterprise", "clear"], ["platform UI", "setup flows"], ["Latin", "Extended Latin"], ["red-hat-display", "jetbrains-mono"], "Enterprise-ready text face for platform products."),
+  fontSpec("epilogue", "Epilogue", "sans", ["sharp", "contemporary"], ["saas sites", "pricing pages"], ["Latin", "Extended Latin", "Vietnamese"], ["newsreader", "space-mono"], "Sharp sans for clear SaaS product framing."),
+  fontSpec("syne", "Syne", "display", ["bold", "experimental"], ["brand campaigns", "hero statements"], ["Latin", "Extended Latin"], ["inter", "dm-sans"], "Expressive display font for standout brand layers."),
+  fontSpec("lexend", "Lexend", "sans", ["legible", "friendly"], ["education products", "multi-step flows"], ["Latin", "Extended Latin", "Vietnamese"], ["spectral", "ibm-plex-mono"], "High-legibility sans for guided product journeys."),
+  fontSpec("be-vietnam-pro", "Be Vietnam Pro", "sans", ["precise", "balanced"], ["mobile products", "customer apps"], ["Latin", "Extended Latin", "Vietnamese"], ["lora", "jetbrains-mono"], "Balanced sans for compact mobile-first interfaces."),
+  fontSpec("archivo-narrow", "Archivo Narrow", "sans", ["dense", "assertive"], ["tables", "filters", "toolbars"], ["Latin", "Extended Latin", "Vietnamese"], ["pt-serif", "space-mono"], "Narrow companion for dense admin views."),
+  fontSpec("titillium-web", "Titillium Web", "sans", ["technical", "friendly"], ["software docs", "settings"], ["Latin", "Extended Latin"], ["merriweather", "ibm-plex-mono"], "Technical sans that still feels approachable."),
+  fontSpec("zilla-slab", "Zilla Slab", "serif", ["open", "editorial"], ["case studies", "support docs"], ["Latin", "Extended Latin"], ["inter", "space-mono"], "Open slab serif for product content with character."),
+  fontSpec("josefin-sans", "Josefin Sans", "display", ["retro", "light"], ["showcases", "cover slides"], ["Latin", "Extended Latin", "Vietnamese"], ["literata", "jetbrains-mono"], "Light display sans for memorable headline moments."),
+  fontSpec("jost", "Jost", "sans", ["systemic", "sleek"], ["navigation", "commerce products"], ["Latin", "Extended Latin"], ["playfair-display", "ibm-plex-mono"], "Sleek geometric sans for modern product shells."),
+  fontSpec("noto-sans-display", "Noto Sans Display", "display", ["global", "functional"], ["multilingual hero copy", "overview cards"], ["Latin", "Extended Latin", "Greek", "Cyrillic"], ["noto-serif", "space-mono"], "Display-safe Noto companion for multilingual products."),
+  fontSpec("commissioner", "Commissioner", "sans", ["balanced", "institutional"], ["government services", "forms"], ["Latin", "Extended Latin", "Cyrillic"], ["newsreader", "jetbrains-mono"], "Balanced sans for trustworthy service products."),
+  fontSpec("questrial", "Questrial", "sans", ["clean", "neutral"], ["simple dashboards", "light UI"], ["Latin", "Extended Latin"], ["lora", "ibm-plex-mono"], "Simple neutral sans for lightweight product surfaces.")
 ];
 
 const OFL_LICENSE_TEXT = `SIL OPEN FONT LICENSE Version 1.1
@@ -180,6 +216,29 @@ function parseCssFaces(cssText) {
   return Array.from(unique.values());
 }
 
+function pickDownloadFaces(faces) {
+  const preferredWeights = ["400", "500", "600", "700"];
+  const picked = [];
+
+  for (const weight of preferredWeights) {
+    let face = faces.find((item) =>
+      item.fontWeight === weight &&
+      item.fontStyle === "normal" &&
+      /latin/i.test(item.unicodeRange || "")
+    );
+    if (!face) {
+      face = faces.find((item) => item.fontWeight === weight && item.fontStyle === "normal");
+    }
+    if (!face) {
+      face = faces.find((item) => item.fontWeight === weight);
+    }
+    if (face && !picked.some((item) => item.url === face.url)) picked.push(face);
+  }
+
+  if (!picked.length && faces[0]) picked.push(faces[0]);
+  return picked.slice(0, 4);
+}
+
 function buildPublicPath(base, ...parts) {
   return [base.replace(/\/$/, ""), ...parts.map((part) => String(part).replace(/^\/+|\/+$/g, ""))]
     .join("/")
@@ -199,7 +258,7 @@ async function downloadFamily(targetRoot, publicBase, spec, dryRun) {
   const familySlug = slugify(spec.family);
   const cssUrl = buildCssUrl(spec.family);
   const cssText = await fetchText(cssUrl);
-  const faces = parseCssFaces(cssText);
+  const faces = pickDownloadFaces(parseCssFaces(cssText));
   if (faces.length === 0) {
     throw new Error(`No downloadable faces discovered for ${spec.family}`);
   }
@@ -248,7 +307,7 @@ async function downloadFamily(targetRoot, publicBase, spec, dryRun) {
 
 function buildCatalog(targetRoot, publicBase, families, policy) {
   return {
-    version: "018B",
+    version: "018C",
     generatedAt: new Date().toISOString(),
     storeRoot: targetRoot,
     publicBaseUrl: publicBase,
@@ -259,7 +318,7 @@ function buildCatalog(targetRoot, publicBase, families, policy) {
     },
     fontInstallFeasibility: {
       automatedInstall: "not_supported_yet",
-      recommendedNextStep: "Keep installation honest: download a reviewed font from the NOFIDA store, then use the native team font upload flow until a supported automation path is verified.",
+      recommendedNextStep: "Download a reviewed font from the NOFIDA store, then add it through the native team font upload flow.",
       nativeUploadRoutePattern: "#/dashboard/team/:team-id/fonts",
       supportedUploadFormats: ["ttf", "otf", "woff", "woff2"],
       storageNote: "NOFIDA treats uploaded custom fonts as native workspace assets. This patch does not write directly to the database."
@@ -288,7 +347,10 @@ function buildCatalog(targetRoot, publicBase, families, policy) {
       modificationAllowed: true,
       redistributionAllowed: true,
       reviewStatus: "approved",
-      reviewNotes: "Open-license family downloaded into the NOFIDA font store for native upload workflows.",
+      recommendedUseCase: family.spec.useCases.length
+        ? `Подходит для ${family.spec.useCases.slice(0, 2).join(" и ")}.`
+        : "Подходит для продуктовых интерфейсов и рабочих макетов.",
+      reviewNotes: "Проверенное семейство с открытой лицензией. Файл можно скачать и добавить через нативную загрузку шрифтов.",
       reviewer: "codex",
       approvedAt: new Date().toISOString(),
       previewText: family.spec.previewText
@@ -309,21 +371,36 @@ async function main() {
 
   const policy = await loadLicensePolicy();
   const results = [];
+  const failures = [];
   for (const spec of specs) {
     process.stdout.write(`sync-open-fonts: ${spec.family}\n`);
-    const downloaded = await downloadFamily(targetRoot, publicBase, spec, args.dryRun);
-    results.push(downloaded);
+    try {
+      const downloaded = await downloadFamily(targetRoot, publicBase, spec, args.dryRun);
+      results.push(downloaded);
+    } catch (error) {
+      failures.push({
+        id: spec.id,
+        family: spec.family,
+        error: error.message || String(error)
+      });
+      process.stderr.write(`sync-open-fonts warning: ${spec.family}: ${error.message || String(error)}\n`);
+    }
+  }
+  if (!results.length) {
+    throw new Error("No font families were downloaded successfully.");
   }
 
   const catalog = buildCatalog(targetRoot, publicBase, results, policy);
   const syncLog = {
-    version: "018B",
+    version: "018C",
     generatedAt: new Date().toISOString(),
     targetRoot,
     publicBase,
     dryRun: args.dryRun,
     totalFamilies: results.length,
     filesDownloaded: results.reduce((sum, item) => sum + item.downloadedFaces.length, 0),
+    failedFamilies: failures.length,
+    failures,
     families: results.map((item) => ({
       id: item.spec.id,
       family: item.spec.family,
@@ -335,6 +412,7 @@ async function main() {
   if (!args.dryRun) {
     await fsp.writeFile(path.join(targetRoot, "licenses", "OFL-1.1.txt"), OFL_LICENSE_TEXT, "utf8");
     await fsp.writeFile(path.join(targetRoot, "catalog.json"), `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
+    await fsp.writeFile(FALLBACK_CATALOG_PATH, `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
     await fsp.writeFile(path.join(targetRoot, "logs", "last-sync.json"), `${JSON.stringify(syncLog, null, 2)}\n`, "utf8");
   } else {
     process.stdout.write(`${JSON.stringify(syncLog, null, 2)}\n`);

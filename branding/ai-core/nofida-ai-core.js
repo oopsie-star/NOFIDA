@@ -2170,7 +2170,7 @@
   }
 
   function startExtLinkObserver() {
-    var nextRoot = document.getElementById("app") || document.body;
+    var nextRoot = document.getElementById("app");
     if (!nextRoot || !window.MutationObserver) {
       stopExtLinkObserver();
       return;
@@ -2208,7 +2208,8 @@
     ensureLibrariesExpanded();
     scheduleAccountSettingsRefresh();
     updateDashboardAIEntry();
-    interceptPenpotExternalLinks(document.getElementById("app") || document.body);
+    var appRoot = document.getElementById("app");
+    if (appRoot) interceptPenpotExternalLinks(appRoot);
     startExtLinkObserver();
   }
 

@@ -17,7 +17,8 @@ Public same-origin exposure:
 /nofida/media-store/licenses/*
 ```
 
-This patch intentionally ships metadata and tiny placeholder SVG assets only.
+This patch ships local SVG assets, thumbnails, licenses, and catalog metadata for
+the NOFIDA media bank.
 
 The catalog is designed for two consumers:
 
