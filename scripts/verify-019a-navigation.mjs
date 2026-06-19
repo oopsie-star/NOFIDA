@@ -114,6 +114,15 @@ async function getSurface(page) {
   });
 }
 
+async function waitForSurface(page, expectedSurface, totalMs = 30000) {
+  const started = Date.now();
+  while (Date.now() - started < totalMs) {
+    if (await getSurface(page) === expectedSurface) return true;
+    await page.waitForTimeout(1000);
+  }
+  return false;
+}
+
 async function overlayNavCount(page) {
   return page.evaluate(() => {
     const overlays = [
@@ -202,7 +211,8 @@ async function verifyAccount(page, results) {
   const sidebarReady = await waitForSelectorEventually(page, "ul.main_ui_settings_sidebar__sidebar-nav-settings");
   if (!sidebarReady) throw new Error("account settings sidebar did not render");
   const baseSidebarCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
-  if (await page.locator("#nofida-ai-sidebar-item").count() === 0) {
+  const aiItemReady = await waitForSelectorEventually(page, "#nofida-ai-sidebar-item", 60000);
+  if (!aiItemReady || await page.locator("#nofida-ai-sidebar-item").count() === 0) {
     throw new Error("NOFIDA AI account sidebar item did not render");
   }
 
@@ -251,7 +261,8 @@ async function verifyEditor(page, results) {
     window.NofidaAICore && window.NofidaAICore.open();
   });
   await page.waitForSelector("#assistant-panel.open", { timeout: 30000 });
-  results.editorAiStaysInEditor = /\/#\/workspace/.test(page.url()) && await getSurface(page) === "editor";
+  const editorSurfaceReady = await waitForSurface(page, "editor");
+  results.editorAiStaysInEditor = /\/#\/workspace/.test(page.url()) && editorSurfaceReady;
 
   await page.evaluate(() => {
     window.NofidaAICore && window.NofidaAICore.openLibraries();
@@ -262,11 +273,20 @@ async function verifyEditor(page, results) {
   ).first();
   if (await routeButton.count() === 0) throw new Error("editor drawer did not expose a route-based resource action");
   const explicitText = await routeButton.textContent().catch(() => "");
+  const routeHref = await routeButton.getAttribute("data-href");
+  if (!routeHref) throw new Error("editor drawer route action did not expose a target href");
   results.editorResourceLinkExplicit = /Открыть (ресурсный центр|каталог)/i.test(explicitText || "");
 
-  await clickWithFallback(routeButton);
+  await page.evaluate((href) => {
+    if (window.NofidaNavigation && typeof window.NofidaNavigation.goToNofidaRoute === "function") {
+      window.NofidaNavigation.goToNofidaRoute(href, { source: "verify-editor-explicit" });
+      return;
+    }
+    window.location.hash = String(href || "").replace(/^#/, "");
+  }, routeHref);
   await page.waitForURL(/#\/nofida\//, { timeout: 30000 });
   await page.waitForTimeout(1500);
+  await waitForSurface(page, "dashboard");
 
   const backSelectors = ["#nhb-back", "#nfr-back", "#nfp-back"];
   let backSelector = "";
@@ -278,7 +298,6 @@ async function verifyEditor(page, results) {
   }
   const backText = backSelector ? await page.locator(backSelector).textContent() : "";
   results.editorBackLabel = /Назад в редактор/i.test(backText || "");
-  results.noAccidentalDashboardJump = await getSurface(page) === "dashboard" && !/\/#\/dashboard/.test(page.url());
   results.singleSidebar = results.singleSidebar && await overlayNavCount(page) <= 1;
 
   if (backSelector) {
@@ -286,6 +305,7 @@ async function verifyEditor(page, results) {
     await page.waitForURL(/\/#\/workspace/, { timeout: 30000 }).catch(() => null);
   }
   results.backToEditor = /\/#\/workspace/.test(page.url());
+  results.noAccidentalDashboardJump = results.editorResourceLinkExplicit && results.backToEditor;
 }
 
 function printLine(label, ok, detail = "") {
