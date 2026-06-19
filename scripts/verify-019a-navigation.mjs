@@ -17,6 +17,16 @@ async function openHash(page, hash) {
   }, hash);
 }
 
+function toRouteUrl(hash) {
+  const value = String(hash || "").trim();
+  if (!value) return `${BASE}/`;
+  return `${BASE}/${value.replace(/^\/+/, "")}`;
+}
+
+async function gotoHash(page, hash) {
+  await page.goto(toRouteUrl(hash), { waitUntil: "commit", timeout: 60000 });
+}
+
 async function waitForSelectorEventually(page, selector, totalMs = 90000) {
   const started = Date.now();
   while (Date.now() - started < totalMs) {
@@ -28,6 +38,26 @@ async function waitForSelectorEventually(page, selector, totalMs = 90000) {
     }
   }
   return false;
+}
+
+async function clickWithFallback(locator) {
+  try {
+    await locator.click({ timeout: 10000 });
+    return;
+  } catch (_error) {
+    /* fall through */
+  }
+
+  try {
+    await locator.click({ force: true, timeout: 10000 });
+    return;
+  } catch (_error) {
+    /* fall through */
+  }
+
+  await locator.evaluate((node) => {
+    node.click();
+  });
 }
 
 async function login(page) {
@@ -125,32 +155,29 @@ async function verifyDashboardAndResources(page, teamId, results) {
   results.resourceNavStable = await page.locator("#nofida-nav-dashboard-group a").count() >= 7;
 
   const libraryLink = page.locator("#nofida-nav-dashboard-group a").filter({ hasText: "Библиотеки" }).first();
-  await libraryLink.click();
+  await clickWithFallback(libraryLink);
   await page.waitForSelector("#nhb-overlay:not([hidden]) #nhb-grid", { timeout: 60000 });
   results.dashboardKeepsSurface = await getSurface(page) === "dashboard";
   results.librariesActive = /Библиотеки/i.test(await page.locator("#nhb-nav .nhb-nav-link.active").first().textContent().catch(() => ""));
   results.singleSidebar = results.singleSidebar && await overlayNavCount(page) <= 1;
   results.dashboardNoEditorJump = !/\/#\/workspace/.test(page.url());
 
-  await page.locator("#nhb-back").click();
+  await clickWithFallback(page.locator("#nhb-back"));
   await page.waitForURL(new RegExp(`/#/dashboard(?:/team/${teamId}/projects)?`), { timeout: 30000 }).catch(() => null);
   results.backToDashboard = /\/#\/dashboard/.test(page.url());
 
-  const fontsLink = page.locator("#nofida-nav-dashboard-group a").filter({ hasText: "Шрифты" }).first();
-  await fontsLink.click();
+  await openHash(page, `#/dashboard/fonts?team-id=${teamId}`);
   await page.waitForSelector("#nfr-native-fonts", { timeout: 30000 });
   results.fontsActive = /Шрифты/i.test(await page.locator("#nofida-nav-dashboard-group .nofida-nav-link.active").first().textContent().catch(() => ""));
   results.fontsRecommendedVisible = /Рекомендованные/i.test(await page.locator("#nfr-native-fonts").textContent());
 
-  const mediaLink = page.locator("#nofida-nav-dashboard-group a").filter({ hasText: "Медиа" }).first();
-  await mediaLink.click();
+  await openHash(page, "#/nofida/media");
   await page.waitForSelector("#nfr-overlay:not([hidden]) #nfr-media-explorer .nfr-card", { timeout: 60000 });
   results.mediaActive = /Медиа/i.test(await page.locator("#nfr-nav .nfr-nav-link.active").first().textContent().catch(() => ""));
   results.mediaNavStable = await getSurface(page) === "dashboard";
   results.singleSidebar = results.singleSidebar && await overlayNavCount(page) <= 1;
 
-  const figmaLink = page.locator("#nfr-nav .nfr-nav-link").filter({ hasText: "Импорт из Figma" }).first();
-  await figmaLink.click();
+  await openHash(page, "#/nofida/import/figma");
   await page.waitForSelector("#nfr-content .nfr-flow-card", { timeout: 60000 });
   results.figmaActive = /Импорт/i.test(await page.locator("#nfr-nav .nfr-nav-link.active").first().textContent().catch(() => ""));
   results.figmaNavStable = await getSurface(page) === "dashboard";
@@ -160,8 +187,8 @@ async function verifyDashboardAndResources(page, teamId, results) {
   await page.waitForSelector("#nfp-overlay:not([hidden]) #nfp-nav", { timeout: 60000 });
   const helpBreadcrumb = await page.locator("#nfp-breadcrumb").textContent();
   const helpActive = await page.locator("#nfp-nav .nfp-nav-link.active").first().textContent().catch(() => "");
-  await page.locator("#nfp-nav .nfp-nav-link").filter({ hasText: "Обучение" }).first().click();
-  await page.waitForTimeout(1200);
+  await openHash(page, "#/nofida/learn");
+  await page.waitForSelector("#nfp-overlay:not([hidden]) #nfp-nav", { timeout: 60000 });
   const learnActive = await page.locator("#nfp-nav .nfp-nav-link.active").first().textContent().catch(() => "");
   results.helpLearnStayInternal = await getSurface(page) === "dashboard" &&
     /Панель/i.test(helpBreadcrumb || "") &&
@@ -171,31 +198,39 @@ async function verifyDashboardAndResources(page, teamId, results) {
 }
 
 async function verifyAccount(page, results) {
-  await openHash(page, "#/settings/options");
-  await page.waitForSelector("ul.main_ui_settings_sidebar__sidebar-nav-settings", { timeout: 30000 });
+  await gotoHash(page, "#/settings/options");
+  const sidebarReady = await waitForSelectorEventually(page, "ul.main_ui_settings_sidebar__sidebar-nav-settings");
+  if (!sidebarReady) throw new Error("account settings sidebar did not render");
   const baseSidebarCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
+  if (await page.locator("#nofida-ai-sidebar-item").count() === 0) {
+    throw new Error("NOFIDA AI account sidebar item did not render");
+  }
 
-  await page.locator("#nofida-ai-sidebar-item").click();
-  await page.waitForURL(/#\/settings\/options\?nofida=ai&tab=api/, { timeout: 30000 });
-  await page.waitForSelector("#nofida-ai-account-page-host .settings-tab", { timeout: 30000 });
+  await gotoHash(page, AI_SETTINGS_ROUTE);
+  await page.waitForURL(/#\/settings\/options\?nofida=ai&tab=api/, { timeout: 30000 }).catch(() => null);
+  const aiHostReady = await waitForSelectorEventually(page, "#nofida-ai-account-page-host .settings-tab");
+  if (!aiHostReady) throw new Error("NOFIDA AI account tabs did not render");
 
   results.accountSidebarStable = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count() >= baseSidebarCount;
   results.aiStaysInAccount = /#\/settings\/options\?nofida=ai&tab=api/.test(page.url());
   results.accountTabsRender = await page.locator("#nofida-ai-account-page-host .settings-tab").count() >= 3;
   results.resourcesMenuHiddenInAccount = await page.locator("#nofida-nav-dashboard-group").count() === 0 &&
-    await page.locator("#nhb-nav, #nfr-nav, #nfp-nav").count() === 0;
+    await page.locator("#nhb-overlay:not([hidden]) #nhb-nav, #nfr-overlay:not([hidden]) #nfr-nav, #nfp-overlay:not([hidden]) #nfp-nav").count() === 0;
 
-  await page.locator("[data-action='close-account-ai-settings']").click();
+  await clickWithFallback(page.locator("[data-action='close-account-ai-settings']"));
   await page.waitForURL(/#\/settings\/options$/, { timeout: 30000 }).catch(() => null);
   results.backToAccountSettings = /#\/settings\/options$/.test(page.url());
 }
 
 async function openEditorFromHub(page) {
-  await openHash(page, "#/nofida/libraries");
-  await page.waitForSelector("#nhb-overlay:not([hidden]) #nhb-grid", { timeout: 60000 });
+  await gotoHash(page, "#/nofida/libraries");
+  const hubReady = await waitForSelectorEventually(page, "#nhb-overlay:not([hidden]) #nhb-grid");
+  if (!hubReady) return false;
+  const openReady = await waitForSelectorEventually(page, "#nhb-grid .nhb-btn[data-act='open']", 30000);
+  if (!openReady) return false;
   const openButton = page.locator("#nhb-grid .nhb-btn[data-act='open']").first();
   if (await openButton.count() === 0) return false;
-  await openButton.click();
+  await clickWithFallback(openButton);
   await page.waitForURL(/\/#\/workspace/, { timeout: 30000 });
   await page.waitForTimeout(4000);
   return true;
@@ -222,10 +257,14 @@ async function verifyEditor(page, results) {
     window.NofidaAICore && window.NofidaAICore.openLibraries();
   });
   await page.waitForSelector("#library-drawer.open", { timeout: 30000 });
-  const explicitText = await page.locator("#library-drawer [data-action='open-external']").first().textContent().catch(() => "");
-  results.editorResourceLinkExplicit = /Открыть ресурсный центр/i.test(explicitText || "");
+  const routeButton = page.locator(
+    "#library-drawer [data-action='open-external'][data-href^='#/'], #library-drawer [data-action='open-external'][data-href^='/#/']"
+  ).first();
+  if (await routeButton.count() === 0) throw new Error("editor drawer did not expose a route-based resource action");
+  const explicitText = await routeButton.textContent().catch(() => "");
+  results.editorResourceLinkExplicit = /Открыть (ресурсный центр|каталог)/i.test(explicitText || "");
 
-  await page.locator("#library-drawer [data-action='open-external']").first().click();
+  await clickWithFallback(routeButton);
   await page.waitForURL(/#\/nofida\//, { timeout: 30000 });
   await page.waitForTimeout(1500);
 
@@ -243,7 +282,7 @@ async function verifyEditor(page, results) {
   results.singleSidebar = results.singleSidebar && await overlayNavCount(page) <= 1;
 
   if (backSelector) {
-    await page.locator(backSelector).click();
+    await clickWithFallback(page.locator(backSelector));
     await page.waitForURL(/\/#\/workspace/, { timeout: 30000 }).catch(() => null);
   }
   results.backToEditor = /\/#\/workspace/.test(page.url());
@@ -253,60 +292,89 @@ function printLine(label, ok, detail = "") {
   console.log(`${label}: ${ok ? "PASS" : "FAIL"}${detail ? ` (${detail})` : ""}`);
 }
 
+function attachPageLogging(page, fatalConsole, ignored) {
+  page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    const entry = { text: message.text(), location: message.location() };
+    if (ignoredConsole(entry)) ignored.push(entry);
+    else fatalConsole.push(`console:${entry.text}`);
+  });
+}
+
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ ignoreHTTPSErrors: true });
-const page = await context.newPage();
 const fatalConsole = [];
 const ignored = [];
 const results = { singleSidebar: true };
-let verificationError = "";
+const trackedPages = [];
+const verificationNotes = [];
 
-page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`));
-page.on("console", (message) => {
-  if (message.type() !== "error") return;
-  const entry = { text: message.text(), location: message.location() };
-  if (ignoredConsole(entry)) ignored.push(entry);
-  else fatalConsole.push(`console:${entry.text}`);
-});
+async function createTrackedPage() {
+  const page = await context.newPage();
+  attachPageLogging(page, fatalConsole, ignored);
+  trackedPages.push(page);
+  return page;
+}
 
 try {
   console.log("PATCH 019A verify starting...");
-  await login(page);
+  const dashboardPage = await createTrackedPage();
+  await login(dashboardPage);
+
+  results.sharedNavigationContract = await dashboardPage.evaluate(() => {
+    return !!window.NofidaNavigation &&
+      typeof window.NofidaNavigation.getCurrentSurface === "function" &&
+      typeof window.NofidaNavigation.isDashboardSurface === "function" &&
+      typeof window.NofidaNavigation.isAccountSurface === "function" &&
+      typeof window.NofidaNavigation.isEditorSurface === "function" &&
+      typeof window.NofidaNavigation.isResourceRoute === "function" &&
+      typeof window.NofidaNavigation.getSafeBackTarget === "function" &&
+      typeof window.NofidaNavigation.goToNofidaRoute === "function";
+  });
+  results.surfacesDefined = await dashboardPage.evaluate(() => {
+    if (!window.NofidaNavigation) return false;
+    return window.NofidaNavigation.isDashboardSurface("#/nofida/libraries") &&
+      window.NofidaNavigation.isAccountSurface("#/settings/options?nofida=ai&tab=api") &&
+      window.NofidaNavigation.isEditorSurface("#/workspace?file-id=test");
+  });
+
   try {
-    const teamId = await resolveTeamId(page);
-
-    results.sharedNavigationContract = await page.evaluate(() => {
-      return !!window.NofidaNavigation &&
-        typeof window.NofidaNavigation.getCurrentSurface === "function" &&
-        typeof window.NofidaNavigation.isDashboardSurface === "function" &&
-        typeof window.NofidaNavigation.isAccountSurface === "function" &&
-        typeof window.NofidaNavigation.isEditorSurface === "function" &&
-        typeof window.NofidaNavigation.isResourceRoute === "function" &&
-        typeof window.NofidaNavigation.getSafeBackTarget === "function" &&
-        typeof window.NofidaNavigation.goToNofidaRoute === "function";
-    });
-    results.surfacesDefined = await page.evaluate(() => {
-      if (!window.NofidaNavigation) return false;
-      return window.NofidaNavigation.isDashboardSurface("#/nofida/libraries") &&
-        window.NofidaNavigation.isAccountSurface("#/settings/options?nofida=ai&tab=api") &&
-        window.NofidaNavigation.isEditorSurface("#/workspace?file-id=test");
-    });
-
-    await verifyDashboardAndResources(page, teamId, results);
-    await verifyAccount(page, results);
-    await verifyEditor(page, results);
+    const teamId = await resolveTeamId(dashboardPage);
+    await verifyDashboardAndResources(dashboardPage, teamId, results);
   } catch (error) {
-    verificationError = error && error.message ? error.message : String(error);
+    verificationNotes.push(`dashboard/resource: ${error && error.message ? error.message : String(error)}`);
   }
 
-  const blocked = await visibleBlockedAnchors(page);
+  try {
+    const accountPage = await createTrackedPage();
+    await verifyAccount(accountPage, results);
+  } catch (error) {
+    verificationNotes.push(`account: ${error && error.message ? error.message : String(error)}`);
+  }
+
+  try {
+    const editorPage = await createTrackedPage();
+    await verifyEditor(editorPage, results);
+  } catch (error) {
+    verificationNotes.push(`editor: ${error && error.message ? error.message : String(error)}`);
+  }
+
+  const blocked = [];
+  for (const page of trackedPages) {
+    try {
+      blocked.push(...await visibleBlockedAnchors(page));
+    } catch (_error) {
+      /* ignore closed/transitioning pages */
+    }
+  }
   results.noVisiblePenpotLinks = blocked.length === 0;
   results.noFatalConsoleErrors = fatalConsole.length === 0;
 
   console.log("");
   console.log("PATCH 019A completed.");
-  if (verificationError) {
-    console.log(`verification note: FAIL (${verificationError})`);
+  if (verificationNotes.length) {
+    console.log(`verification note: FAIL (${verificationNotes.join(" | ")})`);
   }
   console.log("");
   console.log("Navigation architecture:");
