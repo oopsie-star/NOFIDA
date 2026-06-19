@@ -4,6 +4,13 @@
   if (window.NofidaResources) return;
 
   var OVERLAY_ID = "nfr-overlay";
+  var NATIVE_PANEL_ID = "nfr-native-fonts";
+  var NATIVE_PANEL_MARKER = "data-nofida-fonts-enhanced";
+  var NATIVE_PANEL_REVISION = "data-nofida-render-rev";
+  var NATIVE_CONTAINER_SELECTOR = ".main_ui_dashboard_fonts__dashboard-container.main_ui_dashboard_fonts__dashboard-fonts";
+  var NATIVE_UPLOAD_SELECTOR = ".main_ui_dashboard_fonts__dashboard-fonts-upload";
+  var NATIVE_INSTALLED_SELECTOR = ".main_ui_dashboard_fonts__dashboard-installed-fonts";
+  var NATIVE_CONTENT_SELECTOR = ".main_ui_dashboard__dashboard-content";
   var FONT_CATALOG_URLS = [
     "/nofida/font-store/catalog.json?v=__NOFIDA_ASSET_TAG__",
     "/nofida/fonts/catalog.json?v=__NOFIDA_ASSET_TAG__"
@@ -18,36 +25,36 @@
 
   var PAGES = {
     fonts: {
-      title: "NOFIDA Font Catalog",
-      badge: "Native workflow ready",
-      intro: "Use reviewed NOFIDA fonts inside the native Fonts workflow first. The catalog remains available as a secondary resource surface for search, pairing, licensing, and download.",
-      notice: "Automatic installation is not enabled in this patch. Download a reviewed font and continue through the native font upload flow when you need it in the workspace.",
+      title: "Шрифты NOFIDA",
+      badge: "Нативный сценарий",
+      intro: "Сначала используйте проверенные шрифты NOFIDA в нативном экране шрифтов. Каталог остается ресурсным центром для поиска, сочетаний, лицензий и загрузки.",
+      notice: "Автоматическая установка в этом патче не включена. Скачайте проверенный шрифт и продолжите через нативную загрузку шрифтов, когда он действительно нужен в рабочем пространстве.",
       actions: [
-        { label: "Open native Fonts", href: "#/dashboard", action: "native-fonts" },
-        { label: "Open Media Bank", href: PAGE_ROUTES.media },
-        { label: "Open Figma migration", href: PAGE_ROUTES.figma }
+        { label: "Открыть экран шрифтов", href: "#/dashboard", action: "native-fonts" },
+        { label: "Открыть Медиа", href: PAGE_ROUTES.media },
+        { label: "Открыть импорт из Figma", href: PAGE_ROUTES.figma }
       ]
     },
     media: {
-      title: "NOFIDA Media Bank",
-      badge: "License-aware store",
-      intro: "Browse same-origin assets and UI patterns with approval state, source metadata, and compact search filters. Only approved resources should be treated as usable product inventory.",
-      notice: "Assets stay local to the NOFIDA store. No random hotlinks, no hidden provenance, and no copyright laundering through AI styling.",
+      title: "Медиа NOFIDA",
+      badge: "Проверенный каталог",
+      intro: "Просматривайте same-origin ассеты и UI patterns с учетом статуса согласования, источника и компактных фильтров. Используемыми ресурсами считаются только одобренные позиции.",
+      notice: "Ассеты остаются в локальном хранилище NOFIDA. Без случайных hotlink, скрытого происхождения и попыток отмыть авторство через AI-стилизацию.",
       actions: [
-        { label: "Open native Fonts", href: "#/dashboard", action: "native-fonts" },
-        { label: "Open Figma migration", href: PAGE_ROUTES.figma },
-        { label: "Open notices", href: "#/nofida/open-source-notices" }
+        { label: "Открыть экран шрифтов", href: "#/dashboard", action: "native-fonts" },
+        { label: "Открыть импорт из Figma", href: PAGE_ROUTES.figma },
+        { label: "Открыть лицензии", href: "#/nofida/open-source-notices" }
       ]
     },
     figma: {
-      title: "Figma Migration Assistant",
-      badge: "Migration and adaptation",
-      intro: "A practical migration planning surface for exports, font replacement, asset recovery, and risk reporting. It does not promise perfect 1:1 component or prototype fidelity.",
-      notice: "This route is still report-first. It helps teams prepare migrations honestly before any converter work is introduced.",
+      title: "Импорт из Figma",
+      badge: "Миграция и адаптация",
+      intro: "Практическая страница планирования миграции: экспорты, замена шрифтов, восстановление ассетов и отчет по рискам. Она не обещает идеальную 1:1 точность компонентов или прототипов.",
+      notice: "Этот маршрут по-прежнему report-first. Он помогает честно подготовить миграцию до появления конвертера.",
       actions: [
-        { label: "Open native Fonts", href: "#/dashboard", action: "native-fonts" },
-        { label: "Open Media Bank", href: PAGE_ROUTES.media },
-        { label: "Open notices", href: "#/nofida/open-source-notices" }
+        { label: "Открыть экран шрифтов", href: "#/dashboard", action: "native-fonts" },
+        { label: "Открыть Медиа", href: PAGE_ROUTES.media },
+        { label: "Открыть лицензии", href: "#/nofida/open-source-notices" }
       ]
     }
   };
@@ -72,7 +79,10 @@
     loadedPreviewFonts: {},
     nativeSyncTimer: null,
     nativeObserver: null,
-    nativeInterval: null
+    nativeObserverRoot: null,
+    nativeRenderLock: false,
+    nativeSectionKey: "",
+    nativePanelKey: ""
   };
 
   var RESOURCE_CSS = [
@@ -82,10 +92,13 @@
     "#nfr-overlay[hidden]{display:none!important}",
     "#nfr-dynamic-fonts{display:none}",
     ".nfr-shell{max-width:1240px;margin:0 auto;padding:18px 18px 56px}",
-    ".nfr-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}",
-    ".nfr-back,.nfr-close,.nfr-btn,.nfr-copy-btn,.nfr-filter-select,.nfr-filter-search,.nfr-tab,.nfr-link-btn{font:inherit}",
-    ".nfr-back,.nfr-close,.nfr-tab,.nfr-copy-btn{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer}",
-    ".nfr-back:hover,.nfr-close:hover,.nfr-tab:hover,.nfr-copy-btn:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
+    ".nfr-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:14px}",
+    ".nfr-topcopy{display:flex;flex-direction:column;gap:6px}",
+    ".nfr-breadcrumb{margin:0;color:#8fa4c2;font-size:12px;font-weight:700;line-height:1.4}",
+    ".nfr-surface-pill{display:inline-flex;align-items:center;width:fit-content;min-height:24px;padding:0 9px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
+    ".nfr-back,.nfr-btn,.nfr-copy-btn,.nfr-filter-select,.nfr-filter-search,.nfr-tab,.nfr-link-btn{font:inherit}",
+    ".nfr-back,.nfr-tab,.nfr-copy-btn{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer}",
+    ".nfr-back:hover,.nfr-tab:hover,.nfr-copy-btn:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
     ".nfr-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}",
     ".nfr-nav-panel,.nfr-hero,.nfr-panel,.nfr-card,.nfr-native-panel{border:1px solid rgba(90,112,140,.22);background:rgba(11,18,32,.88);box-shadow:0 16px 36px rgba(0,0,0,.26)}",
     ".nfr-nav-panel{position:sticky;top:14px;border-radius:18px;padding:14px}",
@@ -94,11 +107,11 @@
     ".nfr-nav-link{display:block;padding:9px 10px;border-radius:12px;border:1px solid transparent;color:#a9b9cf;text-decoration:none;font-size:13px;line-height:1.35}",
     ".nfr-nav-link:hover,.nfr-nav-link.active{background:#12203a;border-color:rgba(96,165,250,.28);color:#fff}",
     ".nfr-main{display:flex;flex-direction:column;gap:14px}",
-    ".nfr-hero{border-radius:20px;padding:18px 18px 16px}",
+    ".nfr-hero{border-radius:20px;padding:16px 18px 15px}",
     ".nfr-hero-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
     ".nfr-badge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(59,130,246,.14);color:#bfdbfe;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}",
-    ".nfr-hero h1{margin:0;font-size:27px;line-height:1.08;letter-spacing:-.03em}",
-    ".nfr-intro{margin:10px 0 0;color:#c9d5e3;font-size:13px;line-height:1.6;max-width:900px}",
+    ".nfr-hero h1{margin:0;font-size:24px;line-height:1.08;letter-spacing:-.03em}",
+    ".nfr-intro{margin:10px 0 0;color:#c9d5e3;font-size:13px;line-height:1.55;max-width:900px}",
     ".nfr-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}",
     ".nfr-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border-radius:999px;text-decoration:none;font-size:12px;font-weight:700}",
     ".nfr-btn-primary{background:#2563eb;border:1px solid #2563eb;color:#fff}",
@@ -136,16 +149,32 @@
     ".nfr-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}",
     ".nfr-section-title{margin:0;font-size:16px;line-height:1.25;color:#fff}",
     ".nfr-empty,.nfr-error{padding:16px;border-radius:14px;background:#0d1524;border:1px solid rgba(90,112,140,.18);font-size:13px;line-height:1.6;color:#c9d5e3}",
-    ".nfr-native-panel{margin:12px 0 18px}",
+    ".nfr-native-panel{margin:0 0 16px}",
     ".nfr-native-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}",
-    ".nfr-native-copy{max-width:760px;color:#c9d5e3;font-size:13px;line-height:1.58;margin:8px 0 0}",
+    ".nfr-native-copy{max-width:760px;color:#c9d5e3;font-size:12px;line-height:1.5;margin:6px 0 0}",
+    ".nfr-native-panel-compact{padding:12px 14px;border-radius:16px}",
+    ".nfr-native-panel-compact .nfr-native-head{align-items:center}",
+    ".nfr-native-panel-compact h2{font-size:16px;line-height:1.25}",
+    ".nfr-native-section{display:flex;flex-direction:column;gap:12px}",
+    ".nfr-native-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 160px auto;gap:8px;align-items:center}",
+    ".nfr-native-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}",
+    ".nfr-native-card{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;border:1px solid rgba(90,112,140,.16);background:#0d1524}",
+    ".nfr-native-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}",
+    ".nfr-native-card h3{margin:0;font-size:15px;line-height:1.25;color:#fff}",
+    ".nfr-native-card p{margin:0;color:#c9d5e3;font-size:12px;line-height:1.5}",
+    ".nfr-native-preview{padding:10px 12px;border-radius:12px;border:1px solid rgba(90,112,140,.16);background:rgba(255,255,255,.03);color:#fff;font-size:17px;line-height:1.25}",
+    ".nfr-native-meta{display:flex;flex-wrap:wrap;gap:6px}",
+    ".nfr-native-meta span{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:#0b1220;color:#bfd3eb;font-size:10px;font-weight:700}",
+    ".nfr-native-actions{display:flex;flex-wrap:wrap;gap:6px}",
+    ".nfr-native-actions .nfr-link-btn,.nfr-native-actions .nfr-copy-btn{min-height:30px;padding:0 10px;font-size:11px}",
+    ".nfr-native-empty{padding:12px;border-radius:12px;border:1px dashed rgba(90,112,140,.18);background:#0d1524;color:#c9d5e3;font-size:12px;line-height:1.5}",
     ".nfr-footer-note{margin:2px 0 0;color:#8fa4c2;font-size:11px}",
     ".nfr-flow-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}",
     ".nfr-flow-card{padding:12px;border-radius:14px;background:#0d1524;border:1px solid rgba(90,112,140,.16)}",
     ".nfr-flow-card h3{margin:0 0 6px;font-size:14px;color:#fff}",
     ".nfr-flow-card p{margin:0;color:#c9d5e3;font-size:12px;line-height:1.55}",
     "@media (max-width:1080px){.nfr-layout{grid-template-columns:1fr}.nfr-nav-panel{position:static}.nfr-toolbar{grid-template-columns:1fr 1fr}.nfr-toolbar .nfr-filter-select:last-child{grid-column:1/-1}}",
-    "@media (max-width:720px){.nfr-shell{padding:14px 12px 44px}.nfr-topbar{flex-direction:column;align-items:stretch}.nfr-toolbar,.nfr-meta{grid-template-columns:1fr}.nfr-back,.nfr-close,.nfr-btn,.nfr-link-btn,.nfr-copy-btn,.nfr-tab{width:100%}.nfr-hero h1{font-size:24px}}"
+    "@media (max-width:720px){.nfr-shell{padding:14px 12px 44px}.nfr-topbar{flex-direction:column;align-items:stretch}.nfr-toolbar,.nfr-meta,.nfr-native-toolbar{grid-template-columns:1fr}.nfr-back,.nfr-btn,.nfr-link-btn,.nfr-copy-btn,.nfr-tab{width:100%}.nfr-hero h1{font-size:22px}}"
   ].join("");
 
   function onReady(fn) {
@@ -168,6 +197,10 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function getNav() {
+    return window.NofidaNavigation || null;
   }
 
   function normalizeHash(hash) {
@@ -199,9 +232,36 @@
     state.lastAppHash = next;
   }
 
+  function getPageHash(pageId) {
+    return PAGE_ROUTES[pageId] || PAGE_ROUTES.fonts;
+  }
+
+  function getBackInfo(pageId) {
+    var nav = getNav();
+    var currentHash = getPageHash(pageId);
+    if (!nav) {
+      return {
+        hash: normalizeHash(state.lastAppHash || "#/dashboard"),
+        label: "Назад к проектам"
+      };
+    }
+    return nav.getBackTargetInfo(currentHash, window.location.hash || currentHash);
+  }
+
+  function getBreadcrumb(pageId) {
+    var nav = getNav();
+    if (!nav) return "Панель / Ресурсы";
+    var routeMeta = nav.getRouteMeta(getPageHash(pageId));
+    return routeMeta && Array.isArray(routeMeta.breadcrumb) && routeMeta.breadcrumb.length
+      ? routeMeta.breadcrumb.join(" / ")
+      : "Панель / Ресурсы";
+  }
+
   function getTeamId() {
     var fromHash = (window.location.hash || "").match(/#\/dashboard\/team\/([0-9a-f-]{36})/i);
     if (fromHash) return fromHash[1];
+    var fromQuery = (window.location.hash || "").match(/[?&]team-id=([0-9a-f-]{36})/i);
+    if (fromQuery) return fromQuery[1];
     var links = document.querySelectorAll("a[href]");
     for (var index = 0; index < links.length; index += 1) {
       var match = (links[index].getAttribute("href") || "").match(/dashboard\/team\/([0-9a-f-]{36})/i);
@@ -218,7 +278,7 @@
 
   function nativeFontsHash() {
     var teamId = rememberTeamId();
-    return teamId ? "#/dashboard/team/" + teamId + "/fonts" : "#/dashboard";
+    return teamId ? "#/dashboard/fonts?team-id=" + teamId : "#/dashboard";
   }
 
   function openNativeFonts(event) {
@@ -227,15 +287,11 @@
   }
 
   function isNativeFontsHash(hash) {
-    return /#\/dashboard\/team\/[0-9a-f-]{36}\/fonts(?:[/?#].*)?$/i.test(normalizeHash(hash || window.location.hash || ""));
+    return /#\/dashboard(?:\/team\/[0-9a-f-]{36})?\/fonts(?:[/?#].*)?$/i.test(normalizeHash(hash || window.location.hash || ""));
   }
 
   function looksLikeNativeFontsSurface() {
-    var text = "";
-    if (document.body && typeof document.body.innerText === "string") {
-      text = document.body.innerText.slice(0, 2400);
-    }
-    return /upload custom fonts|add custom font|custom fonts you upload|загрузить произвольные шрифты|добавить произвольный шрифт|пользовательские шрифты/i.test(text);
+    return !!document.querySelector("#dashboard-fonts-title, " + NATIVE_CONTAINER_SELECTOR);
   }
 
   function loadJson(cacheKey, urls) {
@@ -416,6 +472,9 @@
       (actions || []).map(function (action, index) {
         var klass = index === 0 ? "nfr-btn nfr-btn-primary" : "nfr-btn nfr-btn-secondary";
         var attrs = action.action ? ' data-nfr-action="' + escapeHtml(action.action) + '"' : "";
+        if (!action.action && action.href && action.href.charAt(0) === "#") {
+          attrs += ' data-nofida-route="' + escapeHtml(action.href) + '"';
+        }
         return '<a class="' + klass + '" href="' + escapeHtml(action.href || "#") + '"' + attrs + ">" + escapeHtml(action.label) + "</a>";
       }).join(""),
       "</div>"
@@ -423,16 +482,28 @@
   }
 
   function renderNav(currentPageId) {
-    var items = [
-      { id: "libraries", label: "Libraries", href: "#/nofida/libraries" },
-      { id: "fonts", label: "Font Catalog", href: PAGE_ROUTES.fonts },
-      { id: "media", label: "Media Bank", href: PAGE_ROUTES.media },
-      { id: "figma", label: "Figma Migration", href: PAGE_ROUTES.figma }
-    ];
-    return items.map(function (item) {
+    var nav = getNav();
+    if (!nav) {
+      var items = [
+        { id: "libraries", label: "Libraries", href: "#/nofida/libraries" },
+        { id: "fonts", label: "Font Catalog", href: PAGE_ROUTES.fonts },
+        { id: "media", label: "Media Bank", href: PAGE_ROUTES.media },
+        { id: "figma", label: "Figma Migration", href: PAGE_ROUTES.figma }
+      ];
+      return items.map(function (item) {
+        var classes = ["nfr-nav-link"];
+        if (item.id === currentPageId) classes.push("active");
+        return '<a class="' + classes.join(" ") + '" href="' + escapeHtml(item.href) + '">' + escapeHtml(item.label) + "</a>";
+      }).join("");
+    }
+
+    var currentHash = getPageHash(currentPageId);
+    var activeId = nav.getActiveResourceMenuId(currentHash);
+    return nav.getResourceMenuItems(currentHash).map(function (item) {
       var classes = ["nfr-nav-link"];
-      if (item.id === currentPageId) classes.push("active");
-      return '<a class="' + classes.join(" ") + '" href="' + escapeHtml(item.href) + '">' + escapeHtml(item.label) + "</a>";
+      if (item.id === activeId) classes.push("active");
+      return '<a class="' + classes.join(" ") + '" href="' + escapeHtml(item.href) + '" data-nofida-route="' +
+        escapeHtml(item.href) + '">' + escapeHtml(item.label) + "</a>";
     }).join("");
   }
 
@@ -536,7 +607,7 @@
       '  <div class="nfr-section-head">',
       '    <div>',
       '      <p class="nfr-label">Reviewed inventory</p>',
-      '      <h2 class="nfr-section-title">' + escapeHtml(isNativeSurface ? "Recommended NOFIDA fonts" : "Reviewed font inventory") + "</h2>",
+      '      <h2 class="nfr-section-title">' + escapeHtml(isNativeSurface ? "Рекомендованные шрифты NOFIDA" : "Проверенный каталог шрифтов") + "</h2>",
       "    </div>",
       '    <div class="nfr-pill-row">',
       '      <span class="nfr-pill">' + escapeHtml(String(matches.length)) + " shown</span>",
@@ -554,7 +625,7 @@
       '    <select class="nfr-filter-select" disabled><option>' + escapeHtml("Native upload: " + normalized.uploadFormats.join(" / ").toUpperCase()) + "</option></select>",
       "  </div>",
       "  <div class=\"nfr-grid\">",
-      matches.length ? matches.map(function (font) { return renderFontCard(font, isNativeSurface); }).join("") : '<div class="nfr-empty">No font matches this search yet.</div>',
+      matches.length ? matches.map(function (font) { return renderFontCard(font, isNativeSurface); }).join("") : '<div class="nfr-empty">По этому запросу пока нет подходящих шрифтов.</div>',
       "  </div>",
       "</section>"
     ].join("");
@@ -711,7 +782,7 @@
         { value: normalized.uploadFormats.join(" / ").toUpperCase(), label: "Native upload formats" }
       ]),
       renderAuditList("Native font workflow", [
-        "Recommended NOFIDA fonts should appear before custom uploads in the native Fonts screen.",
+        "Рекомендованные шрифты NOFIDA должны отображаться перед пользовательскими загрузками в нативном экране шрифтов.",
         "Download a reviewed font, then continue through the native upload flow until automation is verified.",
         "Do not fake installed state, server-wide rollout, or success messages that are not backed by the product."
       ]),
@@ -748,8 +819,8 @@
         { value: "No 1:1 promise", label: "Prototype fidelity and component parity remain follow-up engineering work" }
       ]),
       '<section class="nfr-panel">',
-      '  <p class="nfr-label">Migration flow</p>',
-      "  <h2>Suggested path</h2>",
+      '  <p class="nfr-label">Сценарий миграции</p>',
+      "  <h2>Рекомендуемый путь</h2>",
       '  <div class="nfr-flow-grid">',
       '    <article class="nfr-flow-card"><h3>1. Intake</h3><p>Collect export bundles, image assets, archive files, and future connector placeholders in one package.</p></article>',
       '    <article class="nfr-flow-card"><h3>2. Inventory</h3><p>Count pages, frames, components, assets, and fonts before any transformation is attempted.</p></article>',
@@ -792,6 +863,7 @@
         if (parts.length !== 2) return;
         state.filters[parts[0]][parts[1]] = node.value;
         if (mode === "media") renderMediaExplorer(root, normalized);
+        else if (mode === "font-native-compact") renderNativeFontExplorer(root, normalized);
         else renderFontExplorer(root, normalized, filterKey, mode === "font-native");
       });
       node.addEventListener("change", function () {
@@ -799,6 +871,7 @@
         if (parts.length !== 2) return;
         state.filters[parts[0]][parts[1]] = node.value;
         if (mode === "media") renderMediaExplorer(root, normalized);
+        else if (mode === "font-native-compact") renderNativeFontExplorer(root, normalized);
         else renderFontExplorer(root, normalized, filterKey, mode === "font-native");
       });
     });
@@ -821,16 +894,11 @@
   }
 
   function findNativeFontSection(kind) {
-    var patterns = kind === "upload"
-      ? /upload|custom font|team font|add font|upload all|загруз|добавить/i
-      : /my fonts|custom fonts|uploaded|font family|мои шрифты|загруж/i;
-    var candidates = document.querySelectorAll("section,article,div");
-    for (var index = 0; index < candidates.length; index += 1) {
-      var text = (candidates[index].textContent || "").trim();
-      if (text.length < 8 || text.length > 1200) continue;
-      if (patterns.test(text)) return candidates[index];
-    }
-    return null;
+    var mount = getNativeFontsMount();
+    if (!mount) return null;
+    if (kind === "upload") return mount.upload || mount.section;
+    if (kind === "my-fonts") return mount.installed || mount.section;
+    return document.getElementById(NATIVE_PANEL_ID);
   }
 
   function scrollToNativeFontSection(kind) {
@@ -859,27 +927,27 @@
     }
 
     if (pageId === "fonts") {
-      content.innerHTML = renderLoading("Loading the NOFIDA font catalog...");
+      content.innerHTML = renderLoading("Загружаем каталог шрифтов NOFIDA...");
       loadJson("fontCatalog", FONT_CATALOG_URLS).then(function (catalog) {
         if (state.renderToken !== token || state.currentPageId !== pageId) return;
         content.innerHTML = renderFontBody(catalog);
         renderFontExplorer(content.querySelector("#nfr-font-explorer"), normalizeFontCatalog(catalog), "fonts", false);
       }).catch(function (error) {
         if (state.renderToken !== token || state.currentPageId !== pageId) return;
-        content.innerHTML = renderError("Could not load the font catalog. " + error.message);
+        content.innerHTML = renderError("Не удалось загрузить каталог шрифтов. " + error.message);
       });
       return;
     }
 
     if (pageId === "media") {
-      content.innerHTML = renderLoading("Loading the NOFIDA media store...");
+      content.innerHTML = renderLoading("Загружаем медиатеку NOFIDA...");
       loadJson("mediaCatalog", MEDIA_CATALOG_URL).then(function (catalog) {
         if (state.renderToken !== token || state.currentPageId !== pageId) return;
         content.innerHTML = renderMediaBody(catalog);
         renderMediaExplorer(content.querySelector("#nfr-media-explorer"), normalizeMediaCatalog(catalog));
       }).catch(function (error) {
         if (state.renderToken !== token || state.currentPageId !== pageId) return;
-        content.innerHTML = renderError("Could not load the media catalog. " + error.message);
+        content.innerHTML = renderError("Не удалось загрузить медиатеку. " + error.message);
       });
     }
   }
@@ -898,19 +966,22 @@
     overlay.innerHTML = [
       '<div class="nfr-shell">',
       '  <div class="nfr-topbar">',
-      '    <button class="nfr-back" id="nfr-back" type="button">Back to previous screen</button>',
-      '    <button class="nfr-close" id="nfr-close" type="button" aria-label="Close resource page">Close</button>',
+      '    <div class="nfr-topcopy">',
+      '      <p class="nfr-breadcrumb" id="nfr-breadcrumb">Панель / Ресурсы</p>',
+      '      <span class="nfr-surface-pill">Панель</span>',
+      "    </div>",
+      '    <button class="nfr-back" id="nfr-back" type="button">Назад к проектам</button>',
       "  </div>",
       '  <div class="nfr-layout">',
       '    <aside class="nfr-nav-panel">',
-      '      <p class="nfr-nav-kicker">Resources</p>',
+      '      <p class="nfr-nav-kicker">Ресурсы</p>',
       '      <div class="nfr-nav-list" id="nfr-nav"></div>',
       "    </aside>",
       '    <main class="nfr-main" aria-live="polite">',
       '      <section class="nfr-hero">',
       '        <div class="nfr-hero-head">',
       '          <span class="nfr-badge" id="nfr-badge">Resource page</span>',
-      '          <h1 id="nfr-title">NOFIDA Resources</h1>',
+      '          <h1 id="nfr-title">Ресурсы NOFIDA</h1>',
       "        </div>",
       '        <p class="nfr-intro" id="nfr-intro"></p>',
       '        <div id="nfr-actions"></div>',
@@ -925,7 +996,6 @@
 
     document.body.appendChild(overlay);
     overlay.querySelector("#nfr-back").addEventListener("click", closeToPrevious);
-    overlay.querySelector("#nfr-close").addEventListener("click", closeToPrevious);
     state.overlayEl = overlay;
     return overlay;
   }
@@ -940,15 +1010,17 @@
     state.currentPageId = pageId;
 
     overlay.querySelector("#nfr-nav").innerHTML = renderNav(pageId);
+    overlay.querySelector("#nfr-breadcrumb").textContent = getBreadcrumb(pageId);
     overlay.querySelector("#nfr-badge").textContent = page.badge;
     overlay.querySelector("#nfr-title").textContent = page.title;
     overlay.querySelector("#nfr-intro").textContent = page.intro;
     overlay.querySelector("#nfr-actions").innerHTML = renderActions(page.actions || []);
     overlay.querySelector("#nfr-notice").textContent = page.notice || "";
+    overlay.querySelector("#nfr-back").textContent = getBackInfo(pageId).label;
     overlay.querySelector("#nfr-footer-note").textContent =
       pageId === "figma"
-        ? "Migration guidance only. Report-first, no false 1:1 import promise."
-        : "Internal NOFIDA resource page.";
+        ? "Навигация миграции остается report-first без ложного обещания 1:1 импорта."
+        : "Внутренняя страница ресурсов NOFIDA.";
 
     bindActionHandlers(overlay.querySelector("#nfr-actions"));
     renderBody(pageId, token);
@@ -969,61 +1041,172 @@
   }
 
   function closeToPrevious() {
+    var nav = getNav();
+    var currentHash = getPageHash(state.currentPageId || "fonts");
+    if (nav) {
+      nav.goBack(currentHash);
+      return;
+    }
     var back = normalizeHash(state.lastAppHash || "#/dashboard");
     if (isResourceHash(back)) back = "#/dashboard";
     window.location.hash = back.slice(1);
   }
 
-  function findNativeFontsHost() {
-    var selectors = [
-      "main",
-      "[role='main']",
-      "[class*='dashboard-content']",
-      "[class*='dashboard__content']",
-      "[class*='team-font']"
-    ];
-    for (var index = 0; index < selectors.length; index += 1) {
-      var node = document.querySelector(selectors[index]);
-      if (node && !document.getElementById("nfr-native-fonts")) return node;
-      if (node && document.getElementById("nfr-native-fonts") && node.contains(document.getElementById("nfr-native-fonts"))) return node;
-    }
-    return null;
+  function getNativeFontsMount() {
+    var content = document.querySelector(NATIVE_CONTENT_SELECTOR);
+    var section = content ? content.querySelector(NATIVE_CONTAINER_SELECTOR) : document.querySelector(NATIVE_CONTAINER_SELECTOR);
+    if (!content || !section || !content.contains(section)) return null;
+
+    var upload = section.querySelector(NATIVE_UPLOAD_SELECTOR);
+    var installed = section.querySelector(NATIVE_INSTALLED_SELECTOR);
+    if (!upload && !installed) return null;
+
+    return {
+      content: content,
+      section: section,
+      upload: upload,
+      installed: installed
+    };
   }
 
   function removeNativeFontsPanel() {
-    var panel = document.getElementById("nfr-native-fonts");
+    state.nativeSectionKey = "";
+    state.nativePanelKey = "";
+    var panel = document.getElementById(NATIVE_PANEL_ID);
     if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+    var mount = getNativeFontsMount();
+    if (mount && mount.section) mount.section.removeAttribute(NATIVE_PANEL_MARKER);
   }
 
-  function renderNativeFontsPanel(host, catalog) {
+  function panelRevision(panel) {
+    return String(Number(panel.getAttribute(NATIVE_PANEL_REVISION) || "0") + 1);
+  }
+
+  function renderNativeFontCard(font) {
+    var fontFamily = font.runtimeFontFamily || font.family || "Inter";
+    var previewStyle = "font-family:'" + String(fontFamily).replace(/'/g, "\\'") + "',Inter,\"Segoe UI\",system-ui,sans-serif";
+    var downloadUrl = font.previewFilePath || (font.localFilePaths || [])[0] || "";
+    var canDownload = font.approvalStatus === "approved" && !!downloadUrl;
+    var detailsRoute = PAGE_ROUTES.fonts + "?font=" + encodeURIComponent(font.id || font.family || "");
+    return [
+      '<article class="nfr-native-card">',
+      '  <div class="nfr-native-card-top">',
+      "    <div>",
+      '      <h3>' + escapeHtml(font.family) + "</h3>",
+      '      <p>' + escapeHtml(font.recommendedUseCase || "Проверенное семейство для рабочих интерфейсов NOFIDA.") + "</p>",
+      "    </div>",
+      '    <span class="nfr-pill ' + (font.approvalStatus === "approved" ? "good" : "warn") + '">' + escapeHtml(font.approvalStatus) + "</span>",
+      "  </div>",
+      '  <div class="nfr-native-preview" style="' + escapeHtml(previewStyle) + '">' + escapeHtml(font.previewText || "Aa Бб 123") + "</div>",
+      '  <div class="nfr-native-meta">',
+      '    <span>' + escapeHtml(font.category) + "</span>",
+      '    <span>' + escapeHtml(font.license) + "</span>",
+      arrayify(font.languageCoverage).length ? '<span>' + escapeHtml(arrayify(font.languageCoverage).slice(0, 2).join(", ")) + "</span>" : "",
+      "  </div>",
+      '  <div class="nfr-native-actions">',
+      canDownload
+        ? '<a class="nfr-link-btn" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noreferrer">Скачать</a>'
+        : '<span class="nfr-pill warn">Скачивание недоступно</span>',
+      '<button class="nfr-copy-btn" type="button" data-nfr-native-nav="upload">Открыть загрузку</button>',
+      '<a class="nfr-link-btn" href="' + escapeHtml(detailsRoute) + '" data-nofida-route="' + escapeHtml(PAGE_ROUTES.fonts) + '">Подробнее</a>',
+      "  </div>",
+      "</article>"
+    ].join("");
+  }
+
+  function renderNativeFontExplorer(target, normalized) {
+    var filterState = state.filters.nativeFonts;
+    var categories = ["all"].concat(normalized.fonts.map(function (font) { return font.category; }).filter(function (value, index, arr) {
+      return value && arr.indexOf(value) === index;
+    }));
+    var matches = normalized.fonts.filter(function (font) {
+      return fontMatches(font, filterState);
+    });
+
+    ensurePreviewFonts(matches.slice(0, 8));
+    matches.forEach(function (font) {
+      if (!font.runtimeFontFamily) font.runtimeFontFamily = "NOFIDA-" + font.id;
+    });
+
+    target.innerHTML = [
+      '<section class="nfr-native-section">',
+      '  <div class="nfr-native-toolbar">',
+      '    <input class="nfr-filter-search" data-nfr-filter="nativeFonts:query" type="search" placeholder="Найти семейство, сценарий или язык..." value="' + escapeHtml(filterState.query || "") + '"/>',
+      '    <select class="nfr-filter-select" data-nfr-filter="nativeFonts:category">',
+      categories.map(function (category) {
+        return '<option value="' + escapeHtml(category) + '"' + (filterState.category === category ? " selected" : "") + ">" + escapeHtml(category === "all" ? "Все категории" : category) + "</option>";
+      }).join(""),
+      "    </select>",
+      '    <span class="nfr-pill">' + escapeHtml(String(matches.length)) + " шт.</span>",
+      "  </div>",
+      matches.length ? '<div class="nfr-native-grid">' + matches.slice(0, 8).map(renderNativeFontCard).join("") + "</div>" : '<div class="nfr-native-empty">Подходящих шрифтов пока нет. Откройте полный каталог, если нужен расширенный поиск.</div>',
+      "</section>"
+    ].join("");
+
+    bindActionHandlers(target);
+    bindFilterHandlers(target, normalized, "nativeFonts", "font-native-compact");
+    bindNativeTabHandlers(target);
+  }
+
+  function renderNativeFontsPanel(mount, catalog) {
     var normalized = normalizeFontCatalog(catalog);
-    var panel = document.getElementById("nfr-native-fonts");
+    var sectionKey = "native-fonts:" + (mount.section.className || "") + ":" + (mount.upload ? "upload" : "") + ":" + (mount.installed ? "installed" : "");
+    var renderKey = [
+      normalized.fonts.length,
+      normalized.uploadFormats.join(","),
+      normalized.fonts.slice(0, 8).map(function (font) {
+        return [font.id, font.approvalStatus, font.family].join(":");
+      }).join("|")
+    ].join("::");
+
+    var panel = document.getElementById(NATIVE_PANEL_ID);
+    var desiredParent = mount.section;
+    var beforeNode = mount.upload || mount.section.firstChild || null;
+
     if (!panel) {
       panel = document.createElement("section");
-      panel.id = "nfr-native-fonts";
-      panel.className = "nfr-native-panel";
-      host.insertBefore(panel, host.firstChild || null);
+      panel.id = NATIVE_PANEL_ID;
+      panel.className = "nfr-native-panel nfr-native-panel-compact";
+      panel.setAttribute(NATIVE_PANEL_MARKER, "true");
+    }
+
+    if (panel.parentNode !== desiredParent) {
+      desiredParent.insertBefore(panel, beforeNode);
+    } else if (beforeNode && panel.nextSibling !== beforeNode) {
+      desiredParent.insertBefore(panel, beforeNode);
+    }
+
+    desiredParent.setAttribute(NATIVE_PANEL_MARKER, "true");
+
+    if (state.nativeSectionKey === sectionKey &&
+        state.nativePanelKey === renderKey &&
+        panel.getAttribute(NATIVE_PANEL_MARKER) === "true" &&
+        panel.innerHTML) {
+      return;
     }
 
     panel.innerHTML = [
       '<div class="nfr-native-head">',
       '  <div>',
-      '    <p class="nfr-label">Typography</p>',
-      "    <h2>Recommended NOFIDA</h2>",
-      '    <p class="nfr-native-copy">Pick a reviewed NOFIDA font first, or continue into the native upload flow for your own font files. The native font list remains the source of truth for what is actually available in the workspace.</p>',
+      '    <p class="nfr-label">Типографика</p>',
+      "    <h2>Рекомендованные NOFIDA</h2>",
+      '    <p class="nfr-native-copy">Компактная подборка проверенных шрифтов NOFIDA. Полный каталог доступен отдельно, а нативная загрузка ниже остается основным способом добавить шрифт в рабочее пространство.</p>',
       "  </div>",
       '  <div class="nfr-native-tabs">',
-      '    <button class="nfr-tab" type="button" data-nfr-native-nav="recommended">Recommended NOFIDA</button>',
-      '    <button class="nfr-tab" type="button" data-nfr-native-nav="upload">Upload your font</button>',
-      '    <button class="nfr-tab" type="button" data-nfr-native-nav="my-fonts">My fonts</button>',
+      '    <button class="nfr-tab" type="button" data-nfr-native-nav="recommended">Рекомендованные NOFIDA</button>',
+      '    <button class="nfr-tab" type="button" data-nfr-native-nav="upload">Загрузить свой шрифт</button>',
+      '    <button class="nfr-tab" type="button" data-nfr-native-nav="my-fonts">Мои шрифты</button>',
       "  </div>",
       "</div>",
-      '<div class="nfr-alert">Installation uses the native font upload flow until automatic installation is enabled. NOFIDA does not claim a font is installed unless the native screen shows it.</div>',
       '<div id="nfr-native-font-explorer"></div>'
     ].join("");
+    panel.setAttribute(NATIVE_PANEL_REVISION, panelRevision(panel));
+
+    state.nativeSectionKey = sectionKey;
+    state.nativePanelKey = renderKey;
 
     bindNativeTabHandlers(panel);
-    renderFontExplorer(panel.querySelector("#nfr-native-font-explorer"), normalized, "nativeFonts", true);
+    renderNativeFontExplorer(panel.querySelector("#nfr-native-font-explorer"), normalized);
   }
 
   function syncNativeFontsSurface() {
@@ -1032,26 +1215,76 @@
       removeNativeFontsPanel();
       return;
     }
+    var mount = getNativeFontsMount();
+    if (!mount) return;
+
+    state.nativeRenderLock = true;
     loadJson("fontCatalog", FONT_CATALOG_URLS).then(function (catalog) {
-      var host = findNativeFontsHost();
-      if (!host) return;
-      renderNativeFontsPanel(host, catalog);
+      renderNativeFontsPanel(mount, catalog);
     }).catch(function () {
       /* native screen should not break if the catalog is unavailable */
+    }).finally(function () {
+      window.setTimeout(function () {
+        state.nativeRenderLock = false;
+      }, 120);
     });
   }
 
   function scheduleNativeFontsSync() {
+    if (!isNativeFontsHash(window.location.hash || "") && !looksLikeNativeFontsSurface()) {
+      if (state.nativeSyncTimer) {
+        window.clearTimeout(state.nativeSyncTimer);
+        state.nativeSyncTimer = null;
+      }
+      return;
+    }
     if (state.nativeSyncTimer) window.clearTimeout(state.nativeSyncTimer);
     state.nativeSyncTimer = window.setTimeout(function () {
       state.nativeSyncTimer = null;
       syncNativeFontsSurface();
-    }, 120);
+    }, 220);
+  }
+
+  function disconnectNativeFontsObserver() {
+    if (state.nativeSyncTimer) {
+      window.clearTimeout(state.nativeSyncTimer);
+      state.nativeSyncTimer = null;
+    }
+    if (state.nativeObserver) state.nativeObserver.disconnect();
+    state.nativeObserver = null;
+    state.nativeObserverRoot = null;
+  }
+
+  function ensureNativeFontsObserver() {
+    if (!isNativeFontsHash(window.location.hash || "") && !looksLikeNativeFontsSurface()) {
+      disconnectNativeFontsObserver();
+      return;
+    }
+    var nextRoot = document.querySelector(NATIVE_CONTENT_SELECTOR) || document.getElementById("app");
+    if (!nextRoot || !window.MutationObserver) {
+      disconnectNativeFontsObserver();
+      return;
+    }
+    if (state.nativeObserverRoot === nextRoot && state.nativeObserver) return;
+    disconnectNativeFontsObserver();
+
+    state.nativeObserverRoot = nextRoot;
+    state.nativeObserver = new MutationObserver(function (mutations) {
+      if (state.nativeRenderLock) return;
+      var relevant = mutations.some(function (mutation) {
+        if (!mutation.target || !mutation.target.closest) return false;
+        if (mutation.target.closest("#" + NATIVE_PANEL_ID)) return false;
+        return mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
+      });
+      if (relevant) scheduleNativeFontsSync();
+    });
+    state.nativeObserver.observe(nextRoot, { childList: true, subtree: true });
   }
 
   function onHashChange() {
     var hash = normalizeHash(window.location.hash || "#/dashboard");
     var pageId = getPageIdFromHash(hash);
+    var nativeSurfaceActive = isNativeFontsHash(hash) || looksLikeNativeFontsSurface();
 
     if (pageId) {
       showPage(pageId);
@@ -1060,7 +1293,14 @@
       hidePages();
     }
 
-    scheduleNativeFontsSync();
+    if (nativeSurfaceActive) {
+      ensureNativeFontsObserver();
+      scheduleNativeFontsSync();
+      return;
+    }
+
+    disconnectNativeFontsObserver();
+    removeNativeFontsPanel();
   }
 
   function onKeyDown(event) {
@@ -1075,11 +1315,6 @@
     ensureOverlay();
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("keydown", onKeyDown);
-    if (document.body && window.MutationObserver) {
-      state.nativeObserver = new MutationObserver(scheduleNativeFontsSync);
-      state.nativeObserver.observe(document.body, { childList: true, subtree: true });
-    }
-    state.nativeInterval = window.setInterval(syncNativeFontsSurface, 1500);
     onHashChange();
 
     window.NofidaResources = {

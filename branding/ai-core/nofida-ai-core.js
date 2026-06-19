@@ -140,6 +140,10 @@
     window.addEventListener("load", runAfterPaint, { once: true });
   }
 
+  function getNavigation() {
+    return window.NofidaNavigation || null;
+  }
+
   function isDashboardRoute() {
     return /^#\/dashboard/.test(window.location.hash || "");
   }
@@ -213,6 +217,11 @@
 
   function closeAccountSettingsPage() {
     state.settingsOpen = false;
+    var nav = getNavigation();
+    if (nav) {
+      nav.goToNofidaRoute("#/settings/options", { source: "account-ai-back", rememberOrigin: false });
+      return;
+    }
     window.location.hash = "#/settings/options";
   }
 
@@ -381,7 +390,7 @@
   function renderCatalog(items) {
     return items.map(function (item) {
       var href = item.internal_url || "#/nofida/libraries";
-      var source = item.internal_url ? "Внутренний ресурс" : "Открыть каталог";
+      var source = item.internal_url ? "Открыть ресурсный центр" : "Открыть каталог";
       var title = item.title || item.name || item.id || "Library";
       var meta = [item.type || "library", item.tier || "catalog", item.author || "Nofida"].join(" · ");
       return [
@@ -399,12 +408,22 @@
 
   function openExternal(href) {
     if (!href || href === "#") return;
+    var nav = getNavigation();
     if (/^(#|\/#\/)/.test(href)) {
+      if (nav) {
+        nav.goToNofidaRoute(href, { source: "ai-resource-center" });
+        return;
+      }
       window.location.href = href;
       return;
     }
     if (isPenpotExternalHref(href)) {
-      window.location.href = resolveNofidaInternalRoute(href, "", "", "") || "#/nofida/help";
+      var route = resolveNofidaInternalRoute(href, "", "", "") || "#/nofida/help";
+      if (nav) {
+        nav.goToNofidaRoute(route, { source: "ai-resource-center" });
+        return;
+      }
+      window.location.href = route;
       return;
     }
     window.open(href, "_blank", "noopener,noreferrer");
@@ -1163,6 +1182,9 @@
     }
 
     setAccountSettingsPageMode(activePage);
+    var activeTabLabel = (SETTINGS_TABS.find(function (tab) {
+      return tab.id === state.settingsUi.activeTab;
+    }) || SETTINGS_TABS[0] || { label: "API Configuration" }).label;
 
     var bodyHtml = "";
     if (activePage) {
@@ -1181,7 +1203,7 @@
         '<section class="account-shell page">',
         '  <div class="account-head">',
         '    <div>',
-        '      <span class="eyebrow">Account / Settings / NOFIDA AI</span>',
+        '      <span class="eyebrow">Account / NOFIDA AI / ' + escapeHtml(activeTabLabel) + "</span>",
         '      <h2>NOFIDA AI Provider Settings</h2>',
         '      <p>Server-side provider keys, OpenRouter-backed model library, engine routing, tests, and role assignments are managed here inside your account settings.</p>',
         "    </div>",
@@ -1414,9 +1436,9 @@
       </button>\
       <button class="action-card" type="button" data-action="libraries">\
         <span class="action-kicker">Libraries</span>\
-        <p class="action-title">Каталог Nofida</p>\
-        <p class="action-copy">Локальный curated catalog из <code>/nofida/libraries/catalog.json</code>.</p>\
-        <span class="action-foot">Host-backed store и same-origin файлы</span>\
+        <p class="action-title">Ресурсный центр</p>\
+        <p class="action-copy">Контекстный каталог ресурсов NOFIDA с явным переходом в ресурсный центр при необходимости.</p>\
+        <span class="action-foot">Рекомендации в панели, открытие центра только по явной команде</span>\
       </button>\
     </div>\
   </section>\
@@ -1459,12 +1481,12 @@
   <aside class="library-drawer" id="library-drawer" role="dialog" aria-label="NOFIDA Libraries">\
     <div class="panel-head">\
       <span class="dot"></span>\
-      <h2>NOFIDA Libraries</h2>\
-      <small>local catalog</small>\
+      <h2>Ресурсный центр NOFIDA</h2>\
+      <small>preview before opening</small>\
       <button class="close" type="button" data-close="libraries" aria-label="Закрыть">×</button>\
     </div>\
     <div class="library-body">\
-      <p class="library-note">Каталог читается из server-side store. После monthly sync approved файлы доступны по same-origin URL в <code>/nofida/libraries/files/</code>.</p>\
+      <p class="library-note">Каталог читается из server-side store. Переход в полноэкранный ресурсный центр или открытие файла в редакторе происходит только по явной команде.</p>\
       <div class="library-list" id="library-list"><div class="library-empty">Загрузка каталога…</div></div>\
     </div>\
   </aside>\
@@ -1934,7 +1956,7 @@
     if (!nav) {
       if (!_dashAIObserver) {
         _dashAIObserver = new MutationObserver(function () { updateDashboardAIEntry(); });
-        _dashAIObserver.observe(document.body, { childList: true, subtree: true });
+        _dashAIObserver.observe(document.getElementById("app") || document.body, { childList: true, subtree: true });
       }
       return;
     }
@@ -1961,9 +1983,9 @@
       openAccountSettingsPage("api");
     });
 
-    var nhbBtn = document.getElementById("nhb-sidebar-btn");
-    if (nhbBtn && nhbBtn.parentNode === nav) {
-      nav.insertBefore(entry, nhbBtn.nextSibling || null);
+    var nofidaGroup = document.getElementById("nofida-nav-dashboard-group");
+    if (nofidaGroup && nofidaGroup.parentNode === nav) {
+      nav.insertBefore(entry, nofidaGroup.nextSibling || null);
     } else {
       nav.appendChild(entry);
     }
@@ -1975,6 +1997,8 @@
   // ─────────────────────────────────────────────────────────────────────
 
   var _extLinkObserver = null;
+  var _extLinkObserverRoot = null;
+  var _extLinkObserverTimer = null;
 
   var PENPOT_EXT_DOMAINS = [
     "help.penpot.app",
@@ -2063,8 +2087,31 @@
       .replace(/\bPenpot\b/g, "NOFIDA");
   }
 
-  function sanitizePenpotBrandingUi() {
-    document.querySelectorAll("[title],[aria-label]").forEach(function (node) {
+  function normalizeBrandingRoots(scope) {
+    if (!scope) {
+      var defaultRoot = document.getElementById("app") || document.body;
+      return defaultRoot ? [defaultRoot] : [];
+    }
+    if (scope.nodeType === 1 || scope.nodeType === 9) return [scope];
+    return Array.prototype.filter.call(scope, function (node) {
+      return !!node && (node.nodeType === 1 || node.nodeType === 9);
+    });
+  }
+
+  function collectScopedNodes(scope, selector) {
+    var roots = normalizeBrandingRoots(scope);
+    var out = [];
+    roots.forEach(function (root) {
+      if (root.nodeType === 1 && root.matches && root.matches(selector)) out.push(root);
+      if (root.querySelectorAll) {
+        Array.prototype.push.apply(out, root.querySelectorAll(selector));
+      }
+    });
+    return out;
+  }
+
+  function sanitizePenpotBrandingUi(scope) {
+    collectScopedNodes(scope, "[title],[aria-label]").forEach(function (node) {
       var title = node.getAttribute("title");
       var ariaLabel = node.getAttribute("aria-label");
       if (title && /Penpot/i.test(title)) {
@@ -2075,13 +2122,13 @@
       }
     });
 
-    document.querySelectorAll("svg title").forEach(function (node) {
+    collectScopedNodes(scope, "svg title").forEach(function (node) {
       if (/Penpot/i.test(node.textContent || "")) {
         node.textContent = replacePenpotCopy(node.textContent || "");
       }
     });
 
-    document.querySelectorAll("a,button,span,small").forEach(function (node) {
+    collectScopedNodes(scope, "a,button,span,small").forEach(function (node) {
       if (node.children && node.children.length) return;
       var text = node.textContent || "";
       if (!/Penpot/i.test(text) || text.length > 48) return;
@@ -2089,8 +2136,8 @@
     });
   }
 
-  function interceptPenpotExternalLinks() {
-    document.querySelectorAll("a[href]").forEach(function (link) {
+  function interceptPenpotExternalLinks(scope) {
+    collectScopedNodes(scope, "a[href]").forEach(function (link) {
       if (link.getAttribute("data-nofida-ext")) return;
       var href = link.getAttribute("href") || "";
       var isExt = PENPOT_EXT_DOMAINS.some(function (d) { return href.indexOf(d) >= 0; }) || isPenpotExternalHref(href);
@@ -2109,20 +2156,46 @@
       link.removeAttribute("rel");
     });
 
-    sanitizePenpotBrandingUi();
+    sanitizePenpotBrandingUi(scope);
+  }
+
+  function stopExtLinkObserver() {
+    if (_extLinkObserverTimer) {
+      window.clearTimeout(_extLinkObserverTimer);
+      _extLinkObserverTimer = null;
+    }
+    if (_extLinkObserver) _extLinkObserver.disconnect();
+    _extLinkObserver = null;
+    _extLinkObserverRoot = null;
   }
 
   function startExtLinkObserver() {
-    if (_extLinkObserver) return;
+    var nextRoot = document.getElementById("app") || document.body;
+    if (!nextRoot || !window.MutationObserver) {
+      stopExtLinkObserver();
+      return;
+    }
+    if (_extLinkObserver && _extLinkObserverRoot === nextRoot) return;
+    stopExtLinkObserver();
+
+    _extLinkObserverRoot = nextRoot;
     _extLinkObserver = new MutationObserver(function (mutations) {
-      var hasNew = mutations.some(function (m) {
-        return Array.prototype.some.call(m.addedNodes, function (n) {
-          return n.nodeType === 1;
+      var roots = [];
+      mutations.forEach(function (mutation) {
+        Array.prototype.forEach.call(mutation.addedNodes || [], function (node) {
+          if (!node || node.nodeType !== 1) return;
+          if (node.closest && node.closest("#nofida-shell-root")) return;
+          roots.push(node);
         });
       });
-      if (hasNew) interceptPenpotExternalLinks();
+      if (!roots.length) return;
+      if (_extLinkObserverTimer) window.clearTimeout(_extLinkObserverTimer);
+      _extLinkObserverTimer = window.setTimeout(function () {
+        _extLinkObserverTimer = null;
+        interceptPenpotExternalLinks(roots);
+      }, 160);
     });
-    _extLinkObserver.observe(document.body, { childList: true, subtree: true });
+    _extLinkObserver.observe(nextRoot, { childList: true, subtree: true });
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -2135,7 +2208,7 @@
     ensureLibrariesExpanded();
     scheduleAccountSettingsRefresh();
     updateDashboardAIEntry();
-    interceptPenpotExternalLinks();
+    interceptPenpotExternalLinks(document.getElementById("app") || document.body);
     startExtLinkObserver();
   }
 

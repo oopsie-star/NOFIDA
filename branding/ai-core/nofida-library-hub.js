@@ -94,7 +94,9 @@
     overlayEl:       null,
     sidebarInjected: false,
     galleryPatched:  false,
-    observerActive:  false
+    observer:        null,
+    observerRoot:    null,
+    observerTimer:   null
   };
 
   /* ============================================================
@@ -720,7 +722,7 @@
     var actionsHtml;
     if (action === "open") {
       /* Healthy installed item: primary open + small reimport icon */
-      var openLabel = item.manual_upload ? "Открыть файл" : (isLib ? "Открыть файл библиотеки" : "Открыть шаблон");
+      var openLabel = "Открыть в редакторе";
       actionsHtml = [
         '<div class="nhb-card-actions">',
         '  <button class="nhb-btn nhb-btn-open"',
@@ -739,7 +741,7 @@
         '    type="button">Переимпортировать корректно</button>',
         '  <button class="nhb-btn nhb-btn-open nhb-btn-sm"',
         '    data-act="open" data-id="' + e(item.id) + '"',
-        '    type="button">Открыть</button>',
+        '    type="button">Открыть в редакторе</button>',
         '</div>'
       ].join("");
     } else {
@@ -750,7 +752,7 @@
       switch (action) {
         case "add":
           btnLabel = item.manual_upload
-            ? "Добавить в моё пространство"
+            ? "Добавить в пространство"
             : (isLib ? "Добавить библиотеку" : "Добавить шаблон");
           btnMod   = "nhb-btn-add";
           break;
@@ -887,17 +889,27 @@
       "background:" + BRAND.bg + ";overflow-y:auto;",
       "font-family:" + BRAND.font + ";color:" + BRAND.text + "}",
     "#nhb-overlay[hidden]{display:none!important}",
-    ".nhb-inner{max-width:1280px;margin:0 auto;padding:28px 24px 80px}",
+    ".nhb-shell{max-width:1280px;margin:0 auto;padding:20px 24px 72px}",
+    ".nhb-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}",
+    ".nhb-topcopy{display:flex;flex-direction:column;gap:6px}",
+    ".nhb-breadcrumb{margin:0;color:#8fa4c2;font-size:12px;font-weight:700;line-height:1.4}",
+    ".nhb-surface-pill{display:inline-flex;align-items:center;width:fit-content;min-height:24px;padding:0 9px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
+    ".nhb-back{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}",
+    ".nhb-back:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
+    ".nhb-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}",
+    ".nhb-nav-panel{position:sticky;top:14px;border-radius:18px;padding:14px;border:1px solid rgba(90,112,140,.22);background:rgba(11,18,32,.88);box-shadow:0 16px 36px rgba(0,0,0,.26)}",
+    ".nhb-nav-kicker{margin:0 0 8px;color:#93a8c7;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}",
+    ".nhb-nav-list{display:flex;flex-direction:column;gap:8px}",
+    ".nhb-nav-link{display:block;padding:9px 10px;border-radius:12px;border:1px solid transparent;color:#a9b9cf;text-decoration:none;font-size:13px;line-height:1.35}",
+    ".nhb-nav-link:hover,.nhb-nav-link.active{background:#12203a;border-color:rgba(96,165,250,.28);color:#fff}",
+    ".nhb-inner{min-width:0}",
     /* header */
     ".nhb-hdr{display:flex;align-items:center;justify-content:space-between;",
-      "margin-bottom:28px;gap:12px;flex-wrap:wrap}",
+      "margin-bottom:18px;gap:12px;flex-wrap:wrap}",
     ".nhb-hdr-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
     ".nhb-dot{width:10px;height:10px;border-radius:50%;background:" + BRAND.accent + "}",
-    ".nhb-h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em}",
-    ".nhb-sub{color:" + BRAND.muted + ";font-size:13px}",
-    ".nhb-close{border:0;background:0;color:" + BRAND.muted + ";font-size:26px;",
-      "line-height:1;cursor:pointer;padding:2px 8px;border-radius:8px}",
-    ".nhb-close:hover{color:" + BRAND.text + "}",
+    ".nhb-h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em}",
+    ".nhb-sub{color:" + BRAND.muted + ";font-size:12px;line-height:1.5;max-width:760px}",
     /* controls */
     ".nhb-ctrl{margin-bottom:20px}",
     ".nhb-search{width:100%;padding:10px 16px;",
@@ -967,12 +979,8 @@
     ".nhb-open-proj{background:0;border:0;color:" + BRAND.muted + ";font-size:12px;",
       "cursor:pointer;padding:4px 8px;border-radius:8px;text-decoration:underline;font-family:inherit}",
     ".nhb-open-proj:hover{color:" + BRAND.text + "}",
-    ".nhb-resource-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}",
-    ".nhb-resource-link{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;",
-      "border-radius:999px;text-decoration:none;font-size:11px;font-weight:800;color:#dbeafe;",
-      "background:rgba(7,12,24,.72);border:1px solid rgba(37,99,235,.2)}",
-    ".nhb-resource-link:hover{background:rgba(37,99,235,.18);border-color:rgba(37,99,235,.38);color:" + BRAND.text + "}",
-    "@media(max-width:640px){.nhb-inner{padding:16px}.nhb-grid{grid-template-columns:1fr}}"
+    "@media(max-width:1080px){.nhb-layout{grid-template-columns:1fr}.nhb-nav-panel{position:static}}",
+    "@media(max-width:640px){.nhb-shell{padding:16px 12px 44px}.nhb-topbar{flex-direction:column;align-items:stretch}.nhb-back{width:100%}.nhb-grid{grid-template-columns:1fr}}"
   ].join("");
 
   function buildOverlay() {
@@ -992,47 +1000,49 @@
     div.id = "nhb-overlay";
     div.setAttribute("hidden", "");
     div.innerHTML = [
-      '<div class="nhb-inner">',
-      '  <div class="nhb-hdr">',
-      '    <div class="nhb-hdr-left">',
-      '      <span class="nhb-dot"></span>',
-      '      <h1 class="nhb-h1">Библиотеки NOFIDA</h1>',
-      '      <span class="nhb-sub">Глобальный каталог · для всех пользователей</span>',
+      '<div class="nhb-shell">',
+      '  <div class="nhb-topbar">',
+      '    <div class="nhb-topcopy">',
+      '      <p class="nhb-breadcrumb" id="nhb-breadcrumb">Панель / Ресурсы / Библиотеки</p>',
+      '      <span class="nhb-surface-pill">Панель</span>',
       '    </div>',
-      '    <div style="display:flex;align-items:center;gap:8px">',
-      '      <button class="nhb-open-proj" id="nhb-open-proj" type="button"',
-      '        title="Открыть проект Библиотеки NOFIDA в вашем дашборде">',
-      '        📁 Открыть мои добавленные</button>',
-      '      <button class="nhb-close" id="nhb-close" title="Закрыть" aria-label="Закрыть">×</button>',
-      '    </div>',
+      '    <button class="nhb-back" id="nhb-back" type="button">Назад к проектам</button>',
       '  </div>',
-      '  <div class="nhb-resource-row">',
-      '    <a class="nhb-resource-link" href="javascript:void(0)" data-act="fonts">Fonts</a>',
-      '    <a class="nhb-resource-link" href="#/nofida/media">Media</a>',
-      '    <a class="nhb-resource-link" href="#/nofida/import/figma">Figma Import</a>',
+      '  <div class="nhb-layout">',
+      '    <aside class="nhb-nav-panel">',
+      '      <p class="nhb-nav-kicker">Ресурсы</p>',
+      '      <div class="nhb-nav-list" id="nhb-nav"></div>',
+      '    </aside>',
+      '    <main class="nhb-inner">',
+      '      <div class="nhb-hdr">',
+      '        <div class="nhb-hdr-left">',
+      '          <span class="nhb-dot"></span>',
+      '          <h1 class="nhb-h1">Библиотеки NOFIDA</h1>',
+      '          <span class="nhb-sub">Глобальный каталог ресурсов для панели NOFIDA. Открытие файла в редакторе происходит только по явной команде.</span>',
+      '        </div>',
+      '        <div style="display:flex;align-items:center;gap:8px">',
+      '          <button class="nhb-open-proj" id="nhb-open-proj" type="button"',
+      '            title="Открыть проект Библиотеки NOFIDA в вашем дашборде">',
+      '            Открыть мои добавленные</button>',
+      '        </div>',
+      '      </div>',
+      '      <div class="nhb-ctrl">',
+      '        <input class="nhb-search" id="nhb-search" type="search"',
+      '          placeholder="Поиск библиотек, иконок, шаблонов…" autocomplete="off" />',
+      '        <div class="nhb-filters" id="nhb-filters">' + filterHtml + '</div>',
+      '      </div>',
+      '      <div class="nhb-status" id="nhb-status">Загрузка каталога…</div>',
+      '      <div class="nhb-grid"  id="nhb-grid"></div>',
+      '    </main>',
       '  </div>',
-      '  <div class="nhb-ctrl">',
-      '    <input class="nhb-search" id="nhb-search" type="search"',
-      '      placeholder="Поиск библиотек, иконок, шаблонов…" autocomplete="off" />',
-      '    <div class="nhb-filters" id="nhb-filters">' + filterHtml + '</div>',
-      '  </div>',
-      '  <div class="nhb-status" id="nhb-status">Загрузка каталога…</div>',
-      '  <div class="nhb-grid"  id="nhb-grid"></div>',
       '</div>'
     ].join("");
 
     document.body.appendChild(div);
     S.overlayEl = div;
 
-    div.querySelector(".nhb-resource-row").addEventListener("click", function (ev) {
-      var link = ev.target && ev.target.closest ? ev.target.closest(".nhb-resource-link") : null;
-      if (!link || link.getAttribute("data-act") !== "fonts") return;
-      ev.preventDefault();
-      openNativeFontsRoute();
-    });
-
     /* ── wire overlay-internal events ── */
-    div.querySelector("#nhb-close").addEventListener("click", hideHub);
+    div.querySelector("#nhb-back").addEventListener("click", hideHub);
 
     div.querySelector("#nhb-open-proj").addEventListener("click", function () {
       hideHub();
@@ -1098,11 +1108,19 @@
       }
     });
 
+    div.querySelector("#nhb-nav").addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest(".nhb-nav-link") : null;
+      if (!link || link.getAttribute("data-act") !== "fonts") return;
+      ev.preventDefault();
+      openNativeFontsRoute();
+    });
+
     return div;
   }
 
   function showHub() {
     var overlay = buildOverlay();
+    updateHubChrome();
     overlay.removeAttribute("hidden");
     document.body.style.overflow = "hidden";
     /* Resolve team ID async — needed when user lands on /#/dashboard without UUID */
@@ -1117,8 +1135,12 @@
       S.overlayEl.setAttribute("hidden", "");
     }
     document.body.style.overflow = "";
-    /* Return to dashboard if we're on the hub hash */
     if ((window.location.hash || "") === HUB_HASH) {
+      var nav = getNav();
+      if (nav) {
+        nav.goBack(HUB_HASH, { replace: true });
+        return;
+      }
       var tid = S.teamId || getTeamId();
       var back = tid
         ? "#/dashboard/team/" + tid + "/projects"
@@ -1138,8 +1160,81 @@
         window.location.hash = "/dashboard";
         return;
       }
-      window.location.hash = "/dashboard/team/" + tid + "/fonts";
+      window.location.hash = "/dashboard/fonts?team-id=" + tid;
     });
+  }
+
+  function getNav() {
+    return window.NofidaNavigation || null;
+  }
+
+  function findDashboardSidebarNav() {
+    var selectors = [
+      ".main_ui_dashboard_sidebar__sidebar-nav",
+      "[class*='dashboard_sidebar'][class*='nav']",
+      "[class*='dashboard_sidebar'][class*='menu']",
+      "[class*='dashboard-sidebar'] nav",
+      "[class*='dashboard-sidebar'] ul"
+    ];
+    for (var index = 0; index < selectors.length; index += 1) {
+      var node = document.querySelector(selectors[index]);
+      if (node) return node;
+    }
+    var navEls = document.querySelectorAll("nav, [role='navigation'], aside ul");
+    for (var navIndex = 0; navIndex < navEls.length; navIndex += 1) {
+      if (/черновики|drafts|проекты|projects/i.test(navEls[navIndex].textContent || "")) return navEls[navIndex];
+    }
+    return document.querySelector("[class*='dashboard_sidebar']");
+  }
+
+  function getBackInfo() {
+    var nav = getNav();
+    if (!nav) {
+      return {
+        hash: "#/dashboard",
+        label: "Назад к проектам"
+      };
+    }
+    return nav.getBackTargetInfo(HUB_HASH, window.location.hash || HUB_HASH);
+  }
+
+  function renderOverlayNav() {
+    var nav = getNav();
+    if (!nav) {
+      return [
+        { id: "libraries", label: "Библиотеки", href: HUB_HASH },
+        { id: "fonts", label: "Шрифты", href: "javascript:void(0)", action: "fonts" },
+        { id: "media", label: "Медиа", href: "#/nofida/media" },
+        { id: "figma", label: "Импорт из Figma", href: "#/nofida/import/figma" }
+      ].map(function (item) {
+        var attrs = item.action ? ' data-act="' + e(item.action) + '"' : "";
+        var classes = ["nhb-nav-link"];
+        if (item.id === "libraries") classes.push("active");
+        return '<a class="' + classes.join(" ") + '" href="' + e(item.href) + '"' + attrs + ">" + e(item.label) + "</a>";
+      }).join("");
+    }
+
+    return nav.getResourceMenuItems(HUB_HASH).map(function (item) {
+      var classes = ["nhb-nav-link"];
+      if (item.id === "libraries") classes.push("active");
+      return '<a class="' + classes.join(" ") + '" href="' + e(item.href) + '" data-nofida-route="' + e(item.href) + '">' +
+        e(item.label) + "</a>";
+    }).join("");
+  }
+
+  function updateHubChrome() {
+    if (!S.overlayEl) return;
+    var nav = getNav();
+    var breadcrumb = "Панель / Ресурсы / Библиотеки";
+    if (nav) {
+      var meta = nav.getRouteMeta(HUB_HASH);
+      if (meta && Array.isArray(meta.breadcrumb) && meta.breadcrumb.length) {
+        breadcrumb = meta.breadcrumb.join(" / ");
+      }
+    }
+    S.overlayEl.querySelector("#nhb-breadcrumb").textContent = breadcrumb;
+    S.overlayEl.querySelector("#nhb-back").textContent = getBackInfo().label;
+    S.overlayEl.querySelector("#nhb-nav").innerHTML = renderOverlayNav();
   }
 
   /* ============================================================
@@ -1182,75 +1277,53 @@
   function tryInjectSidebar() {
     if (S.sidebarInjected) return;
     if (!isDashboard()) return;
+    var nav = getNav();
+    if (nav && typeof nav.refreshDashboardGroup === "function") {
+      nav.refreshDashboardGroup();
+      S.sidebarInjected = true;
+      return;
+    }
+
     if (document.getElementById("nhb-sidebar-btn") && document.getElementById("nhb-sidebar-resources")) {
       S.sidebarInjected = true;
       return;
     }
 
-    /* ── find the sidebar nav container ── */
-    var nav = null;
-
-    /* 1. known Penpot 2.16 class patterns */
-    var candidates = [
-      ".main_ui_dashboard_sidebar__sidebar-nav",
-      "[class*='dashboard_sidebar'][class*='nav']",
-      "[class*='dashboard_sidebar'][class*='menu']",
-      "[class*='dashboard-sidebar'] nav",
-      "[class*='dashboard-sidebar'] ul"
-    ];
-    for (var ci = 0; ci < candidates.length; ci++) {
-      nav = document.querySelector(candidates[ci]);
-      if (nav) break;
-    }
-
-    /* 2. heuristic: element with "Черновики" or "Drafts" text inside */
-    if (!nav) {
-      var all = document.querySelectorAll("nav, [role='navigation'], aside ul");
-      for (var ai = 0; ai < all.length; ai++) {
-        if (/черновики|drafts|проекты|projects/i.test(all[ai].textContent || "")) {
-          nav = all[ai];
-          break;
-        }
-      }
-    }
-
-    /* 3. broadest fallback — any sidebar-like element */
-    if (!nav) {
-      nav = document.querySelector("[class*='dashboard_sidebar']");
-    }
-
-    if (!nav) return;   /* not rendered yet — observer will retry */
+    var host = findDashboardSidebarNav();
+    if (!host) return;
 
     S.sidebarInjected = true;
 
     var btn = document.createElement("a");
-    btn.id            = "nhb-sidebar-btn";
-    btn.href          = "javascript:void(0)"; /* eslint-disable-line no-script-url */
+    btn.id = "nhb-sidebar-btn";
+    btn.href = "javascript:void(0)"; // eslint-disable-line no-script-url
     btn.setAttribute("role", "menuitem");
     btn.setAttribute("aria-label", "Библиотеки NOFIDA");
-    btn.textContent   = "📚 Библиотеки NOFIDA";
+    btn.textContent = "📚 Библиотеки NOFIDA";
     btn.style.cssText =
       "display:flex;align-items:center;padding:8px 12px;margin:4px 6px;" +
       "border-radius:10px;font-size:13px;font-weight:700;" +
       "color:" + BRAND.accent + ";text-decoration:none;cursor:pointer;" +
       "background:rgba(191,255,0,.07);border:1px solid rgba(191,255,0,.18);" +
       "transition:all .15s;font-family:" + BRAND.font + ";box-sizing:border-box";
-
     btn.addEventListener("mouseenter", function () {
-      btn.style.background   = "rgba(191,255,0,.14)";
-      btn.style.borderColor  = "rgba(191,255,0,.38)";
+      btn.style.background = "rgba(191,255,0,.14)";
+      btn.style.borderColor = "rgba(191,255,0,.38)";
     });
     btn.addEventListener("mouseleave", function () {
-      btn.style.background   = "rgba(191,255,0,.07)";
-      btn.style.borderColor  = "rgba(191,255,0,.18)";
+      btn.style.background = "rgba(191,255,0,.07)";
+      btn.style.borderColor = "rgba(191,255,0,.18)";
     });
     btn.addEventListener("click", function (ev) {
       ev.preventDefault();
       state_teamId_refresh();
+      if (nav && typeof nav.goToNofidaRoute === "function") {
+        nav.goToNofidaRoute(HUB_HASH, { source: "hub-sidebar-fallback" });
+        return;
+      }
       window.location.hash = "/nofida/libraries";
     });
-
-    nav.appendChild(btn);
+    host.appendChild(btn);
 
     var resourceWrap = document.createElement("div");
     resourceWrap.id = "nhb-sidebar-resources";
@@ -1264,7 +1337,7 @@
       { label: "Figma", hash: "/nofida/import/figma" }
     ].forEach(function (item) {
       var link = document.createElement("a");
-      link.href = "javascript:void(0)"; /* eslint-disable-line no-script-url */
+      link.href = "javascript:void(0)"; // eslint-disable-line no-script-url
       link.textContent = item.label;
       link.setAttribute("role", "menuitem");
       link.style.cssText =
@@ -1289,12 +1362,16 @@
           openNativeFontsRoute();
           return;
         }
+        if (nav && typeof nav.goToNofidaRoute === "function") {
+          nav.goToNofidaRoute(item.hash, { source: "hub-sidebar-fallback" });
+          return;
+        }
         window.location.hash = item.hash;
       });
       resourceWrap.appendChild(link);
     });
 
-    nav.appendChild(resourceWrap);
+    host.appendChild(resourceWrap);
   }
 
   /* ============================================================
@@ -1330,7 +1407,9 @@
         ev.preventDefault();
         ev.stopPropagation();
         state_teamId_refresh();
-        window.location.hash = "/nofida/libraries";
+        var nav = getNav();
+        if (nav) nav.goToNofidaRoute(HUB_HASH, { source: "gallery-link" });
+        else window.location.hash = "/nofida/libraries";
       });
       if (link.parentNode) link.parentNode.replaceChild(clone, link);
     });
@@ -1372,11 +1451,13 @@
       '<span style="font-size:18px">📚</span>' +
       '<div>' +
         '<div style="font-size:13px;font-weight:700;color:#bfff00">NOFIDA Hub</div>' +
-        '<div style="font-size:11px;color:#94a3b8">Explore libraries, templates, UI kits, and design-system resources inside your workspace.</div>' +
+        '<div style="font-size:11px;color:#94a3b8">Откройте библиотеки, шаблоны, UI-киты и design-system ресурсы внутри пространства NOFIDA.</div>' +
       '</div>';
     card.addEventListener("click", function () {
       state_teamId_refresh();
-      window.location.hash = "/nofida/libraries";
+      var nav = getNav();
+      if (nav) nav.goToNofidaRoute(HUB_HASH, { source: "gallery-card" });
+      else window.location.hash = "/nofida/libraries";
     });
 
     if (grid) {
@@ -1447,11 +1528,52 @@
     if (isDashboard()) patchThumbnailErrors();
   }
 
+  function scheduleRunChecks() {
+    if (S.observerTimer) window.clearTimeout(S.observerTimer);
+    S.observerTimer = window.setTimeout(function () {
+      S.observerTimer = null;
+      runChecks();
+    }, 180);
+  }
+
+  function stopObserver() {
+    if (S.observerTimer) {
+      window.clearTimeout(S.observerTimer);
+      S.observerTimer = null;
+    }
+    if (S.observer) S.observer.disconnect();
+    S.observer = null;
+    S.observerRoot = null;
+  }
+
+  function getObserverRoot() {
+    return document.getElementById("app") || null;
+  }
+
   function startObserver() {
-    if (S.observerActive) return;
-    S.observerActive = true;
-    var obs = new MutationObserver(function () { runChecks(); });
-    obs.observe(document.body, { childList: true, subtree: true });
+    if (!isDashboard() || !window.MutationObserver) {
+      stopObserver();
+      return;
+    }
+
+    var nextRoot = getObserverRoot();
+    if (!nextRoot) {
+      stopObserver();
+      return;
+    }
+    if (S.observer && S.observerRoot === nextRoot) return;
+
+    stopObserver();
+    S.observerRoot = nextRoot;
+    S.observer = new MutationObserver(function (mutations) {
+      var relevant = mutations.some(function (mutation) {
+        if (!mutation.target || !mutation.target.closest) return false;
+        if (mutation.target.closest("#nhb-overlay")) return false;
+        return mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
+      });
+      if (relevant) scheduleRunChecks();
+    });
+    S.observer.observe(nextRoot, { childList: true, subtree: true });
   }
 
   /* ============================================================
@@ -1481,13 +1603,17 @@
 
     /* Sidebar / gallery may need re-injection after route change */
     if (isDashboard()) {
+      startObserver();
       S.sidebarInjected = false;
       S.galleryPatched  = false;
       /* Resolve team ID then inject; delay for Penpot React to commit new DOM */
       setTimeout(function () {
         resolveTeamId().then(function () { runChecks(); });
       }, 600);
+      return;
     }
+
+    stopObserver();
   }
 
   /* Toast helper for user-visible errors */
@@ -1513,7 +1639,7 @@
     resolveTeamId();
 
     buildOverlay();          /* pre-build hidden overlay */
-    startObserver();         /* watch DOM for sidebar/gallery */
+    startObserver();         /* watch dashboard DOM for sidebar/gallery */
 
     window.addEventListener("hashchange", onHashChange);
 
@@ -1532,7 +1658,9 @@
     window.NofidaLibraryHub = {
       open:    function () {
         resolveTeamId().then(function () {
-          window.location.hash = "/nofida/libraries";
+          var nav = getNav();
+          if (nav) nav.goToNofidaRoute(HUB_HASH, { source: "hub-api" });
+          else window.location.hash = "/nofida/libraries";
         });
       },
       close:   hideHub,
