@@ -575,8 +575,8 @@ const ignoredConsoleEntries = [];
 
 if (USE_LOCAL_OVERRIDES) {
   await installLocalOverrides(context);
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
 }
+await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE }).catch(() => null);
 
 const page = await context.newPage();
 page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`));
