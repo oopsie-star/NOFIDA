@@ -5,6 +5,7 @@ WEBROOT="${1:-/var/www/app}"
 INDEX="${WEBROOT}/index.html"
 BRAND_CSS="${WEBROOT}/nofida/brand/nofida-brand.css"
 PAGES_CSS="${WEBROOT}/nofida/brand/nofida-pages.css"
+NAVIGATION_JS="${WEBROOT}/nofida/ai-core/nofida-navigation.js"
 AI_CORE="${WEBROOT}/nofida/ai-core/nofida-ai-core.js"
 PAGES_JS="${WEBROOT}/nofida/ai-core/nofida-pages.js"
 RESOURCES_JS="${WEBROOT}/nofida/ai-core/nofida-resources.js"
@@ -26,7 +27,7 @@ NOFIDA_ICON_HREF="/nofida/brand/icon.png?v=${ASSET_TAG}"
 # Remove the broken ui.css include if the pinned image does not ship that file.
 [ -f "${WEBROOT}/css/ui.css" ] || sed -i '/css\/ui\.css/d' "${INDEX}"
 
-for templated_file in "${BRAND_CSS}" "${PAGES_CSS}" "${AI_CORE}" "${PAGES_JS}" "${RESOURCES_JS}" "${LIB_HUB}" "${MANIFEST_FILE}"; do
+for templated_file in "${BRAND_CSS}" "${PAGES_CSS}" "${NAVIGATION_JS}" "${AI_CORE}" "${PAGES_JS}" "${RESOURCES_JS}" "${LIB_HUB}" "${MANIFEST_FILE}"; do
   [ -f "${templated_file}" ] && sed -i "s/__NOFIDA_ASSET_TAG__/${ASSET_TAG}/g" "${templated_file}"
 done
 
@@ -46,6 +47,8 @@ grep -q 'nofida-pages.css' "${INDEX}" || \
   sed -i "/<\/head>/i\\    <link rel=\"stylesheet\" href=\"/nofida/brand/nofida-pages.css?v=${ASSET_TAG}\">" "${INDEX}"
 grep -q 'id="nofida-shell-root"' "${INDEX}" || \
   sed -i '/<\/body>/i\    <section id="nofida-shell-root"></section>' "${INDEX}"
+grep -q 'nofida-navigation.js' "${INDEX}" || \
+  sed -i "/<\/body>/i\\    <script src=\"/nofida/ai-core/nofida-navigation.js?v=${ASSET_TAG}\" defer></script>" "${INDEX}"
 grep -q 'nofida-ai-core.js' "${INDEX}" || \
   sed -i "/<\/body>/i\\    <script src=\"/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}\" defer></script>" "${INDEX}"
 grep -q 'nofida-pages.js' "${INDEX}" || \
@@ -65,7 +68,7 @@ sed -i \
   -e 's|<meta name="theme-color"[^>]*>|<meta name="theme-color" content="#0b1020">|' \
   "${INDEX}"
 
-perl -0pi -e "s#/nofida/brand/nofida-brand\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-brand.css?v=${ASSET_TAG}#g; s#/nofida/brand/nofida-pages\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-pages.css?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-ai-core\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-pages\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-pages.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-resources\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-resources.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-library-hub\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-library-hub.js?v=${ASSET_TAG}#g" "${INDEX}"
+perl -0pi -e "s#/nofida/brand/nofida-brand\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-brand.css?v=${ASSET_TAG}#g; s#/nofida/brand/nofida-pages\\.css(?:\\?v=[^\"]*)?#/nofida/brand/nofida-pages.css?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-navigation\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-navigation.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-ai-core\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-ai-core.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-pages\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-pages.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-resources\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-resources.js?v=${ASSET_TAG}#g; s#/nofida/ai-core/nofida-library-hub\\.js(?:\\?v=[^\"]*)?#/nofida/ai-core/nofida-library-hub.js?v=${ASSET_TAG}#g" "${INDEX}"
 perl -0pi -e 's#<link rel="icon"[^>]*>\s*##g; s#<link rel="shortcut icon"[^>]*>\s*##g; s#<link rel="apple-touch-icon"[^>]*>\s*##g; s#<link rel="manifest"[^>]*>\s*##g' "${INDEX}"
 grep -q 'nofida/brand/icon.png' "${INDEX}" || \
   sed -i "/<\/head>/i\\    <link rel=\"icon\" type=\"image/png\" href=\"/nofida/brand/icon.png?v=${ASSET_TAG}\" />\\n    <link rel=\"shortcut icon\" type=\"image/png\" href=\"/nofida/brand/favicon-32.png?v=${ASSET_TAG}\" />\\n    <link rel=\"apple-touch-icon\" href=\"/nofida/brand/apple-touch-icon.png?v=${ASSET_TAG}\" />\\n    <link rel=\"manifest\" href=\"/nofida/brand/site.webmanifest?v=${ASSET_TAG}\" />" "${INDEX}"

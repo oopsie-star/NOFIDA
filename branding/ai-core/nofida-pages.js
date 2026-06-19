@@ -570,6 +570,10 @@
       .replace(/'/g, "&#39;");
   }
 
+  function getNav() {
+    return window.NofidaNavigation || null;
+  }
+
   function getHashPath() {
     var hash = window.location.hash || "";
     var queryIndex = hash.indexOf("?");
@@ -598,12 +602,40 @@
     state.lastAppHash = next;
   }
 
+  function getPageHash(pageId) {
+    return "#/nofida/" + pageId;
+  }
+
+  function getBackInfo(pageId) {
+    var nav = getNav();
+    var currentHash = getPageHash(pageId);
+    if (!nav) {
+      return {
+        hash: normalizeHash(state.lastAppHash || "#/dashboard"),
+        label: "Назад к проектам"
+      };
+    }
+    return nav.getBackTargetInfo(currentHash, window.location.hash || currentHash);
+  }
+
+  function getBreadcrumb(pageId) {
+    var nav = getNav();
+    if (!nav) return "Панель / Справка";
+    var routeMeta = nav.getRouteMeta(getPageHash(pageId));
+    return routeMeta && Array.isArray(routeMeta.breadcrumb) && routeMeta.breadcrumb.length
+      ? routeMeta.breadcrumb.join(" / ")
+      : "Панель / Справка";
+  }
+
   function renderLinks(links) {
     if (!Array.isArray(links) || links.length === 0) return "";
     return [
       '<div class="nfp-links">',
       links.map(function (link) {
-        return '<a href="' + escapeHtml(link.href) + '">' + escapeHtml(link.label) + "</a>";
+        var attrs = link.href && link.href.charAt(0) === "#"
+          ? ' data-nofida-route="' + escapeHtml(link.href) + '"'
+          : "";
+        return '<a href="' + escapeHtml(link.href) + '"' + attrs + ">" + escapeHtml(link.label) + "</a>";
       }).join(""),
       "</div>"
     ].join("");
@@ -615,7 +647,10 @@
       '<div class="nfp-actions">',
       actions.map(function (action, index) {
         var klass = index === 0 ? "nfp-btn nfp-btn-primary" : "nfp-btn nfp-btn-secondary";
-        return '<a class="' + klass + '" href="' + escapeHtml(action.href) + '">' + escapeHtml(action.label) + "</a>";
+        var attrs = action.href && action.href.charAt(0) === "#"
+          ? ' data-nofida-route="' + escapeHtml(action.href) + '"'
+          : "";
+        return '<a class="' + klass + '" href="' + escapeHtml(action.href) + '"' + attrs + ">" + escapeHtml(action.label) + "</a>";
       }).join(""),
       "</div>"
     ].join("");
@@ -635,11 +670,23 @@
   }
 
   function renderNav(currentPageId) {
-    return NAV_ITEMS.map(function (item) {
+    var nav = getNav();
+    if (!nav) {
+      return NAV_ITEMS.map(function (item) {
+        var classes = ["nfp-nav-link"];
+        if (item.id === currentPageId) classes.push("active");
+        return '<a class="' + classes.join(" ") + '" href="#/nofida/' + item.id + '">' +
+          escapeHtml(item.label) + "</a>";
+      }).join("");
+    }
+
+    var currentHash = getPageHash(currentPageId);
+    var activeId = nav.getActiveResourceMenuId(currentHash);
+    return nav.getResourceMenuItems(currentHash).map(function (item) {
       var classes = ["nfp-nav-link"];
-      if (item.id === currentPageId) classes.push("active");
-      return '<a class="' + classes.join(" ") + '" href="#/nofida/' + item.id + '">' +
-        escapeHtml(item.label) + "</a>";
+      if (item.id === activeId) classes.push("active");
+      return '<a class="' + classes.join(" ") + '" href="' + escapeHtml(item.href) + '" data-nofida-route="' +
+        escapeHtml(item.href) + '">' + escapeHtml(item.label) + "</a>";
     }).join("");
   }
 
@@ -650,10 +697,13 @@
 
     var overlay = state.overlayEl;
     overlay.querySelector("#nfp-nav").innerHTML = renderNav(pageId);
+    overlay.querySelector("#nfp-breadcrumb").textContent = getBreadcrumb(pageId);
     overlay.querySelector("#nfp-badge").textContent = page.badge || "Internal page";
     overlay.querySelector("#nfp-title").textContent = page.title;
     overlay.querySelector("#nfp-intro").textContent = page.intro;
     overlay.querySelector("#nfp-actions-wrap").innerHTML = renderActions(page.actions || []);
+    var backInfo = getBackInfo(pageId);
+    overlay.querySelector("#nfp-back").textContent = backInfo.label;
 
     var noticeEl = overlay.querySelector("#nfp-notice");
     if (page.notice) {
@@ -681,12 +731,15 @@
     overlay.innerHTML = [
       '<div class="nfp-shell">',
       '  <div class="nfp-topbar">',
-      '    <button class="nfp-back" id="nfp-back" type="button">Back to previous screen</button>',
-      '    <button class="nfp-close" id="nfp-close" type="button" aria-label="Close NOFIDA page">Close</button>',
+      '    <div class="nfp-topcopy">',
+      '      <p class="nfp-breadcrumb" id="nfp-breadcrumb">Панель / Справка</p>',
+      '      <span class="nfp-surface-pill">Панель</span>',
+      "    </div>",
+      '    <button class="nfp-back" id="nfp-back" type="button">Назад к проектам</button>',
       "  </div>",
       '  <div class="nfp-layout">',
       '    <aside class="nfp-nav-panel">',
-      '      <p class="nfp-nav-kicker">NOFIDA pages</p>',
+      '      <p class="nfp-nav-kicker">Ресурсы</p>',
       '      <div class="nfp-nav" id="nfp-nav"></div>',
       "    </aside>",
       '    <main class="nfp-main" aria-live="polite">',
@@ -708,7 +761,6 @@
 
     document.body.appendChild(overlay);
     overlay.querySelector("#nfp-back").addEventListener("click", closeToPrevious);
-    overlay.querySelector("#nfp-close").addEventListener("click", closeToPrevious);
 
     state.overlayEl = overlay;
     return overlay;
@@ -733,6 +785,12 @@
   }
 
   function closeToPrevious() {
+    var nav = getNav();
+    var currentHash = getPageHash(state.currentPageId || "help");
+    if (nav) {
+      nav.goBack(currentHash);
+      return;
+    }
     var back = normalizeHash(state.lastAppHash || "#/dashboard");
     if (isPageHash(back)) back = "#/dashboard";
     window.location.hash = back.slice(1);
