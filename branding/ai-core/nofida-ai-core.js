@@ -902,9 +902,9 @@
     if (state.settingsUi.activeTab === "models") return renderModelLibraryTab();
     if (state.settingsUi.activeTab === "engine") return renderEngineTab();
     if (state.settingsUi.activeTab === "accounts")
-      return renderPlaceholderTab("External Accounts", "This tab is reserved for future external account linking. The provider key system in API Configuration is already functional in this patch.");
+      return renderPlaceholderTab("Внешние аккаунты", "Здесь появится связка внешних аккаунтов. Пока рабочий путь остается в разделе настройки API и моделей.");
     if (state.settingsUi.activeTab === "prompts")
-      return renderPlaceholderTab("Prompts", "Prompt management is intentionally left as a placeholder in this patch. Engine assignments and provider configuration are already live.");
+      return renderPlaceholderTab("Промпты", "Управление промптами появится отдельным этапом. Назначения движков и настройка провайдеров уже работают в текущей версии.");
 
     return renderApiConfigurationTab();
   }

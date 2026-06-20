@@ -17,15 +17,15 @@
   ];
 
   var NAV_ITEMS = [
-    { id: "help", label: "Help" },
-    { id: "learn", label: "Learn" },
-    { id: "repository", label: "Repository" },
-    { id: "community", label: "Community" },
-    { id: "releases", label: "Releases" },
-    { id: "changelog", label: "Changelog" },
-    { id: "terms", label: "Terms" },
-    { id: "privacy", label: "Privacy" },
-    { id: "open-source-notices", label: "Notices" }
+    { id: "help", label: "Справка" },
+    { id: "learn", label: "Обучение" },
+    { id: "repository", label: "Репозиторий" },
+    { id: "community", label: "Сообщество" },
+    { id: "releases", label: "Релизы" },
+    { id: "changelog", label: "Журнал изменений" },
+    { id: "terms", label: "Условия" },
+    { id: "privacy", label: "Данные" },
+    { id: "open-source-notices", label: "Лицензии" }
   ];
 
   var state = {
@@ -36,7 +36,7 @@
 
   var PAGES = {
     help: {
-      title: "Help Center",
+      title: "Справка",
       badge: "Internal guide",
       intro: "Practical NOFIDA help for everyday work: files, libraries, fonts, media, migration prep, AI settings, and support.",
       actions: [
@@ -99,14 +99,14 @@
           title: "Support path",
           text: "Use the community page for support routing, feedback intake, and admin follow-up when your team needs help.",
           links: [
-            { label: "Community", href: "#/nofida/community" },
+            { label: "Сообщество", href: "#/nofida/community" },
             { label: "Privacy draft", href: "#/nofida/privacy" }
           ]
         }
       ]
     },
     learn: {
-      title: "Learning Center",
+      title: "Обучение",
       badge: "Short guides",
       intro: "Compact learning tracks for designers and admins who want to get productive in NOFIDA quickly.",
       actions: [
@@ -145,7 +145,7 @@
           title: "Build with components",
           text: "Turn repeated UI into components early, then evolve variants only after naming and usage patterns are stable.",
           links: [
-            { label: "Repository page", href: "#/nofida/repository" },
+            { label: "Страница репозитория", href: "#/nofida/repository" },
             { label: "Changelog", href: "#/nofida/changelog" }
           ]
         },
@@ -153,7 +153,7 @@
           title: "Organize design systems",
           text: "Keep tokens, shared components, and examples close together so new teammates can learn the system by opening one file.",
           links: [
-            { label: "Community practices", href: "#/nofida/community" },
+            { label: "Практики сообщества", href: "#/nofida/community" },
             { label: "Open source notices", href: "#/nofida/open-source-notices" }
           ]
         },
@@ -176,7 +176,7 @@
       ]
     },
     repository: {
-      title: "Repository",
+      title: "Репозиторий",
       badge: "Product distribution",
       intro: "This page explains how NOFIDA is packaged and maintained as an internal product distribution for your organization.",
       actions: [
@@ -197,7 +197,7 @@
           title: "How updates move",
           text: "Work is changed here first, verified against the live workspace, then deployed as a same-origin NOFIDA build.",
           links: [
-            { label: "Community process", href: "#/nofida/community" },
+            { label: "Процесс сообщества", href: "#/nofida/community" },
             { label: "Help center", href: "#/nofida/help" }
           ]
         },
@@ -229,12 +229,12 @@
       ]
     },
     community: {
-      title: "Community",
+      title: "Сообщество",
       badge: "Support and feedback",
       intro: "A simple NOFIDA page for team support, rollout guidance, feedback intake, and future community planning.",
       actions: [
         { label: "Help center", href: "#/nofida/help" },
-        { label: "Repository", href: "#/nofida/repository" },
+        { label: "Репозиторий", href: "#/nofida/repository" },
         { label: "Open dashboard", href: "#/dashboard" }
       ],
       sections: [
@@ -259,7 +259,7 @@
           text: "Collect broken flows, upgrade pain points, and missing library requests in one place before planning the next patch.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
-            { label: "Repository", href: "#/nofida/repository" }
+            { label: "Репозиторий", href: "#/nofida/repository" }
           ]
         },
         {
@@ -281,13 +281,13 @@
       ]
     },
     releases: {
-      title: "Release Notes",
+      title: "Релизы",
       badge: "Current line",
       intro: "Recent NOFIDA changes for the current product line built on the 2.16.0 base with NOFIDA patch overlays.",
       actions: [
         { label: "View changelog", href: "#/nofida/changelog" },
         { label: "Open NOFIDA Hub", href: "#/nofida/libraries" },
-        { label: "Repository", href: "#/nofida/repository" }
+        { label: "Репозиторий", href: "#/nofida/repository" }
       ],
       sections: [
         {
@@ -304,7 +304,7 @@
           text: "The NOFIDA Hub remains the internal route for libraries, templates, UI kits, and starter assets, now linked to the newer resource surfaces.",
           links: [
             { label: "Open catalog", href: "#/nofida/libraries" },
-            { label: "Repository", href: "#/nofida/repository" },
+            { label: "Репозиторий", href: "#/nofida/repository" },
             { label: "Font catalog", href: "#/nofida/fonts" }
           ]
         },
@@ -329,18 +329,18 @@
           text: "After each deploy, verify internal routes, provider configuration, notices text, and same-origin behavior from the live domain.",
           links: [
             { label: "Open source notices", href: "#/nofida/open-source-notices" },
-            { label: "Community", href: "#/nofida/community" }
+            { label: "Сообщество", href: "#/nofida/community" }
           ]
         }
       ]
     },
     changelog: {
-      title: "Changelog",
+      title: "Журнал изменений",
       badge: "Patch history",
       intro: "A short chronological NOFIDA record of the changes that shape the current branded workspace.",
       actions: [
         { label: "Release notes", href: "#/nofida/releases" },
-        { label: "Repository", href: "#/nofida/repository" },
+        { label: "Репозиторий", href: "#/nofida/repository" },
         { label: "Help center", href: "#/nofida/help" }
       ],
       sections: [
@@ -381,17 +381,17 @@
           title: "PATCH 014H-014M",
           text: "Native import adapter, inventory cleanup, file quality checks, and thumbnail reliability improvements were introduced.",
           links: [
-            { label: "Repository", href: "#/nofida/repository" },
+            { label: "Репозиторий", href: "#/nofida/repository" },
             { label: "Release notes", href: "#/nofida/releases" }
           ]
         }
       ]
     },
     terms: {
-      title: "Terms of Use",
-      badge: "Draft placeholder",
-      intro: "This is a product placeholder for NOFIDA terms. It provides structure only and is not final legal advice or a finished legal document.",
-      notice: "Draft. Replace with legal-approved text before public/commercial launch.",
+      title: "Условия использования",
+      badge: "Черновая версия",
+      intro: "Страница фиксирует структуру условий использования NOFIDA для внутреннего согласования и юридической доработки.",
+      notice: "Перед внешним запуском замените этот текст на утвержденную юридическую версию.",
       actions: [
         { label: "Privacy draft", href: "#/nofida/privacy" },
         { label: "Open source notices", href: "#/nofida/open-source-notices" },
@@ -402,8 +402,8 @@
           title: "Use scope",
           text: "NOFIDA is presented here as an internal or self-hosted workspace operated under the deployment rules of your organization.",
           links: [
-            { label: "Repository", href: "#/nofida/repository" },
-            { label: "Community", href: "#/nofida/community" }
+            { label: "Репозиторий", href: "#/nofida/repository" },
+            { label: "Сообщество", href: "#/nofida/community" }
           ]
         },
         {
@@ -432,7 +432,7 @@
         },
         {
           title: "Draft status",
-          text: "This page is a placeholder structure for future legal review and should not be treated as the final legal agreement.",
+          text: "Эта страница фиксирует структуру будущего юридического текста и не должна восприниматься как финальное соглашение.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
             { label: "Back to repository", href: "#/nofida/repository" }
@@ -441,10 +441,10 @@
       ]
     },
     privacy: {
-      title: "Privacy / Data",
-      badge: "Draft placeholder",
-      intro: "This is a NOFIDA privacy placeholder that explains the intended data flow at a high level without claiming legal finality.",
-      notice: "Draft. Replace with legal-approved text before public/commercial launch.",
+      title: "Данные и приватность",
+      badge: "Черновая версия",
+      intro: "Страница описывает предполагаемый поток данных NOFIDA и помогает согласовать требования до финальной юридической версии.",
+      notice: "Перед внешним запуском замените этот текст на утвержденную юридическую версию.",
       actions: [
         { label: "Terms draft", href: "#/nofida/terms" },
         { label: "AI settings", href: "#/settings/options?nofida=ai&tab=api" },
@@ -455,8 +455,8 @@
           title: "Stored workspace data",
           text: "NOFIDA stores account, team, project, and design-file data on the configured server used by your deployment.",
           links: [
-            { label: "Repository", href: "#/nofida/repository" },
-            { label: "Community", href: "#/nofida/community" }
+            { label: "Репозиторий", href: "#/nofida/repository" },
+            { label: "Сообщество", href: "#/nofida/community" }
           ]
         },
         {
@@ -480,12 +480,12 @@
           text: "Admins may need access to logs, health checks, and deploy status to operate the service safely inside the organization.",
           links: [
             { label: "Open source notices", href: "#/nofida/open-source-notices" },
-            { label: "Repository", href: "#/nofida/repository" }
+            { label: "Репозиторий", href: "#/nofida/repository" }
           ]
         },
         {
           title: "Draft status",
-          text: "This page is a structural placeholder only and should be replaced with legal-approved privacy text before wider launch.",
+          text: "Эта страница задает структуру текста о данных и приватности и должна быть заменена на юридически согласованную версию до широкого запуска.",
           links: [
             { label: "Terms draft", href: "#/nofida/terms" },
             { label: "Changelog", href: "#/nofida/changelog" }
@@ -494,11 +494,11 @@
       ]
     },
     "open-source-notices": {
-      title: "Open Source Notices",
+      title: "Открытые лицензии",
       badge: "Neutral attribution",
-      intro: "A neutral place for licensing, attribution, source-model disclosures, and adapted-resource notices that should stay separate from product marketing navigation.",
+      intro: "Нейтральная страница для лицензий, атрибуции и обязательных уведомлений, которые должны оставаться отдельно от продуктовой навигации.",
       actions: [
-        { label: "Repository", href: "#/nofida/repository" },
+        { label: "Репозиторий", href: "#/nofida/repository" },
         { label: "Terms draft", href: "#/nofida/terms" },
         { label: "Privacy draft", href: "#/nofida/privacy" }
       ],
@@ -507,7 +507,7 @@
           title: "Base application notice",
           text: "NOFIDA includes open source components that power the editor, service layer, and reviewed resource stores inside the branded workspace.",
           links: [
-            { label: "Repository", href: "#/nofida/repository" },
+            { label: "Репозиторий", href: "#/nofida/repository" },
             { label: "Release notes", href: "#/nofida/releases" }
           ]
         },
@@ -541,7 +541,7 @@
           text: "Re-check versions, license allowlists, attribution requirements, and approval states whenever the base product line or the reviewed resource inventory changes.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
-            { label: "Repository", href: "#/nofida/repository" }
+            { label: "Репозиторий", href: "#/nofida/repository" }
           ]
         }
       ]
@@ -695,7 +695,7 @@
     state.overlayEl.querySelector("#nfp-grid").innerHTML = renderSections(page.sections || []);
     state.overlayEl.querySelector("#nfp-footer-note").textContent =
       pageId === "terms" || pageId === "privacy"
-        ? "Placeholder only. Replace after legal review."
+        ? "Черновая страница для юридического согласования."
         : "Страница NOFIDA внутри рабочего пространства.";
   }
 

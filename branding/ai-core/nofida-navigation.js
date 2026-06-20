@@ -9,12 +9,13 @@
   var SHELL_ID = "nofida-shell";
   var SIDEBAR_ID = "nofida-shell-sidebar";
   var NAV_ID = "nofida-shell-nav";
+  var TOPBAR_ID = "nofida-shell-topbar";
   var MAIN_ID = "nofida-shell-main";
   var FRAME_ID = "nofida-page-frame";
   var PLACEHOLDER_OWNER = "navigation-placeholder";
   var BODY_CLASS_NATIVE = "nofida-dashboard-shell-active";
   var BODY_CLASS_PAGE = "nofida-shell-page-active";
-  var SEARCH_PLACEHOLDER = "Поиск";
+  var SEARCH_PLACEHOLDER = "Поиск по рабочему пространству";
   var SAFE_LOCAL_TEAM_KEYS = [
     "default-team-id",
     "defaultTeamId",
@@ -30,6 +31,7 @@
   var ROUTES = {
     dashboard: "#/dashboard",
     settings: "#/settings/options",
+    aiSettings: "#/settings/options?nofida=ai&tab=api",
     libraries: "#/nofida/libraries",
     fontCatalog: "#/nofida/fonts",
     media: "#/nofida/media",
@@ -47,12 +49,18 @@
 
   var NAV_TREE = [
     {
-      section: "Основное",
+      section: "Главное",
       items: [
+        {
+          id: "dashboard-home",
+          label: "Главная",
+          icon: "home"
+        },
         {
           id: "projects",
           label: "Проекты",
-          childIds: ["all-projects", "drafts"],
+          icon: "folder",
+          childIds: ["all-projects", "drafts", "shared-with-me", "archived"],
           children: [
             { id: "all-projects", label: "Все проекты" },
             {
@@ -60,6 +68,18 @@
               label: "Черновики",
               disabled: true,
               disabledTitle: "Раздел черновиков откроется в панели проектов"
+            },
+            {
+              id: "shared-with-me",
+              label: "Доступные мне",
+              disabled: true,
+              disabledTitle: "Раздел общих проектов появится в следующем обновлении панели"
+            },
+            {
+              id: "archived",
+              label: "Архив",
+              disabled: true,
+              disabledTitle: "Архив проектов будет подключен в панели проектов"
             }
           ]
         }
@@ -68,35 +88,41 @@
     {
       section: "Ресурсы",
       items: [
-        { id: "libraries", label: "Библиотеки" },
+        { id: "libraries", label: "Библиотеки", icon: "library" },
         {
           id: "fonts",
           label: "Шрифты",
+          icon: "type",
           childIds: ["team-fonts", "font-catalog"],
           children: [
             { id: "team-fonts", label: "Шрифты команды" },
             { id: "font-catalog", label: "Каталог шрифтов" }
           ]
         },
-        { id: "media", label: "Медиа" },
-        { id: "figma", label: "Импорт из Figma" }
+        { id: "media", label: "Медиа", icon: "media" },
+        { id: "figma", label: "Импорт из Figma", icon: "figma" }
       ]
     },
     {
       section: "Помощь",
       items: [
-        { id: "help", label: "Справка" },
-        { id: "learn", label: "Обучение" },
-        { id: "releases", label: "Релизы" },
-        { id: "changelog", label: "Журнал изменений" }
+        { id: "help", label: "Справка", icon: "help" },
+        { id: "learn", label: "Обучение", icon: "learn" },
+        { id: "releases", label: "Релизы", icon: "spark" },
+        { id: "changelog", label: "Журнал изменений", icon: "history" }
       ]
     },
     {
-      section: "Документы",
+      section: "AI",
       items: [
-        { id: "terms", label: "Условия" },
-        { id: "privacy", label: "Privacy / Data" },
-        { id: "open-source", label: "Open Source" }
+        { id: "ai-assistant", label: "AI Assistant", icon: "ai" }
+      ]
+    },
+    {
+      section: "Настройки",
+      items: [
+        { id: "settings", label: "Настройки", icon: "settings" },
+        { id: "account", label: "Аккаунт", icon: "user" }
       ]
     }
   ];
@@ -341,12 +367,21 @@
     return "";
   }
 
+  function isDashboardHomeHash(hash) {
+    var path = getHashPath(hash || getCurrentHash());
+    return path === "#/dashboard" || /\/recent$/i.test(path);
+  }
+
   function getRouteForItem(itemId, hash) {
     switch (itemId) {
+      case "dashboard-home":
+        return ROUTES.dashboard;
       case "projects":
       case "all-projects":
         return getProjectsRoute(hash);
       case "drafts":
+      case "shared-with-me":
+      case "archived":
         return getDraftsRoute(hash);
       case "libraries":
         return ROUTES.libraries;
@@ -367,6 +402,11 @@
         return ROUTES.releases;
       case "changelog":
         return ROUTES.changelog;
+      case "ai-assistant":
+        return ROUTES.aiSettings;
+      case "settings":
+      case "account":
+        return ROUTES.settings;
       case "terms":
         return ROUTES.terms;
       case "privacy":
@@ -381,6 +421,7 @@
   function getActiveNavState(hash) {
     var current = normalizeHash(hash || getCurrentHash());
     var path = getHashPath(current);
+    var params = getHashParams(current);
 
     if (isNativeFontsHash(current) || (isDashboardRoute(current) && looksLikeNativeFontsSurface())) {
       return { activeId: "fonts", childActiveId: "team-fonts" };
@@ -391,7 +432,17 @@
     }
 
     if (isProjectsHash(current)) {
+      if (isDashboardHomeHash(current)) {
+        return { activeId: "dashboard-home", childActiveId: "" };
+      }
       return { activeId: "projects", childActiveId: "all-projects" };
+    }
+
+    if (isAccountSurface(current)) {
+      if (params.get("nofida") === "ai") {
+        return { activeId: "ai-assistant", childActiveId: "" };
+      }
+      return { activeId: "account", childActiveId: "" };
     }
 
     switch (path) {
@@ -414,11 +465,9 @@
       case ROUTES.changelog:
         return { activeId: "changelog", childActiveId: "" };
       case ROUTES.terms:
-        return { activeId: "terms", childActiveId: "" };
       case ROUTES.privacy:
-        return { activeId: "privacy", childActiveId: "" };
       case ROUTES.openSource:
-        return { activeId: "open-source", childActiveId: "" };
+        return { activeId: "help", childActiveId: "" };
       default:
         return { activeId: "", childActiveId: "" };
     }
@@ -434,7 +483,16 @@
         menuId: "projects",
         childMenuId: "drafts",
         label: "Черновики",
-        breadcrumb: ["Панель", "Основное", "Проекты", "Черновики"]
+        breadcrumb: ["Рабочее пространство", "Проекты", "Черновики"]
+      };
+    }
+
+    if (active.activeId === "dashboard-home") {
+      return {
+        menuId: "dashboard-home",
+        childMenuId: "",
+        label: "Главная",
+        breadcrumb: ["Рабочее пространство", "Главная"]
       };
     }
 
@@ -443,7 +501,7 @@
         menuId: "projects",
         childMenuId: "all-projects",
         label: "Проекты",
-        breadcrumb: ["Панель", "Основное", "Проекты", "Все проекты"]
+        breadcrumb: ["Рабочее пространство", "Проекты", "Все проекты"]
       };
     }
 
@@ -452,7 +510,7 @@
         menuId: "fonts",
         childMenuId: "team-fonts",
         label: "Шрифты команды",
-        breadcrumb: ["Панель", "Ресурсы", "Шрифты", "Шрифты команды"]
+        breadcrumb: ["Рабочее пространство", "Ресурсы", "Шрифты команды"]
       };
     }
 
@@ -461,55 +519,55 @@
         menuId: "fonts",
         childMenuId: "font-catalog",
         label: "Каталог шрифтов",
-        breadcrumb: ["Панель", "Ресурсы", "Шрифты", "Каталог шрифтов"]
+        breadcrumb: ["Рабочее пространство", "Ресурсы", "Каталог шрифтов"]
       };
     }
 
     if (path === ROUTES.libraries) {
-      return { menuId: "libraries", childMenuId: "", label: "Библиотеки", breadcrumb: ["Панель", "Ресурсы", "Библиотеки"] };
+      return { menuId: "libraries", childMenuId: "", label: "Библиотеки", breadcrumb: ["Рабочее пространство", "Ресурсы", "Библиотеки"] };
     }
     if (path === ROUTES.media) {
-      return { menuId: "media", childMenuId: "", label: "Медиа", breadcrumb: ["Панель", "Ресурсы", "Медиа"] };
+      return { menuId: "media", childMenuId: "", label: "Медиа", breadcrumb: ["Рабочее пространство", "Ресурсы", "Медиа"] };
     }
     if (path === ROUTES.figma) {
-      return { menuId: "figma", childMenuId: "", label: "Импорт из Figma", breadcrumb: ["Панель", "Ресурсы", "Импорт из Figma"] };
+      return { menuId: "figma", childMenuId: "", label: "Импорт из Figma", breadcrumb: ["Рабочее пространство", "Ресурсы", "Импорт из Figma"] };
     }
     if (path === ROUTES.help) {
-      return { menuId: "help", childMenuId: "", label: "Справка", breadcrumb: ["Панель", "Помощь", "Справка"] };
+      return { menuId: "help", childMenuId: "", label: "Справка", breadcrumb: ["Рабочее пространство", "Помощь", "Справка"] };
     }
     if (path === ROUTES.learn) {
-      return { menuId: "learn", childMenuId: "", label: "Обучение", breadcrumb: ["Панель", "Помощь", "Обучение"] };
+      return { menuId: "learn", childMenuId: "", label: "Обучение", breadcrumb: ["Рабочее пространство", "Помощь", "Обучение"] };
     }
     if (path === ROUTES.releases) {
-      return { menuId: "releases", childMenuId: "", label: "Релизы", breadcrumb: ["Панель", "Помощь", "Релизы"] };
+      return { menuId: "releases", childMenuId: "", label: "Релизы", breadcrumb: ["Рабочее пространство", "Помощь", "Релизы"] };
     }
     if (path === ROUTES.changelog) {
-      return { menuId: "changelog", childMenuId: "", label: "Журнал изменений", breadcrumb: ["Панель", "Помощь", "Журнал изменений"] };
+      return { menuId: "changelog", childMenuId: "", label: "Журнал изменений", breadcrumb: ["Рабочее пространство", "Помощь", "Журнал изменений"] };
     }
     if (path === ROUTES.terms) {
-      return { menuId: "terms", childMenuId: "", label: "Условия", breadcrumb: ["Панель", "Документы", "Условия"] };
+      return { menuId: "help", childMenuId: "", label: "Условия использования", breadcrumb: ["Рабочее пространство", "Помощь", "Условия использования"] };
     }
     if (path === ROUTES.privacy) {
-      return { menuId: "privacy", childMenuId: "", label: "Privacy / Data", breadcrumb: ["Панель", "Документы", "Privacy / Data"] };
+      return { menuId: "help", childMenuId: "", label: "Данные и приватность", breadcrumb: ["Рабочее пространство", "Помощь", "Данные и приватность"] };
     }
     if (path === ROUTES.openSource) {
-      return { menuId: "open-source", childMenuId: "", label: "Open Source", breadcrumb: ["Панель", "Документы", "Open Source"] };
+      return { menuId: "help", childMenuId: "", label: "Открытые лицензии", breadcrumb: ["Рабочее пространство", "Помощь", "Открытые лицензии"] };
     }
     if (path === ROUTES.repository) {
-      return { menuId: "help", childMenuId: "", label: "Репозиторий", breadcrumb: ["Панель", "Помощь", "Репозиторий"] };
+      return { menuId: "help", childMenuId: "", label: "Репозиторий", breadcrumb: ["Рабочее пространство", "Помощь", "Репозиторий"] };
     }
     if (path === ROUTES.community) {
-      return { menuId: "help", childMenuId: "", label: "Сообщество", breadcrumb: ["Панель", "Помощь", "Сообщество"] };
+      return { menuId: "help", childMenuId: "", label: "Сообщество", breadcrumb: ["Рабочее пространство", "Помощь", "Сообщество"] };
     }
 
     if (isAccountSurface(current)) {
       var params = getHashParams(current);
       var tab = params.get("tab") || "api";
       return {
-        menuId: "account",
+        menuId: params.get("nofida") === "ai" ? "ai-assistant" : "account",
         childMenuId: "",
-        label: params.get("nofida") === "ai" ? "NOFIDA AI" : "Настройки",
-        breadcrumb: ["Аккаунт", params.get("nofida") === "ai" ? "NOFIDA AI" : "Настройки", tab]
+        label: params.get("nofida") === "ai" ? "AI Assistant" : "Настройки",
+        breadcrumb: ["Аккаунт", params.get("nofida") === "ai" ? "AI Assistant" : "Настройки", tab]
       };
     }
 
@@ -532,6 +590,7 @@
 
   function getResourceMenuItems(hash) {
     return [
+      { id: "dashboard-home", label: "Главная", href: ROUTES.dashboard },
       { id: "projects", label: "Проекты", href: getProjectsRoute(hash) },
       { id: "libraries", label: "Библиотеки", href: ROUTES.libraries },
       { id: "fonts", label: "Шрифты", href: getNativeFontsRoute(hash) },
@@ -540,10 +599,7 @@
       { id: "help", label: "Справка", href: ROUTES.help },
       { id: "learn", label: "Обучение", href: ROUTES.learn },
       { id: "releases", label: "Релизы", href: ROUTES.releases },
-      { id: "changelog", label: "Журнал изменений", href: ROUTES.changelog },
-      { id: "terms", label: "Условия", href: ROUTES.terms },
-      { id: "privacy", label: "Privacy / Data", href: ROUTES.privacy },
-      { id: "open-source", label: "Open Source", href: ROUTES.openSource }
+      { id: "changelog", label: "Журнал изменений", href: ROUTES.changelog }
     ];
   }
 
@@ -762,6 +818,10 @@
     return null;
   }
 
+  function normalizeTextContent(node) {
+    return String(node && node.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
   function getWorkspaceInfo() {
     var node = pickVisibleNode([
       ".main_ui_dashboard_sidebar__team-name",
@@ -770,12 +830,11 @@
       "[data-testid='team-name']"
     ]);
 
-    var name = node ? String(node.textContent || "").replace(/\s+/g, " ").trim() : "";
+    var name = normalizeTextContent(node);
     if (!name) name = "NOFIDA Workspace";
 
     return {
-      name: name,
-      hasDropdown: !!(node && (node.closest("button") || node.querySelector("svg, [aria-haspopup='listbox'], [aria-haspopup='menu']")))
+      name: name
     };
   }
 
@@ -789,7 +848,7 @@
       "[class*='user-menu']"
     ]);
 
-    var text = node ? String(node.textContent || "").replace(/\s+/g, " ").trim() : "";
+    var text = normalizeTextContent(node);
     var name = text ? text.split("  ").join(" ").trim() : "";
     if (!name) name = "Аккаунт";
 
@@ -800,25 +859,86 @@
     };
   }
 
+  function getIconMarkup(name, extraClass) {
+    var path = "";
+    switch (name) {
+      case "workspace":
+        path = '<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h3A1.5 1.5 0 0 1 9 4.5v3A1.5 1.5 0 0 1 7.5 9h-3A1.5 1.5 0 0 1 3 7.5zm0 8A1.5 1.5 0 0 1 4.5 11h3A1.5 1.5 0 0 1 9 12.5v3A1.5 1.5 0 0 1 7.5 17h-3A1.5 1.5 0 0 1 3 15.5zm8-8A1.5 1.5 0 0 1 12.5 3h3A1.5 1.5 0 0 1 17 4.5v3A1.5 1.5 0 0 1 15.5 9h-3A1.5 1.5 0 0 1 11 7.5zm1.5 7.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5z"/>';
+        break;
+      case "home":
+        path = '<path d="M3.5 8.8 10 3l6.5 5.8v7.2a1 1 0 0 1-1 1H12v-4.5H8V17H4.5a1 1 0 0 1-1-1z"/>';
+        break;
+      case "folder":
+        path = '<path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a2 2 0 0 1 1.4.57l1.1 1.1a1 1 0 0 0 .7.29H16A1.5 1.5 0 0 1 17.5 8.5v6A2.5 2.5 0 0 1 15 17H5A2.5 2.5 0 0 1 2.5 14.5z"/>';
+        break;
+      case "library":
+        path = '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H8v14H5.5A1.5 1.5 0 0 1 4 15.5zm5-1.5h3a1.5 1.5 0 0 1 1.5 1.5V17H9zm5 1.5A1.5 1.5 0 0 1 15.5 3h1A1.5 1.5 0 0 1 18 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-1A1.5 1.5 0 0 1 14 15.5z"/>';
+        break;
+      case "type":
+        path = '<path d="M3 5.5V3h14v2.5h-5V17H8V5.5z"/>';
+        break;
+      case "media":
+        path = '<path d="M4.5 3h11A1.5 1.5 0 0 1 17 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3m.7 10.5h9.6l-2.6-3.3a1 1 0 0 0-1.56-.03L8.9 12.2l-1.1-1.34a1 1 0 0 0-1.57.04zm2.3-5.2a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6"/>';
+        break;
+      case "figma":
+        path = '<path d="M9 3.5A2.5 2.5 0 0 1 11.5 1h2a2.5 2.5 0 0 1 0 5H11v2h2.5a2.5 2.5 0 1 1 0 5H11v2.5a2.5 2.5 0 1 1-5 0A2.5 2.5 0 0 1 8.5 13H11V8H8.5A2.5 2.5 0 1 1 8.5 3H11V1H8.5A2.5 2.5 0 0 1 6 3.5"/>';
+        break;
+      case "help":
+        path = '<path d="M10 17a1.2 1.2 0 1 1 0-2.4A1.2 1.2 0 0 1 10 17m0-14a7 7 0 1 1 0 14 7 7 0 0 1 0-14m0 3.2c-1.3 0-2.3.8-2.6 2.1l1.8.4c.12-.48.44-.9.98-.9.62 0 1 .37 1 .92 0 .44-.25.75-.74 1.06-.95.6-1.64 1.25-1.64 2.72v.18h1.9v-.13c0-.7.26-1.04 1.05-1.56.86-.57 1.34-1.3 1.34-2.33 0-1.55-1.21-2.46-3.09-2.46"/>';
+        break;
+      case "learn":
+        path = '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3h8A2.5 2.5 0 0 1 16 5.5v9a.5.5 0 0 1-.8.4A3.5 3.5 0 0 0 13 14H5.5A1.5 1.5 0 0 1 4 12.5zm2 1v6h7a5 5 0 0 1 1 .1V5.5a.5.5 0 0 0-.5-.5z"/>';
+        break;
+      case "history":
+        path = '<path d="M10 3a7 7 0 1 1-6.58 4.62H1V6h4.5v4H4V8.32A5.5 5.5 0 1 0 10 4.5zm-.75 3h1.5v4.05l2.8 1.6-.75 1.3-3.55-2.02z"/>';
+        break;
+      case "spark":
+      case "ai":
+        path = '<path d="M10 2.5 11.8 7l4.7 1.2L12 10.2l-.4 5.3L10 12.7 8.4 15.5 8 10.2 3.5 8.2 8.2 7z"/>';
+        break;
+      case "settings":
+        path = '<path d="m10 2 1.2 2.4 2.7.5-.8 2.6 1.8 2.1-1.8 2.1.8 2.6-2.7.5L10 18l-1.2-2.4-2.7-.5.8-2.6L5.1 9.5l1.8-2.1-.8-2.6 2.7-.5zm0 5.2a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6"/>';
+        break;
+      case "user":
+        path = '<path d="M10 10.2A3.1 3.1 0 1 0 10 4a3.1 3.1 0 0 0 0 6.2m-5 5.9a5.8 5.8 0 0 1 10 0V17H5z"/>';
+        break;
+      case "bell":
+        path = '<path d="M10 17a1.75 1.75 0 0 0 1.73-1.5H8.27A1.75 1.75 0 0 0 10 17m4.5-3.5V9.3a4.5 4.5 0 1 0-9 0v4.2L4 15v.5h12V15z"/>';
+        break;
+      case "search":
+        path = '<path d="M8.75 3a5.75 5.75 0 1 1 0 11.5A5.75 5.75 0 0 1 8.75 3m0 1.5a4.25 4.25 0 1 0 0 8.5 4.25 4.25 0 0 0 0-8.5m5.49 8.93 2.51 2.5-1.06 1.07-2.51-2.5z"/>';
+        break;
+      case "plus":
+        path = '<path d="M9.25 3h1.5v6.25H17v1.5h-6.25V17h-1.5v-6.25H3v-1.5h6.25z"/>';
+        break;
+      default:
+        path = '<circle cx="10" cy="10" r="6"/>';
+    }
+    return '<span class="' + escapeHtml(extraClass || "nf-nav-icon") + '" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + path + "</svg></span>";
+  }
+
   function ensureShell() {
     var shell = document.getElementById(SHELL_ID);
     if (!shell) {
       shell = document.createElement("div");
       shell.id = SHELL_ID;
-      shell.className = "nofida-shell";
+      shell.className = "nofida-shell nf-shell";
       shell.setAttribute("data-surface", "dashboard-resource");
       shell.innerHTML = [
-        '<aside id="' + SIDEBAR_ID + '" class="nofida-shell-sidebar">',
+        '<aside id="' + SIDEBAR_ID + '" class="nofida-shell-sidebar nf-sidebar">',
         '  <div class="nofida-shell-workspace"></div>',
         '  <div class="nofida-shell-search">',
         '    <input type="search" placeholder="' + escapeHtml(SEARCH_PLACEHOLDER) + '" aria-label="' + escapeHtml(SEARCH_PLACEHOLDER) + '" autocomplete="off" spellcheck="false">',
         "  </div>",
-        '  <nav id="' + NAV_ID + '" class="nofida-shell-nav"></nav>',
+        '  <nav id="' + NAV_ID + '" class="nofida-shell-nav nf-sidebar-nav"></nav>',
         '  <div class="nofida-shell-footer"></div>',
         "</aside>",
-        '<main id="' + MAIN_ID + '" class="nofida-shell-main">',
-        '  <div id="' + FRAME_ID + '" class="nofida-page-frame"></div>',
-        "</main>"
+        '<section class="nofida-shell-workstage nf-workspace">',
+        '  <header id="' + TOPBAR_ID + '" class="nofida-shell-topbar nf-topbar"></header>',
+        '  <main id="' + MAIN_ID + '" class="nofida-shell-main nf-main">',
+        '    <div id="' + FRAME_ID + '" class="nofida-page-frame nf-page"></div>',
+        "  </main>",
+        "</section>"
       ].join("");
       document.body.appendChild(shell);
     }
@@ -830,6 +950,7 @@
       search: shell.querySelector(".nofida-shell-search input"),
       nav: document.getElementById(NAV_ID),
       footer: shell.querySelector(".nofida-shell-footer"),
+      topbar: document.getElementById(TOPBAR_ID),
       main: document.getElementById(MAIN_ID),
       frame: document.getElementById(FRAME_ID)
     };
@@ -843,10 +964,13 @@
   function renderWorkspace(els) {
     var workspace = getWorkspaceInfo();
     els.workspace.innerHTML = [
-      '<div class="nofida-workspace-row">',
-      '  <img class="nofida-workspace-logo" src="/nofida/brand/icon.png' + escapeHtml(ASSET_QUERY) + '" alt="NOFIDA">',
-      '  <span class="nofida-workspace-name">' + escapeHtml(workspace.name) + "</span>",
-      workspace.hasDropdown ? '  <span class="nofida-workspace-caret" aria-hidden="true">▾</span>' : "",
+      '<div class="nf-sidebar-brand">',
+      '  <span class="nf-logo-mark">N</span>',
+      '  <span class="nf-logo-word">NOFIDA</span>',
+      "</div>",
+      '<div class="nf-sidebar-meta">',
+      '  <span class="nf-sidebar-meta-label">Рабочее пространство</span>',
+      '  <strong class="nf-sidebar-meta-value">' + escapeHtml(workspace.name) + "</strong>",
       "</div>"
     ].join("");
   }
@@ -854,10 +978,40 @@
   function renderFooter(els) {
     var user = getUserInfo();
     els.footer.innerHTML = [
-      '<div class="nofida-footer-user">',
-      '  <span class="nofida-footer-avatar" aria-hidden="true">' + escapeHtml(user.initial) + "</span>",
-      '  <span class="nofida-footer-name">' + escapeHtml(user.name) + "</span>",
-      '  <button type="button" class="nofida-footer-settings" data-nofida-route="' + escapeHtml(ROUTES.settings) + '">Настройки</button>',
+      '<button type="button" class="nofida-footer-user nf-account-chip" data-nofida-route="' + escapeHtml(ROUTES.settings) + '">',
+      '  <span class="nofida-footer-avatar nf-account-avatar" aria-hidden="true">' + escapeHtml(user.initial) + "</span>",
+      '  <span class="nf-account-copy"><strong class="nofida-footer-name">' + escapeHtml(user.name) + '</strong><span class="nf-account-meta">Аккаунт команды</span></span>',
+      getIconMarkup("user", "nf-account-chip-icon"),
+      "</button>"
+    ].join("");
+  }
+
+  function renderTopbar(els, route) {
+    var meta = getRouteMeta(route);
+    var workspace = getWorkspaceInfo();
+    var user = getUserInfo();
+    var pageLabel = meta.label || "NOFIDA";
+
+    els.topbar.innerHTML = [
+      '<div class="nofida-topbar-breadcrumb nf-topbar-breadcrumb">',
+      getIconMarkup("workspace", "nf-topbar-crumb-icon"),
+      '  <span class="nf-topbar-crumb-root">' + escapeHtml(workspace.name) + "</span>",
+      '  <span class="nf-topbar-crumb-sep">/</span>',
+      '  <strong>' + escapeHtml(pageLabel) + "</strong>",
+      "</div>",
+      '<label class="nf-global-search">',
+      getIconMarkup("search", "nf-global-search-icon"),
+      '  <input type="search" aria-label="Глобальный поиск" placeholder="Поиск проектов, файлов и ресурсов…" autocomplete="off" spellcheck="false">',
+      '  <span class="nf-shortcut">Ctrl K</span>',
+      "</label>",
+      '<div class="nofida-topbar-actions nf-topbar-actions">',
+      '  <button type="button" class="nf-btn nf-btn-primary" data-nofida-action="new-project">' + getIconMarkup("plus", "nf-btn-inline-icon") + '<span>Новый проект</span></button>',
+      '  <button type="button" class="nf-btn nf-btn-secondary nf-btn-icon" data-nofida-route="' + escapeHtml(ROUTES.releases) + '" aria-label="Уведомления">' + getIconMarkup("bell", "nf-btn-inline-icon") + "</button>",
+      '  <button type="button" class="nf-btn nf-btn-secondary nf-btn-icon" data-nofida-route="' + escapeHtml(ROUTES.help) + '" aria-label="Справка">' + getIconMarkup("help", "nf-btn-inline-icon") + "</button>",
+      '  <button type="button" class="nf-account-chip nf-account-chip-topbar" data-nofida-route="' + escapeHtml(ROUTES.settings) + '">',
+      '    <span class="nf-account-avatar" aria-hidden="true">' + escapeHtml(user.initial) + "</span>",
+      '    <span class="nf-account-copy"><strong>' + escapeHtml(user.name) + '</strong><span class="nf-account-meta">Параметры</span></span>',
+      "  </button>",
       "</div>"
     ].join("");
   }
@@ -875,7 +1029,7 @@
           var routeForItem = getRouteForItem(item.id, route);
           var parentActive = active.activeId === item.id;
           var childActive = item.childIds && item.childIds.indexOf(active.childActiveId) >= 0;
-          var parentClasses = ["nofida-nav-item"];
+          var parentClasses = ["nofida-nav-item", "nf-nav-item"];
           if (parentActive && !childActive) parentClasses.push("is-active");
           if (parentActive || childActive) parentClasses.push("is-parent-active");
           if (!routeForItem && item.children && item.children.length) parentClasses.push("is-disabled");
@@ -884,14 +1038,15 @@
             '<button type="button" class="' + parentClasses.join(" ") + '"',
             routeForItem ? ' data-nofida-route="' + escapeHtml(routeForItem) + '"' : ' disabled="disabled"',
             ' data-nofida-nav-id="' + escapeHtml(item.id) + '">',
+            getIconMarkup(item.icon || "home", "nofida-nav-icon nf-nav-icon"),
             '  <span class="nofida-nav-dot" aria-hidden="true"></span>',
-            '  <span>' + escapeHtml(item.label) + "</span>",
+            '  <span class="nf-nav-label">' + escapeHtml(item.label) + "</span>",
             "</button>"
           ].join("");
 
           var children = (item.children || []).map(function (child) {
             var childRoute = getRouteForItem(child.id, route);
-            var childClasses = ["nofida-nav-subitem"];
+            var childClasses = ["nofida-nav-subitem", "nf-nav-subitem"];
             var isChildActive = active.childActiveId === child.id;
             if (isChildActive) childClasses.push("is-active");
             if (child.disabled || !childRoute) childClasses.push("is-disabled");
@@ -901,7 +1056,7 @@
               child.disabledTitle ? ' title="' + escapeHtml(child.disabledTitle) + '"' : "",
               ' data-nofida-nav-child-id="' + escapeHtml(child.id) + '">',
               '  <span class="nofida-nav-dot" aria-hidden="true"></span>',
-              '  <span>' + escapeHtml(child.label) + "</span>",
+              '  <span class="nf-nav-label">' + escapeHtml(child.label) + "</span>",
               "</button>"
             ].join("");
           }).join("");
@@ -917,25 +1072,27 @@
     var route = normalizeHash(options.route || getCurrentHash());
     var meta = getRouteMeta(route);
     var backTarget = options.backTarget || getBackTarget(route);
-    var breadcrumb = Array.isArray(options.breadcrumb) ? options.breadcrumb : meta.breadcrumb;
     var title = options.title || meta.label || "NOFIDA";
     var subtitle = options.subtitle || "";
     var showHeader = options.hideFrameHeader !== true;
-    var showBack = options.showBackButton !== false;
+    var showBack = options.showBackButton === true;
+    var eyebrow = options.eyebrow || "Рабочее пространство";
+    var headerActionsHtml = options.headerActionsHtml || "";
 
     return [
       showBack ? [
         '<div class="nofida-page-backrow">',
-        '  <button type="button" class="nofida-page-back" data-nofida-back="safe" data-nofida-current="' + escapeHtml(route) + '">' + escapeHtml(backTarget.label) + "</button>",
+          '  <button type="button" class="nofida-page-back" data-nofida-back="safe" data-nofida-current="' + escapeHtml(route) + '">' + escapeHtml(backTarget.label) + "</button>",
         "</div>"
       ].join("") : "",
-      breadcrumb && breadcrumb.length ? '<div class="nofida-page-breadcrumb">' + breadcrumb.map(function (segment) {
-        return '<span>' + escapeHtml(segment) + "</span>";
-      }).join('<span>/</span>') + "</div>" : "",
       showHeader ? [
-        '<header class="nofida-page-header">',
-        '  <h1 class="nofida-page-title">' + escapeHtml(title) + "</h1>",
-        subtitle ? '  <p class="nofida-page-subtitle">' + escapeHtml(subtitle) + "</p>" : "",
+        '<header class="nofida-page-header nf-page-header">',
+        "  <div>",
+        '    <p class="nf-eyebrow">' + escapeHtml(eyebrow) + "</p>",
+        '    <h1 class="nofida-page-title nf-page-title">' + escapeHtml(title) + "</h1>",
+        subtitle ? '    <p class="nofida-page-subtitle nf-page-subtitle">' + escapeHtml(subtitle) + "</p>" : "",
+        "  </div>",
+        headerActionsHtml ? '  <div class="nf-page-actions">' + headerActionsHtml + "</div>" : "",
         "</header>"
       ].join("") : "",
       options.contentHtml || ""
@@ -947,6 +1104,7 @@
     els.shell.setAttribute("data-surface", "dashboard-resource");
     els.shell.setAttribute("data-route-kind", mode);
     renderWorkspace(els);
+    renderTopbar(els, route);
     renderFooter(els);
     renderNav(els, route, forcedActiveId, forcedChildActiveId);
     return els;
@@ -965,13 +1123,14 @@
 
     els.frame.innerHTML = renderFrameChrome({
       route: route,
-      breadcrumb: opts.breadcrumb,
       title: opts.title,
       subtitle: opts.subtitle,
       contentHtml: opts.contentHtml,
       hideFrameHeader: opts.hideFrameHeader,
       showBackButton: opts.showBackButton,
-      backTarget: opts.backTarget
+      backTarget: opts.backTarget,
+      eyebrow: opts.eyebrow,
+      headerActionsHtml: opts.headerActionsHtml
     });
 
     state.shellOwner = opts.owner || "";
@@ -988,6 +1147,14 @@
     clearShellBodyClasses();
     document.body.classList.add(BODY_CLASS_NATIVE);
     els.frame.innerHTML = "";
+
+    window.requestAnimationFrame(function () {
+      if (isNativeFontsHash(route) || looksLikeNativeFontsSurface()) {
+        cleanupNativeDashboardEnhancements();
+        return;
+      }
+      enhanceNativeDashboard(route);
+    });
 
     state.shellOwner = "";
     state.shellRoute = route;
@@ -1032,6 +1199,193 @@
     });
   }
 
+  function findNativeDashboardContent() {
+    return pickVisibleNode([
+      ".main_ui_dashboard__dashboard-content",
+      "[class*='dashboard-content']"
+    ]);
+  }
+
+  function collectDashboardActivity(content) {
+    var rows = Array.prototype.slice.call(
+      content.querySelectorAll(".main_ui_dashboard_projects__dashboard-project-row"),
+      0,
+      5
+    );
+
+    var items = rows.map(function (row) {
+      var title = normalizeTextContent(row.querySelector(".main_ui_dashboard_projects__project-name")) || "Проект";
+      var fileInfo = normalizeTextContent(row.querySelector(".main_ui_dashboard_projects__info"));
+      var recency = normalizeTextContent(row.querySelector(".main_ui_dashboard_projects__recent-files-row-title-info"));
+      return {
+        title: title + " обновлен",
+        meta: [fileInfo, recency].filter(Boolean).join(" · ") || "Активность появится после обновлений команды."
+      };
+    }).filter(function (item) {
+      return !!item.title;
+    });
+
+    if (items.length) return items;
+
+    return [
+      { title: "Обновите первый проект", meta: "Карточки активности появятся после сохранения файлов команды." },
+      { title: "Подготовьте библиотеку", meta: "Добавьте стартовые ресурсы в рабочее пространство NOFIDA." }
+    ];
+  }
+
+  function buildDashboardContextMarkup(content) {
+    var activity = collectDashboardActivity(content);
+    return [
+      '<aside id="nf-dashboard-context-panel" class="nf-context-panel">',
+      '  <section class="nf-panel">',
+      '    <div class="nf-panel-header"><h2 class="nf-panel-title">Последняя активность</h2><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(getProjectsRoute(getCurrentHash())) + '">Открыть</button></div>',
+      '    <div class="nf-list">',
+      activity.map(function (item) {
+        return [
+          '<div class="nf-list-item">',
+          '  <div class="nf-list-icon">' + getIconMarkup("workspace", "nf-list-icon-svg") + "</div>",
+          '  <div><p class="nf-list-title">' + escapeHtml(item.title) + '</p><p class="nf-list-meta">' + escapeHtml(item.meta) + "</p></div>",
+          "</div>"
+        ].join("");
+      }).join(""),
+      "    </div>",
+      "  </section>",
+      '  <section class="nf-panel">',
+      '    <div class="nf-panel-header"><h2 class="nf-panel-title">AI-подсказки</h2><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(ROUTES.aiSettings) + '">Настроить</button></div>',
+      '    <div class="nf-list">',
+      '      <button type="button" class="nf-suggestion-card" data-nofida-route="' + escapeHtml(ROUTES.aiSettings) + '"><span class="nf-list-icon">' + getIconMarkup("ai", "nf-list-icon-svg") + '</span><span><strong>Собрать рабочий бриф</strong><small>Запустите AI Assistant для структуры проекта и задач команды.</small></span></button>',
+      '      <button type="button" class="nf-suggestion-card" data-nofida-route="' + escapeHtml(ROUTES.fontCatalog) + '"><span class="nf-list-icon">' + getIconMarkup("type", "nf-list-icon-svg") + '</span><span><strong>Подобрать типографику</strong><small>Откройте каталог шрифтов и соберите продуктовую пару.</small></span></button>',
+      '      <button type="button" class="nf-suggestion-card" data-nofida-route="' + escapeHtml(ROUTES.media) + '"><span class="nf-list-icon">' + getIconMarkup("media", "nf-list-icon-svg") + '</span><span><strong>Проверить визуальные ресурсы</strong><small>Сверьте иконки, фоны и empty states перед релизом.</small></span></button>',
+      "    </div>",
+      "  </section>",
+      '  <section class="nf-panel">',
+      '    <div class="nf-panel-header"><h2 class="nf-panel-title">Закрепленные ресурсы</h2><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '">Все ресурсы</button></div>',
+      '    <div class="nf-pinned-list">',
+      '      <button type="button" class="nf-pinned-item" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '">' + getIconMarkup("library", "nf-pinned-icon") + '<span><strong>Библиотеки</strong><small>Компоненты, UI kits и шаблоны.</small></span></button>',
+      '      <button type="button" class="nf-pinned-item" data-nofida-route="' + escapeHtml(getNativeFontsRoute(getCurrentHash())) + '">' + getIconMarkup("type", "nf-pinned-icon") + '<span><strong>Шрифты команды</strong><small>Нативная загрузка и рекомендации NOFIDA.</small></span></button>',
+      '      <button type="button" class="nf-pinned-item" data-nofida-route="' + escapeHtml(ROUTES.media) + '">' + getIconMarkup("media", "nf-pinned-icon") + '<span><strong>Медиабанк</strong><small>Локальные ассеты и паттерны.</small></span></button>',
+      "    </div>",
+      "  </section>",
+      "</aside>"
+    ].join("");
+  }
+
+  function buildDashboardResourceStripMarkup() {
+    return [
+      '<section id="nf-dashboard-resource-strip" class="nf-resource-strip">',
+      '  <div class="nf-resource-strip-header"><div><p class="nf-eyebrow">Ресурсы</p><h2 class="nf-section-title">Быстрый доступ к ресурсам NOFIDA</h2></div><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '">Открыть каталог</button></div>',
+      '  <div class="nf-resource-grid">',
+      '    <button type="button" class="nf-resource-card" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '"><span class="nf-resource-icon">' + getIconMarkup("library", "nf-resource-icon-svg") + '</span><h3 class="nf-resource-title">Библиотеки</h3><p class="nf-resource-desc">Добавляйте в пространство дизайн-системы, UI kits и шаблоны.</p><span class="nf-resource-meta">Каталог команды</span></button>',
+      '    <button type="button" class="nf-resource-card" data-nofida-route="' + escapeHtml(getNativeFontsRoute(getCurrentHash())) + '"><span class="nf-resource-icon">' + getIconMarkup("type", "nf-resource-icon-svg") + '</span><h3 class="nf-resource-title">Шрифты</h3><p class="nf-resource-desc">Загрузите нативные шрифты команды и откройте рекомендации NOFIDA.</p><span class="nf-resource-meta">Командная типографика</span></button>',
+      '    <button type="button" class="nf-resource-card" data-nofida-route="' + escapeHtml(ROUTES.media) + '"><span class="nf-resource-icon">' + getIconMarkup("media", "nf-resource-icon-svg") + '</span><h3 class="nf-resource-title">Медиа</h3><p class="nf-resource-desc">Иконки, иллюстрации и фоны уже готовы для продуктовых сценариев.</p><span class="nf-resource-meta">Локальные ассеты</span></button>',
+      '    <button type="button" class="nf-resource-card" data-nofida-route="' + escapeHtml(ROUTES.figma) + '"><span class="nf-resource-icon">' + getIconMarkup("figma", "nf-resource-icon-svg") + '</span><h3 class="nf-resource-title">Импорт из Figma</h3><p class="nf-resource-desc">Соберите файл, ассеты и миграционный план перед переносом.</p><span class="nf-resource-meta">План переноса</span></button>',
+      "  </div>",
+      "</section>"
+    ].join("");
+  }
+
+  function cleanupNativeDashboardEnhancements() {
+    Array.prototype.forEach.call(document.querySelectorAll("#nf-dashboard-context-panel, #nf-dashboard-resource-strip"), function (node) {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    });
+  }
+
+  function enhanceNativeDashboard(route) {
+    if (!isDashboardRoute(route) || isNofidaResourceRoute(route) || isNativeFontsHash(route) || looksLikeNativeFontsSurface()) return;
+
+    var content = findNativeDashboardContent();
+    if (!content) return;
+
+    var header = content.querySelector(".main_ui_dashboard_projects__dashboard-header");
+    var projects = content.querySelector(".main_ui_dashboard_projects__projects-container");
+    if (!header || !projects) return;
+
+    content.classList.add("nf-dashboard-native-root");
+
+    var titleNode = header.querySelector("h1");
+    if (titleNode && !header.querySelector(".nf-native-page-subtitle")) {
+      var subtitle = document.createElement("p");
+      subtitle.className = "nf-native-page-subtitle";
+      subtitle.textContent = "Создавайте, собирайте и передавайте проектные материалы в одном рабочем пространстве.";
+      titleNode.insertAdjacentElement("afterend", subtitle);
+    }
+
+    var headerActions = header.querySelector(".nf-dashboard-page-actions");
+    var nativeNewProject = header.querySelector("[data-testid='new-project-button']");
+    if (!headerActions) {
+      headerActions = document.createElement("div");
+      headerActions.className = "nf-dashboard-page-actions nf-page-actions";
+      header.appendChild(headerActions);
+    }
+
+    if (!headerActions.querySelector("[data-nofida-action='focus-search']")) {
+      var filterButton = document.createElement("button");
+      filterButton.type = "button";
+      filterButton.className = "nf-btn nf-btn-secondary";
+      filterButton.setAttribute("data-nofida-action", "focus-search");
+      filterButton.textContent = "Фильтры";
+      headerActions.appendChild(filterButton);
+    }
+
+    if (nativeNewProject && nativeNewProject.parentNode !== headerActions) {
+      headerActions.appendChild(nativeNewProject);
+    }
+    if (nativeNewProject) {
+      nativeNewProject.classList.add("nf-btn", "nf-btn-primary");
+      nativeNewProject.textContent = "+ Новый проект";
+    }
+
+    var context = content.querySelector("#nf-dashboard-context-panel");
+    if (!context) {
+      context = document.createElement("aside");
+      context.id = "nf-dashboard-context-panel";
+      content.appendChild(context);
+    }
+    context.outerHTML = buildDashboardContextMarkup(content);
+
+    var resourceStrip = content.querySelector("#nf-dashboard-resource-strip");
+    if (!resourceStrip) {
+      resourceStrip = document.createElement("section");
+      resourceStrip.id = "nf-dashboard-resource-strip";
+      content.appendChild(resourceStrip);
+    }
+    resourceStrip.outerHTML = buildDashboardResourceStripMarkup();
+
+    var legacySection = content.querySelector(".main_ui_dashboard_templates__dashboard-templates-section");
+    if (legacySection) legacySection.setAttribute("hidden", "hidden");
+  }
+
+  function focusTopbarSearch() {
+    var input = document.querySelector("#" + TOPBAR_ID + " input[type='search']");
+    if (!input) return false;
+    input.focus();
+    if (typeof input.select === "function") input.select();
+    return true;
+  }
+
+  function triggerNativeNewProject() {
+    var button = pickVisibleNode([
+      "[data-testid='new-project-button']",
+      ".main_ui_dashboard_projects__btn-secondary"
+    ]);
+    if (!button) return false;
+    button.click();
+    return true;
+  }
+
+  function handleShellAction(action) {
+    switch (action) {
+      case "new-project":
+        if (!triggerNativeNewProject()) goToNofidaRoute(getProjectsRoute(getCurrentHash()), { source: "shell-new-project" });
+        return true;
+      case "focus-search":
+        focusTopbarSearch();
+        return true;
+      default:
+        return false;
+    }
+  }
+
   function scheduleDashboardRefresh() {
     while (refreshTimers.length) {
       window.clearTimeout(refreshTimers.pop());
@@ -1041,6 +1395,7 @@
       refreshTimers.push(window.setTimeout(function () {
         if (!isDashboardRoute(getCurrentHash()) || isNofidaResourceRoute(getCurrentHash())) return;
         renderNativeDashboardShell(getCurrentHash());
+        enhanceNativeDashboard(getCurrentHash());
       }, delay));
     });
   }
@@ -1050,6 +1405,7 @@
     var surface = getSurface(current);
 
     if (surface === "account" || surface === "editor" || surface === "other") {
+      cleanupNativeDashboardEnhancements();
       destroyDashboardShell();
       return;
     }
@@ -1094,6 +1450,15 @@
             source: routeLink.getAttribute("data-nofida-source") || "",
             replace: routeLink.getAttribute("data-nofida-replace") === "true"
           });
+          return;
+        }
+      }
+
+      var actionTrigger = target.closest("[data-nofida-action]");
+      if (actionTrigger) {
+        var action = actionTrigger.getAttribute("data-nofida-action");
+        if (action && handleShellAction(action)) {
+          event.preventDefault();
           return;
         }
       }
