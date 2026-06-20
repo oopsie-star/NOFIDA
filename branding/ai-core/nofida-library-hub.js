@@ -1286,10 +1286,17 @@
     if (S.galleryPatched) return;
     if (!isDashboard()) return;
 
-    /* Step 1: replace any external penpot.app links in the entire dashboard */
-    var extLinks = document.querySelectorAll(
-      "a[href*='penpot.app/penpothub'],a[href*='penpot.app/hub'],a[href*='penpot.app/libraries-templates']"
-    );
+    /* Step 1: replace gallery links with an internal same-tab opener.
+       In some builds the original hub card is still external; in others it has
+       already been rewritten to /#/nofida/libraries but keeps target=_blank. */
+    var extLinks = Array.prototype.filter.call(document.querySelectorAll("a[href]"), function (link) {
+      var href = String(link.getAttribute("href") || "");
+      var text = String(link.textContent || "").trim();
+      var isGalleryCopy = /Библиотеки и шаблоны|Libraries.*templates/i.test(text);
+      var isExternalHub = /penpot\.app\/(?:penpothub|hub|libraries-templates)/i.test(href);
+      var isInternalHub = /(?:^|\/)?#\/nofida\/libraries(?:$|[/?#])/i.test(href);
+      return isGalleryCopy && (isExternalHub || isInternalHub);
+    });
     if (extLinks.length === 0) return;   /* section not rendered yet */
 
     S.galleryPatched = true;
