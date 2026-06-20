@@ -436,12 +436,18 @@ page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`))
 page.on("console", (message) => {
   if (message.type() !== "error") return;
   const text = message.text();
-  // Known non-fatal: feature-flags 401 — check text and location URL
+  // Known non-fatal: feature-flags 401
   if (/get-enabled-flags/i.test(text)) return;
+  // Known non-fatal: Penpot WebSocket notification reconnects during long headless sessions.
+  // ERR_NETWORK_IO_SUSPENDED fires when Chromium suspends network for idle headless tabs.
+  // ERR_NAME_NOT_RESOLVED fires on transient DNS hiccups; both are Penpot-native, not NOFIDA.
+  if (/ws\/notifications/i.test(text)) return;
+  if (/ERR_NETWORK_IO_SUSPENDED/i.test(text)) return;
   // Playwright sets location().url to the failing resource URL for network errors
   let locUrl = "";
   try { locUrl = (message.location() || {}).url || ""; } catch (_e) {}
   if (/get-enabled-flags/i.test(locUrl)) return;
+  if (/ws\/notifications/i.test(locUrl)) return;
   // Suppress console errors that reference any tracked non-fatal 401 path
   for (const path of nonFatalRequestPaths) {
     if (text.includes(path)) return;
