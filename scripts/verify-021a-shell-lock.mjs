@@ -264,7 +264,8 @@ async function waitForAccount(page) {
 
 async function accountSidebarStabilityRun(page, teamId) {
   // page.goto to settings as cold route renders Penpot 404; must route via dashboard first.
-  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "load", timeout: 60000 });
+  // waitUntil "commit" (not "load") so page.goto returns fast; waitForDashboardShell has full 90s.
+  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "commit", timeout: 60000 });
   await waitForDashboardShell(page);
   await openHash(page, "#/settings/options");
   await waitForAccount(page);
@@ -419,6 +420,9 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 900 }
 });
 const page = await context.newPage();
+// { timeout: N } as 2nd arg to waitForFunction is silently treated as arg, not options.
+// setDefaultTimeout makes ALL playwright waits (waitForFunction, waitForSelector, etc.) use 90s.
+page.setDefaultTimeout(90000);
 const fatalConsole = [];
 const nonFatalRequestPaths = new Set();
 
@@ -596,7 +600,8 @@ try {
 
   // page.goto to #/settings/options as a cold route renders a Penpot 404 — must first land on
   // a known Penpot route (dashboard) and then hash-navigate to account settings.
-  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "load", timeout: 60000 });
+  // waitUntil "commit" (not "load") so page.goto returns fast; waitForDashboardShell has full 90s.
+  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "commit", timeout: 60000 });
   await waitForDashboardShell(page);
   await openHash(page, "#/settings/options");
   await waitForAccount(page);
