@@ -596,19 +596,22 @@ try {
   });
 
   // Account settings block — fully isolated so it cannot cascade into editor/stability.
+  // #/nofida/* routes overlay Penpot's 404 page; navigating directly to #/settings/options from
+  // those routes causes a 404→settings transition that Penpot cannot handle. We must route via a
+  // Penpot-native route (dashboard) first so the SPA state is valid before account navigation.
   let accountBaseCount = 0;
   let accountShellCount = 0;
-  await openHash(page, "#/settings/options");
   try {
+    await openHash(page, `#/dashboard/team/${teamId}/projects`);
+    await waitForDashboardShell(page);
+    await openHash(page, "#/settings/options");
     await waitForAccount(page);
     accountBaseCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
     accountShellCount = await page.locator("#nofida-shell").count();
   } catch (accountWaitErr) {
     const diag = await page.evaluate(() => ({
       hash: window.location.hash,
-      body: (document.body?.textContent || "").slice(0, 150).replace(/\s+/g, " ").trim(),
       hasNav: !!document.querySelector("ul.main_ui_settings_sidebar__sidebar-nav-settings"),
-      hasShell: !!document.getElementById("nofida-shell"),
       routeKind: document.getElementById("nofida-shell")?.getAttribute("data-route-kind") || ""
     }));
     notes.push(`waitForAccount: ${accountWaitErr.message} | ${JSON.stringify(diag)}`);
