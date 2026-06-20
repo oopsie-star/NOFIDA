@@ -17,15 +17,15 @@
   ];
 
   var NAV_ITEMS = [
-    { id: "help", label: "Справка" },
-    { id: "learn", label: "Обучение" },
-    { id: "repository", label: "Репозиторий" },
-    { id: "community", label: "Сообщество" },
-    { id: "releases", label: "Релизы" },
-    { id: "changelog", label: "Журнал изменений" },
-    { id: "terms", label: "Условия" },
-    { id: "privacy", label: "Данные" },
-    { id: "open-source-notices", label: "Лицензии" }
+    { id: "help", label: "Help" },
+    { id: "learn", label: "Learn" },
+    { id: "repository", label: "Repository" },
+    { id: "community", label: "Community" },
+    { id: "releases", label: "Releases" },
+    { id: "changelog", label: "Changelog" },
+    { id: "terms", label: "Terms" },
+    { id: "privacy", label: "Privacy" },
+    { id: "open-source-notices", label: "Notices" }
   ];
 
   var state = {
@@ -36,7 +36,7 @@
 
   var PAGES = {
     help: {
-      title: "Справка",
+      title: "Help Center",
       badge: "Internal guide",
       intro: "Practical NOFIDA help for everyday work: files, libraries, fonts, media, migration prep, AI settings, and support.",
       actions: [
@@ -99,14 +99,14 @@
           title: "Support path",
           text: "Use the community page for support routing, feedback intake, and admin follow-up when your team needs help.",
           links: [
-            { label: "Сообщество", href: "#/nofida/community" },
+            { label: "Community", href: "#/nofida/community" },
             { label: "Privacy draft", href: "#/nofida/privacy" }
           ]
         }
       ]
     },
     learn: {
-      title: "Обучение",
+      title: "Learning Center",
       badge: "Short guides",
       intro: "Compact learning tracks for designers and admins who want to get productive in NOFIDA quickly.",
       actions: [
@@ -145,7 +145,7 @@
           title: "Build with components",
           text: "Turn repeated UI into components early, then evolve variants only after naming and usage patterns are stable.",
           links: [
-            { label: "Страница репозитория", href: "#/nofida/repository" },
+            { label: "Repository page", href: "#/nofida/repository" },
             { label: "Changelog", href: "#/nofida/changelog" }
           ]
         },
@@ -153,7 +153,7 @@
           title: "Organize design systems",
           text: "Keep tokens, shared components, and examples close together so new teammates can learn the system by opening one file.",
           links: [
-            { label: "Практики сообщества", href: "#/nofida/community" },
+            { label: "Community practices", href: "#/nofida/community" },
             { label: "Open source notices", href: "#/nofida/open-source-notices" }
           ]
         },
@@ -176,7 +176,7 @@
       ]
     },
     repository: {
-      title: "Репозиторий",
+      title: "Repository",
       badge: "Product distribution",
       intro: "This page explains how NOFIDA is packaged and maintained as an internal product distribution for your organization.",
       actions: [
@@ -197,7 +197,7 @@
           title: "How updates move",
           text: "Work is changed here first, verified against the live workspace, then deployed as a same-origin NOFIDA build.",
           links: [
-            { label: "Процесс сообщества", href: "#/nofida/community" },
+            { label: "Community process", href: "#/nofida/community" },
             { label: "Help center", href: "#/nofida/help" }
           ]
         },
@@ -229,12 +229,12 @@
       ]
     },
     community: {
-      title: "Сообщество",
+      title: "Community",
       badge: "Support and feedback",
       intro: "A simple NOFIDA page for team support, rollout guidance, feedback intake, and future community planning.",
       actions: [
         { label: "Help center", href: "#/nofida/help" },
-        { label: "Репозиторий", href: "#/nofida/repository" },
+        { label: "Repository", href: "#/nofida/repository" },
         { label: "Open dashboard", href: "#/dashboard" }
       ],
       sections: [
@@ -259,7 +259,7 @@
           text: "Collect broken flows, upgrade pain points, and missing library requests in one place before planning the next patch.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
-            { label: "Репозиторий", href: "#/nofida/repository" }
+            { label: "Repository", href: "#/nofida/repository" }
           ]
         },
         {
@@ -281,13 +281,13 @@
       ]
     },
     releases: {
-      title: "Релизы",
+      title: "Release Notes",
       badge: "Current line",
       intro: "Recent NOFIDA changes for the current product line built on the 2.16.0 base with NOFIDA patch overlays.",
       actions: [
         { label: "View changelog", href: "#/nofida/changelog" },
         { label: "Open NOFIDA Hub", href: "#/nofida/libraries" },
-        { label: "Репозиторий", href: "#/nofida/repository" }
+        { label: "Repository", href: "#/nofida/repository" }
       ],
       sections: [
         {
@@ -304,7 +304,7 @@
           text: "The NOFIDA Hub remains the internal route for libraries, templates, UI kits, and starter assets, now linked to the newer resource surfaces.",
           links: [
             { label: "Open catalog", href: "#/nofida/libraries" },
-            { label: "Репозиторий", href: "#/nofida/repository" },
+            { label: "Repository", href: "#/nofida/repository" },
             { label: "Font catalog", href: "#/nofida/fonts" }
           ]
         },
@@ -329,18 +329,18 @@
           text: "After each deploy, verify internal routes, provider configuration, notices text, and same-origin behavior from the live domain.",
           links: [
             { label: "Open source notices", href: "#/nofida/open-source-notices" },
-            { label: "Сообщество", href: "#/nofida/community" }
+            { label: "Community", href: "#/nofida/community" }
           ]
         }
       ]
     },
     changelog: {
-      title: "Журнал изменений",
+      title: "Changelog",
       badge: "Patch history",
       intro: "A short chronological NOFIDA record of the changes that shape the current branded workspace.",
       actions: [
         { label: "Release notes", href: "#/nofida/releases" },
-        { label: "Репозиторий", href: "#/nofida/repository" },
+        { label: "Repository", href: "#/nofida/repository" },
         { label: "Help center", href: "#/nofida/help" }
       ],
       sections: [
@@ -381,17 +381,17 @@
           title: "PATCH 014H-014M",
           text: "Native import adapter, inventory cleanup, file quality checks, and thumbnail reliability improvements were introduced.",
           links: [
-            { label: "Репозиторий", href: "#/nofida/repository" },
+            { label: "Repository", href: "#/nofida/repository" },
             { label: "Release notes", href: "#/nofida/releases" }
           ]
         }
       ]
     },
     terms: {
-      title: "Условия использования",
-      badge: "Черновая версия",
-      intro: "Страница фиксирует структуру условий использования NOFIDA для внутреннего согласования и юридической доработки.",
-      notice: "Перед внешним запуском замените этот текст на утвержденную юридическую версию.",
+      title: "Terms of Use",
+      badge: "Draft placeholder",
+      intro: "This is a product placeholder for NOFIDA terms. It provides structure only and is not final legal advice or a finished legal document.",
+      notice: "Draft. Replace with legal-approved text before public/commercial launch.",
       actions: [
         { label: "Privacy draft", href: "#/nofida/privacy" },
         { label: "Open source notices", href: "#/nofida/open-source-notices" },
@@ -402,8 +402,8 @@
           title: "Use scope",
           text: "NOFIDA is presented here as an internal or self-hosted workspace operated under the deployment rules of your organization.",
           links: [
-            { label: "Репозиторий", href: "#/nofida/repository" },
-            { label: "Сообщество", href: "#/nofida/community" }
+            { label: "Repository", href: "#/nofida/repository" },
+            { label: "Community", href: "#/nofida/community" }
           ]
         },
         {
@@ -432,7 +432,7 @@
         },
         {
           title: "Draft status",
-          text: "Эта страница фиксирует структуру будущего юридического текста и не должна восприниматься как финальное соглашение.",
+          text: "This page is a placeholder structure for future legal review and should not be treated as the final legal agreement.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
             { label: "Back to repository", href: "#/nofida/repository" }
@@ -441,10 +441,10 @@
       ]
     },
     privacy: {
-      title: "Данные и приватность",
-      badge: "Черновая версия",
-      intro: "Страница описывает предполагаемый поток данных NOFIDA и помогает согласовать требования до финальной юридической версии.",
-      notice: "Перед внешним запуском замените этот текст на утвержденную юридическую версию.",
+      title: "Privacy / Data",
+      badge: "Draft placeholder",
+      intro: "This is a NOFIDA privacy placeholder that explains the intended data flow at a high level without claiming legal finality.",
+      notice: "Draft. Replace with legal-approved text before public/commercial launch.",
       actions: [
         { label: "Terms draft", href: "#/nofida/terms" },
         { label: "AI settings", href: "#/settings/options?nofida=ai&tab=api" },
@@ -455,8 +455,8 @@
           title: "Stored workspace data",
           text: "NOFIDA stores account, team, project, and design-file data on the configured server used by your deployment.",
           links: [
-            { label: "Репозиторий", href: "#/nofida/repository" },
-            { label: "Сообщество", href: "#/nofida/community" }
+            { label: "Repository", href: "#/nofida/repository" },
+            { label: "Community", href: "#/nofida/community" }
           ]
         },
         {
@@ -480,12 +480,12 @@
           text: "Admins may need access to logs, health checks, and deploy status to operate the service safely inside the organization.",
           links: [
             { label: "Open source notices", href: "#/nofida/open-source-notices" },
-            { label: "Репозиторий", href: "#/nofida/repository" }
+            { label: "Repository", href: "#/nofida/repository" }
           ]
         },
         {
           title: "Draft status",
-          text: "Эта страница задает структуру текста о данных и приватности и должна быть заменена на юридически согласованную версию до широкого запуска.",
+          text: "This page is a structural placeholder only and should be replaced with legal-approved privacy text before wider launch.",
           links: [
             { label: "Terms draft", href: "#/nofida/terms" },
             { label: "Changelog", href: "#/nofida/changelog" }
@@ -494,11 +494,11 @@
       ]
     },
     "open-source-notices": {
-      title: "Открытые лицензии",
+      title: "Open Source Notices",
       badge: "Neutral attribution",
-      intro: "Нейтральная страница для лицензий, атрибуции и обязательных уведомлений, которые должны оставаться отдельно от продуктовой навигации.",
+      intro: "A neutral place for licensing, attribution, source-model disclosures, and adapted-resource notices that should stay separate from product marketing navigation.",
       actions: [
-        { label: "Репозиторий", href: "#/nofida/repository" },
+        { label: "Repository", href: "#/nofida/repository" },
         { label: "Terms draft", href: "#/nofida/terms" },
         { label: "Privacy draft", href: "#/nofida/privacy" }
       ],
@@ -507,7 +507,7 @@
           title: "Base application notice",
           text: "NOFIDA includes open source components that power the editor, service layer, and reviewed resource stores inside the branded workspace.",
           links: [
-            { label: "Репозиторий", href: "#/nofida/repository" },
+            { label: "Repository", href: "#/nofida/repository" },
             { label: "Release notes", href: "#/nofida/releases" }
           ]
         },
@@ -541,7 +541,7 @@
           text: "Re-check versions, license allowlists, attribution requirements, and approval states whenever the base product line or the reviewed resource inventory changes.",
           links: [
             { label: "Release notes", href: "#/nofida/releases" },
-            { label: "Репозиторий", href: "#/nofida/repository" }
+            { label: "Repository", href: "#/nofida/repository" }
           ]
         }
       ]
@@ -606,6 +606,27 @@
     return "#/nofida/" + pageId;
   }
 
+  function getBackInfo(pageId) {
+    var nav = getNav();
+    var currentHash = getPageHash(pageId);
+    if (!nav) {
+      return {
+        hash: normalizeHash(state.lastAppHash || "#/dashboard"),
+        label: "Назад к проектам"
+      };
+    }
+    return nav.getBackTargetInfo(currentHash, window.location.hash || currentHash);
+  }
+
+  function getBreadcrumb(pageId) {
+    var nav = getNav();
+    if (!nav) return "Панель / Справка";
+    var routeMeta = nav.getRouteMeta(getPageHash(pageId));
+    return routeMeta && Array.isArray(routeMeta.breadcrumb) && routeMeta.breadcrumb.length
+      ? routeMeta.breadcrumb.join(" / ")
+      : "Панель / Справка";
+  }
+
   function renderLinks(links) {
     if (!Array.isArray(links) || links.length === 0) return "";
     return [
@@ -648,42 +669,43 @@
     }).join("");
   }
 
-  function buildShellContent() {
-    return [
-      '<div id="nfp-shell-root">',
-      '  <div class="nfp-actions-wrap" id="nfp-actions-wrap"></div>',
-      '  <div class="nfp-notice" id="nfp-notice" hidden></div>',
-      '  <section class="nfp-grid" id="nfp-grid"></section>',
-      '  <p class="nfp-footer-note" id="nfp-footer-note"></p>',
-      "</div>"
-    ].join("");
+  function renderNav(currentPageId) {
+    var nav = getNav();
+    if (!nav) {
+      return NAV_ITEMS.map(function (item) {
+        var classes = ["nfp-nav-link"];
+        if (item.id === currentPageId) classes.push("active");
+        return '<a class="' + classes.join(" ") + '" href="#/nofida/' + item.id + '">' +
+          escapeHtml(item.label) + "</a>";
+      }).join("");
+    }
+
+    var currentHash = getPageHash(currentPageId);
+    var activeId = nav.getActiveResourceMenuId(currentHash);
+    return nav.getResourceMenuItems(currentHash).map(function (item) {
+      var classes = ["nfp-nav-link"];
+      if (item.id === activeId) classes.push("active");
+      return '<a class="' + classes.join(" ") + '" href="' + escapeHtml(item.href) + '" data-nofida-route="' +
+        escapeHtml(item.href) + '">' + escapeHtml(item.label) + "</a>";
+    }).join("");
   }
 
   function renderPage(pageId) {
-    var nav = getNav();
     var page = PAGES[pageId];
-    var currentHash = getPageHash(pageId);
-    var routeMeta = nav ? nav.getRouteMeta(currentHash) : null;
-    if (!page || !nav || !routeMeta) return;
-
-    nav.renderDashboardShell({
-      owner: "pages",
-      route: currentHash,
-      activeId: routeMeta.menuId,
-      childActiveId: routeMeta.childMenuId,
-      breadcrumb: routeMeta.breadcrumb,
-      title: page.title,
-      subtitle: page.intro,
-      contentHtml: buildShellContent()
-    });
-
-    state.overlayEl = document.getElementById("nfp-shell-root");
-    if (!state.overlayEl) return;
-
+    if (!page || !state.overlayEl) return;
     state.currentPageId = pageId;
-    state.overlayEl.querySelector("#nfp-actions-wrap").innerHTML = renderActions(page.actions || []);
 
-    var noticeEl = state.overlayEl.querySelector("#nfp-notice");
+    var overlay = state.overlayEl;
+    overlay.querySelector("#nfp-nav").innerHTML = renderNav(pageId);
+    overlay.querySelector("#nfp-breadcrumb").textContent = getBreadcrumb(pageId);
+    overlay.querySelector("#nfp-badge").textContent = page.badge || "Internal page";
+    overlay.querySelector("#nfp-title").textContent = page.title;
+    overlay.querySelector("#nfp-intro").textContent = page.intro;
+    overlay.querySelector("#nfp-actions-wrap").innerHTML = renderActions(page.actions || []);
+    var backInfo = getBackInfo(pageId);
+    overlay.querySelector("#nfp-back").textContent = backInfo.label;
+
+    var noticeEl = overlay.querySelector("#nfp-notice");
     if (page.notice) {
       noticeEl.textContent = page.notice;
       noticeEl.hidden = false;
@@ -692,16 +714,74 @@
       noticeEl.textContent = "";
     }
 
-    state.overlayEl.querySelector("#nfp-grid").innerHTML = renderSections(page.sections || []);
-    state.overlayEl.querySelector("#nfp-footer-note").textContent =
+    overlay.querySelector("#nfp-grid").innerHTML = renderSections(page.sections || []);
+    overlay.querySelector("#nfp-footer-note").textContent =
       pageId === "terms" || pageId === "privacy"
-        ? "Черновая страница для юридического согласования."
+        ? "Placeholder only. Replace after legal review."
         : "Страница NOFIDA внутри рабочего пространства.";
+    overlay.scrollTop = 0;
+  }
+
+  function buildOverlay() {
+    if (state.overlayEl) return state.overlayEl;
+
+    var overlay = document.createElement("div");
+    overlay.id = OVERLAY_ID;
+    overlay.setAttribute("hidden", "");
+    overlay.innerHTML = [
+      '<div class="nfp-shell">',
+      '  <div class="nfp-topbar">',
+      '    <div class="nfp-topcopy">',
+      '      <p class="nfp-breadcrumb" id="nfp-breadcrumb">Панель / Справка</p>',
+      '      <span class="nfp-surface-pill">Панель</span>',
+      "    </div>",
+      '    <button class="nfp-back" id="nfp-back" type="button">Назад к проектам</button>',
+      "  </div>",
+      '  <div class="nfp-layout">',
+      '    <aside class="nfp-nav-panel">',
+      '      <p class="nfp-nav-kicker">Ресурсы</p>',
+      '      <div class="nfp-nav" id="nfp-nav"></div>',
+      "    </aside>",
+      '    <main class="nfp-main" aria-live="polite">',
+      '      <section class="nfp-hero">',
+      '        <div class="nfp-hero-head">',
+      '          <span class="nfp-badge" id="nfp-badge">Internal page</span>',
+      '          <h1 id="nfp-title">NOFIDA</h1>',
+      "        </div>",
+      '        <p class="nfp-intro" id="nfp-intro"></p>',
+      '        <div class="nfp-actions-wrap" id="nfp-actions-wrap"></div>',
+      '        <div class="nfp-notice" id="nfp-notice" hidden></div>',
+      "      </section>",
+      '      <section class="nfp-grid" id="nfp-grid"></section>',
+      '      <p class="nfp-footer-note" id="nfp-footer-note"></p>',
+      "    </main>",
+      "  </div>",
+      "</div>"
+    ].join("");
+
+    document.body.appendChild(overlay);
+    overlay.querySelector("#nfp-back").addEventListener("click", closeToPrevious);
+
+    state.overlayEl = overlay;
+    return overlay;
+  }
+
+  function showPage(pageId) {
+    var overlay = buildOverlay();
+    renderPage(pageId);
+    overlay.removeAttribute("hidden");
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(function () {
+      if (state.overlayEl && !state.overlayEl.hasAttribute("hidden")) {
+        document.body.style.overflow = "hidden";
+      }
+    });
   }
 
   function hidePages() {
-    state.currentPageId = "";
-    state.overlayEl = null;
+    if (!state.overlayEl) return;
+    state.overlayEl.setAttribute("hidden", "");
+    document.body.style.overflow = "";
   }
 
   function closeToPrevious() {
@@ -721,7 +801,7 @@
     var pageId = getPageIdFromHash(hash);
 
     if (pageId) {
-      renderPage(pageId);
+      showPage(pageId);
       return;
     }
 
@@ -731,12 +811,13 @@
 
   function onKeyDown(ev) {
     if (ev.key !== "Escape") return;
-    if (!state.currentPageId) return;
+    if (!state.overlayEl || state.overlayEl.hasAttribute("hidden")) return;
     closeToPrevious();
   }
 
   function init() {
     rememberAppHash(window.location.hash || "#/dashboard");
+    buildOverlay();
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("keydown", onKeyDown);
     onHashChange();

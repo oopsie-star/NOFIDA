@@ -43,7 +43,7 @@
       console.info("[Nofida AI] stub.generateLayers", spec);
       return Promise.resolve({
         ok: true,
-        message: 'Локальный режим: подготовим рекомендации по запросу "' + (spec.prompt || "") + '"',
+        message: 'stub: would generate layers for "' + (spec.prompt || "") + '"',
       });
     },
 

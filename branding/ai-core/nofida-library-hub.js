@@ -562,7 +562,6 @@
     var e = S.installed[item.id];
     if (!e) return;
     resolveTeamId().then(function (tid) {
-      var nav = getNav();
       var params = [];
       if (tid) params.push("team-id=" + encodeURIComponent(tid));
       params.push("file-id=" + encodeURIComponent(e.fileId));
@@ -571,14 +570,7 @@
       } else if (item.open_default_page) {
         params.push("nhb-page=" + encodeURIComponent(item.open_default_page));
       }
-      if (nav && typeof nav.goToNofidaRoute === "function") {
-        nav.goToNofidaRoute("#/workspace?" + params.join("&"), {
-          source: "hub-open-file",
-          rememberOrigin: false
-        });
-        return;
-      }
-      window.location.hash = "/workspace?" + params.join("&");
+      window.location.href = "/#/workspace?" + params.join("&");
     });
   }
 
@@ -893,135 +885,199 @@
    * HUB OVERLAY  (full-screen, z-index > everything)
    * ========================================================== */
   var HUB_CSS = [
-    ".nhb-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:14px;flex-wrap:wrap}",
-    ".nhb-hdr-left{display:grid;gap:6px}",
-    ".nhb-dot{width:10px;height:10px;border-radius:50%;background:var(--nf-brand)}",
-    ".nhb-h1{margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--nf-text)}",
-    ".nhb-sub{color:var(--nf-text-muted);font-size:13px;line-height:1.55;max-width:760px}",
-    ".nhb-ctrl{margin-bottom:18px;padding:16px;border-radius:16px;border:1px solid var(--nf-border);background:var(--nf-surface);box-shadow:var(--nf-shadow-card)}",
-    ".nhb-search{width:100%;height:38px;padding:0 12px;border:1px solid var(--nf-border);border-radius:11px;background:#fff;color:var(--nf-text);font-size:13px;outline:none;box-sizing:border-box;font-family:inherit;box-shadow:var(--nf-shadow-sm)}",
-    ".nhb-search:focus{border-color:rgba(15,118,110,.38);box-shadow:0 0 0 3px rgba(15,118,110,.1)}",
+    "#nhb-overlay{position:fixed;inset:0;z-index:2147483500;",
+      "background:" + BRAND.bg + ";overflow-y:auto;",
+      "font-family:" + BRAND.font + ";color:" + BRAND.text + "}",
+    "#nhb-overlay[hidden]{display:none!important}",
+    ".nhb-shell{max-width:1280px;margin:0 auto;padding:20px 24px 72px}",
+    ".nhb-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}",
+    ".nhb-topcopy{display:flex;flex-direction:column;gap:6px}",
+    ".nhb-breadcrumb{margin:0;color:#8fa4c2;font-size:12px;font-weight:700;line-height:1.4}",
+    ".nhb-surface-pill{display:inline-flex;align-items:center;width:fit-content;min-height:24px;padding:0 9px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
+    ".nhb-back{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}",
+    ".nhb-back:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
+    ".nhb-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}",
+    ".nhb-nav-panel{position:sticky;top:14px;border-radius:18px;padding:14px;border:1px solid rgba(90,112,140,.22);background:rgba(11,18,32,.88);box-shadow:0 16px 36px rgba(0,0,0,.26)}",
+    ".nhb-nav-kicker{margin:0 0 8px;color:#93a8c7;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}",
+    ".nhb-nav-list{display:flex;flex-direction:column;gap:8px}",
+    ".nhb-nav-link{display:block;padding:9px 10px;border-radius:12px;border:1px solid transparent;color:#a9b9cf;text-decoration:none;font-size:13px;line-height:1.35}",
+    ".nhb-nav-link:hover,.nhb-nav-link.active{background:#12203a;border-color:rgba(96,165,250,.28);color:#fff}",
+    ".nhb-inner{min-width:0}",
+    /* header */
+    ".nhb-hdr{display:flex;align-items:center;justify-content:space-between;",
+      "margin-bottom:18px;gap:12px;flex-wrap:wrap}",
+    ".nhb-hdr-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
+    ".nhb-dot{width:10px;height:10px;border-radius:50%;background:" + BRAND.accent + "}",
+    ".nhb-h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em}",
+    ".nhb-sub{color:" + BRAND.muted + ";font-size:12px;line-height:1.5;max-width:760px}",
+    /* controls */
+    ".nhb-ctrl{margin-bottom:20px}",
+    ".nhb-search{width:100%;padding:10px 16px;",
+      "border:1px solid " + BRAND.border + ";border-radius:12px;",
+      "background:" + BRAND.surface + ";color:" + BRAND.text + ";",
+      "font-size:14px;outline:none;box-sizing:border-box;font-family:inherit}",
+    ".nhb-search:focus{border-color:" + BRAND.primary + "}",
     ".nhb-filters{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}",
-    ".nhb-flt{border:1px solid var(--nf-border);border-radius:999px;padding:5px 14px;background:#fff;color:var(--nf-text-muted);font-size:12px;font-weight:700;cursor:pointer;transition:all .14s}",
-    ".nhb-flt:hover{border-color:rgba(15,118,110,.24);color:var(--nf-text)}",
-    ".nhb-flt.on{border-color:rgba(15,118,110,.22);color:var(--nf-brand-strong);background:var(--nf-brand-soft)}",
-    ".nhb-status{font-size:12px;color:var(--nf-text-muted);margin-bottom:16px;min-height:18px}",
-    ".nhb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}",
-    ".nhb-empty{grid-column:1/-1;padding:36px;text-align:center;color:var(--nf-text-muted);border:1px dashed var(--nf-border-strong);border-radius:16px;background:var(--nf-surface-soft)}",
-    ".nhb-card{background:var(--nf-surface);border:1px solid var(--nf-border);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--nf-shadow-card);transition:border-color .14s,transform .14s,box-shadow .14s}",
-    ".nhb-card:hover{border-color:rgba(15,118,110,.22);transform:translateY(-2px);box-shadow:var(--nf-shadow-md)}",
-    ".nhb-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}",
-    ".nhb-type{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--nf-brand)}",
-    ".nhb-card-title{margin:0;font-size:15px;font-weight:750;line-height:1.3;color:var(--nf-text)}",
-    ".nhb-meta{display:flex;flex-direction:column;gap:4px}",
-    ".nhb-meta span,.nhb-location{font-size:12px;color:var(--nf-text-muted);line-height:1.45}",
-    ".nhb-location strong{color:var(--nf-brand-strong)}",
-    ".nhb-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;letter-spacing:.06em;text-transform:uppercase}",
-    ".nhb-ok{background:var(--nf-green-soft);color:var(--nf-green)}",
-    ".nhb-warn{background:var(--nf-amber-soft);color:var(--nf-amber)}",
-    ".nhb-dim{background:var(--nf-surface-muted);color:var(--nf-text-dim)}",
-    ".nhb-btn{border:1px solid transparent;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;transition:all .14s;width:100%;margin-top:auto;font-family:inherit}",
-    ".nhb-btn-add{background:var(--nf-brand-strong);color:#fff;box-shadow:0 8px 18px rgba(6,95,70,.18)}",
-    ".nhb-btn-add:hover{background:#064e3b}",
-    ".nhb-btn-open{background:var(--nf-green-soft);color:var(--nf-green);border-color:rgba(5,150,105,.18)}",
-    ".nhb-btn-open:hover{background:rgba(5,150,105,.16)}",
-    ".nhb-btn-err{background:var(--nf-red-soft);color:var(--nf-red);border-color:rgba(220,38,38,.16)}",
-    ".nhb-btn-err:hover{background:rgba(220,38,38,.16)}",
-    ".nhb-btn-dim{background:var(--nf-surface-muted);color:var(--nf-text-dim);cursor:not-allowed;opacity:.85}",
+    ".nhb-flt{border:1px solid " + BRAND.border + ";border-radius:999px;",
+      "padding:5px 14px;background:0;color:" + BRAND.muted + ";",
+      "font-size:12px;font-weight:600;cursor:pointer;transition:all .14s}",
+    ".nhb-flt:hover{border-color:" + BRAND.primary + ";color:" + BRAND.text + "}",
+    ".nhb-flt.on{border-color:" + BRAND.accent + ";color:" + BRAND.accent + ";",
+      "background:rgba(191,255,0,.08)}",
+    /* status bar */
+    ".nhb-status{font-size:12px;color:" + BRAND.muted + ";margin-bottom:16px;min-height:18px}",
+    /* grid */
+    ".nhb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}",
+    ".nhb-empty{grid-column:1/-1;padding:48px;text-align:center;color:" + BRAND.muted + "}",
+    /* card */
+    ".nhb-card{background:" + BRAND.surface + ";border:1px solid " + BRAND.border + ";",
+      "border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px;",
+      "transition:border-color .14s,transform .14s}",
+    ".nhb-card:hover{border-color:rgba(37,99,235,.55);transform:translateY(-2px)}",
+    ".nhb-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px}",
+    ".nhb-type{font-size:10px;font-weight:700;letter-spacing:.1em;",
+      "text-transform:uppercase;color:" + BRAND.accent + "}",
+    ".nhb-card-title{margin:0;font-size:15px;font-weight:700;line-height:1.3}",
+    ".nhb-meta{display:flex;flex-direction:column;gap:3px}",
+    ".nhb-meta span{font-size:11px;color:" + BRAND.muted + "}",
+    ".nhb-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;",
+      "letter-spacing:.06em;text-transform:uppercase}",
+    ".nhb-ok{background:rgba(34,197,94,.14);color:" + BRAND.success + "}",
+    ".nhb-warn{background:rgba(245,158,11,.12);color:" + BRAND.warning + "}",
+    ".nhb-dim{background:rgba(148,163,184,.1);color:" + BRAND.muted + "}",
+    /* buttons */
+    ".nhb-btn{border:0;border-radius:10px;padding:9px 14px;font-size:13px;",
+      "font-weight:700;cursor:pointer;transition:all .14s;width:100%;",
+      "margin-top:auto;font-family:inherit}",
+    ".nhb-btn-add{background:" + BRAND.primary + ";color:#fff}",
+    ".nhb-btn-add:hover{background:" + BRAND.primaryHov + "}",
+    ".nhb-btn-open{background:rgba(34,197,94,.14);color:" + BRAND.success + ";",
+      "border:1px solid rgba(34,197,94,.28)}",
+    ".nhb-btn-open:hover{background:rgba(34,197,94,.24)}",
+    ".nhb-btn-err{background:rgba(244,63,94,.14);color:" + BRAND.error + ";",
+      "border:1px solid rgba(244,63,94,.28)}",
+    ".nhb-btn-err:hover{background:rgba(244,63,94,.24)}",
+    ".nhb-btn-dim{background:" + BRAND.surfaceHard + ";color:" + BRAND.muted + ";",
+      "cursor:not-allowed;opacity:.75}",
     ".nhb-spin{animation:nhb-pulse 1.1s ease-in-out infinite}",
     "@keyframes nhb-pulse{0%,100%{opacity:.65}50%{opacity:1}}",
+    /* location hint shown after install */
+    ".nhb-location{font-size:11px;color:" + BRAND.muted + ";padding:4px 0}",
+    ".nhb-location strong{color:" + BRAND.accent + "}",
+    /* dual-button card actions row */
     ".nhb-card-actions{display:flex;gap:6px;align-items:center;margin-top:auto}",
     ".nhb-card-actions .nhb-btn{flex:1;margin-top:0}",
-    ".nhb-btn-icon{border:1px solid var(--nf-border);border-radius:10px;padding:9px 11px;font-size:15px;cursor:pointer;background:#fff;color:var(--nf-text-soft);flex-shrink:0;transition:all .14s;line-height:1;box-shadow:var(--nf-shadow-sm)}",
-    ".nhb-btn-icon:hover{background:#f8fafc;color:var(--nf-text)}",
-    ".nhb-btn-reimport-primary{background:var(--nf-amber-soft);color:var(--nf-amber);border:1px solid rgba(217,119,6,.18)}",
-    ".nhb-btn-reimport-primary:hover{background:rgba(217,119,6,.16)}",
+    ".nhb-btn-icon{border:0;border-radius:8px;padding:9px 11px;font-size:15px;",
+      "cursor:pointer;background:rgba(148,163,184,.1);color:" + BRAND.muted + ";",
+      "flex-shrink:0;transition:all .14s;line-height:1}",
+    ".nhb-btn-icon:hover{background:rgba(148,163,184,.2);color:" + BRAND.text + "}",
+    ".nhb-btn-reimport-primary{background:rgba(245,158,11,.14);color:" + BRAND.warning + ";",
+      "border:1px solid rgba(245,158,11,.28)}",
+    ".nhb-btn-reimport-primary:hover{background:rgba(245,158,11,.24)}",
     ".nhb-btn-sm{padding:7px 10px;font-size:11px;flex-shrink:0;flex:0 0 auto}",
-    ".nhb-open-proj{background:0;border:0;color:var(--nf-brand);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:8px;font-family:inherit;font-weight:700}",
-    ".nhb-open-proj:hover{color:var(--nf-brand-strong)}",
-    "@media(max-width:1080px){.nhb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}",
-    "@media(max-width:720px){.nhb-grid{grid-template-columns:1fr}.nhb-hdr{flex-direction:column;align-items:stretch}}"
+    /* open-hub-project link */
+    ".nhb-open-proj{background:0;border:0;color:" + BRAND.muted + ";font-size:12px;",
+      "cursor:pointer;padding:4px 8px;border-radius:8px;text-decoration:underline;font-family:inherit}",
+    ".nhb-open-proj:hover{color:" + BRAND.text + "}",
+    "@media(max-width:1080px){.nhb-layout{grid-template-columns:1fr}.nhb-nav-panel{position:static}}",
+    "@media(max-width:640px){.nhb-shell{padding:16px 12px 44px}.nhb-topbar{flex-direction:column;align-items:stretch}.nhb-back{width:100%}.nhb-grid{grid-template-columns:1fr}}"
   ].join("");
 
-  function ensureHubStyles() {
+  function buildOverlay() {
+    if (S.overlayEl) return S.overlayEl;
+
     var style = document.createElement("style");
-    if (document.getElementById("nhb-styles")) return;
-    style.id = "nhb-styles";
+    style.id  = "nhb-styles";
     style.textContent = HUB_CSS;
     document.head.appendChild(style);
-  }
 
-  function buildShellContent() {
     var filterHtml = CATEGORIES.map(function (c) {
       return '<button class="nhb-flt' + (c.id === "all" ? " on" : "") +
         '" data-f="' + e(c.id) + '">' + e(c.label) + '</button>';
     }).join("");
 
-    return [
-      '<div id="nhb-shell-root">',
-      '  <div class="nhb-hdr">',
-      '    <div class="nhb-hdr-left">',
-      '      <span class="nhb-dot"></span>',
-      '      <h2 class="nhb-h1">Библиотеки</h2>',
-      '      <span class="nhb-sub">Компоненты, UI kits и шаблоны для рабочих пространств NOFIDA. Добавляйте ресурсы в команду и открывайте их в редакторе только по явной команде.</span>',
+    var div = document.createElement("div");
+    div.id = "nhb-overlay";
+    div.setAttribute("hidden", "");
+    div.innerHTML = [
+      '<div class="nhb-shell">',
+      '  <div class="nhb-topbar">',
+      '    <div class="nhb-topcopy">',
+      '      <p class="nhb-breadcrumb" id="nhb-breadcrumb">Панель / Ресурсы / Библиотеки</p>',
+      '      <span class="nhb-surface-pill">Панель</span>',
       '    </div>',
-      '    <div style="display:flex;align-items:center;gap:8px">',
-      '      <button class="nhb-open-proj" id="nhb-open-proj" type="button" title="Открыть проект Библиотеки NOFIDA в вашем дашборде">Открыть мои добавленные</button>',
-      '    </div>',
+      '    <button class="nhb-back" id="nhb-back" type="button">Назад к проектам</button>',
       '  </div>',
-      '  <div class="nhb-ctrl">',
-      '    <input class="nhb-search" id="nhb-search" type="search" placeholder="Поиск библиотек, компонентов и шаблонов…" autocomplete="off" />',
-      '    <div class="nhb-filters" id="nhb-filters">' + filterHtml + '</div>',
+      '  <div class="nhb-layout">',
+      '    <aside class="nhb-nav-panel">',
+      '      <p class="nhb-nav-kicker">Ресурсы</p>',
+      '      <div class="nhb-nav-list" id="nhb-nav"></div>',
+      '    </aside>',
+      '    <main class="nhb-inner">',
+      '      <div class="nhb-hdr">',
+      '        <div class="nhb-hdr-left">',
+      '          <span class="nhb-dot"></span>',
+      '          <h1 class="nhb-h1">Библиотеки NOFIDA</h1>',
+      '          <span class="nhb-sub">Глобальный каталог ресурсов для панели NOFIDA. Открытие файла в редакторе происходит только по явной команде.</span>',
+      '        </div>',
+      '        <div style="display:flex;align-items:center;gap:8px">',
+      '          <button class="nhb-open-proj" id="nhb-open-proj" type="button"',
+      '            title="Открыть проект Библиотеки NOFIDA в вашем дашборде">',
+      '            Открыть мои добавленные</button>',
+      '        </div>',
+      '      </div>',
+      '      <div class="nhb-ctrl">',
+      '        <input class="nhb-search" id="nhb-search" type="search"',
+      '          placeholder="Поиск библиотек, иконок, шаблонов…" autocomplete="off" />',
+      '        <div class="nhb-filters" id="nhb-filters">' + filterHtml + '</div>',
+      '      </div>',
+      '      <div class="nhb-status" id="nhb-status">Загрузка каталога…</div>',
+      '      <div class="nhb-grid"  id="nhb-grid"></div>',
+      '    </main>',
       '  </div>',
-      '  <div class="nhb-status" id="nhb-status">Загрузка каталога…</div>',
-      '  <div class="nhb-grid" id="nhb-grid"></div>',
-      "</div>"
+      '</div>'
     ].join("");
-  }
 
-  function bindShellEvents() {
-    var root = document.getElementById("nhb-shell-root");
-    if (!root) return null;
-    S.overlayEl = root;
-    if (root.getAttribute("data-nhb-bound") === "true") return root;
-    root.setAttribute("data-nhb-bound", "true");
+    document.body.appendChild(div);
+    S.overlayEl = div;
 
-    root.querySelector("#nhb-open-proj").addEventListener("click", function () {
+    /* ── wire overlay-internal events ── */
+    div.querySelector("#nhb-back").addEventListener("click", hideHub);
+
+    div.querySelector("#nhb-open-proj").addEventListener("click", function () {
       hideHub();
+      /* Navigate to user's hub project on the dashboard */
       resolveTeamId().then(function (tid) {
-        var nav = getNav();
-        var projId = S.hubProjectId;
         if (!tid) return;
-        if (projId && nav && typeof nav.goToNofidaRoute === "function") {
-          nav.goToNofidaRoute("#/dashboard/team/" + tid + "/projects/" + projId);
-          return;
+        /* If we already know the hub project id, navigate directly */
+        var projId = S.hubProjectId;
+        if (projId) {
+          window.location.href = "/#/dashboard/team/" + tid + "/projects/" + projId;
+        } else {
+          /* Fall back to team projects page */
+          window.location.href = "/#/dashboard/team/" + tid + "/projects";
         }
-        if (nav && typeof nav.goToNofidaRoute === "function") {
-          nav.goToNofidaRoute("#/dashboard/team/" + tid + "/projects");
-          return;
-        }
-        window.location.hash = "/dashboard/team/" + tid + "/projects";
       });
     });
 
-    root.querySelector("#nhb-search").addEventListener("input", function (ev) {
+    div.querySelector("#nhb-search").addEventListener("input", function (ev) {
       S.searchQuery = ev.target.value;
       refreshGrid();
       updateStatusBar();
     });
 
-    root.querySelector("#nhb-filters").addEventListener("click", function (ev) {
+    div.querySelector("#nhb-filters").addEventListener("click", function (ev) {
       var btn = ev.target.closest(".nhb-flt");
       if (!btn) return;
       S.activeFilter = btn.getAttribute("data-f") || "all";
-      root.querySelectorAll(".nhb-flt").forEach(function (b) {
+      div.querySelectorAll(".nhb-flt").forEach(function (b) {
         b.classList.toggle("on", b.getAttribute("data-f") === S.activeFilter);
       });
       refreshGrid();
       updateStatusBar();
     });
 
-    root.querySelector("#nhb-grid").addEventListener("click", function (ev) {
+    div.querySelector("#nhb-grid").addEventListener("click", function (ev) {
       var btn = ev.target.closest(".nhb-btn");
       if (!btn || btn.disabled) return;
       var act    = btn.getAttribute("data-act");
@@ -1051,23 +1107,22 @@
         });
       }
     });
-    return root;
+
+    div.querySelector("#nhb-nav").addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest(".nhb-nav-link") : null;
+      if (!link || link.getAttribute("data-act") !== "fonts") return;
+      ev.preventDefault();
+      openNativeFontsRoute();
+    });
+
+    return div;
   }
 
   function showHub() {
-    var nav = getNav();
-    ensureHubStyles();
-    if (!nav) return;
-    nav.renderDashboardShell({
-      owner: "hub",
-      route: HUB_HASH,
-      activeId: "libraries",
-      breadcrumb: ["Панель", "Ресурсы", "Библиотеки"],
-      title: "Библиотеки",
-      subtitle: "Компоненты, UI kits и шаблоны для рабочих пространств NOFIDA.",
-      contentHtml: buildShellContent()
-    });
-    bindShellEvents();
+    var overlay = buildOverlay();
+    updateHubChrome();
+    overlay.removeAttribute("hidden");
+    document.body.style.overflow = "hidden";
     /* Resolve team ID async — needed when user lands on /#/dashboard without UUID */
     resolveTeamId().then(function (tid) {
       if (tid && !S.teamId) S.teamId = tid;
@@ -1076,7 +1131,10 @@
   }
 
   function hideHub() {
-    S.overlayEl = null;
+    if (S.overlayEl) {
+      S.overlayEl.setAttribute("hidden", "");
+    }
+    document.body.style.overflow = "";
     if ((window.location.hash || "") === HUB_HASH) {
       var nav = getNav();
       if (nav) {
@@ -1098,17 +1156,8 @@
 
   function openNativeFontsRoute() {
     return resolveTeamId().then(function (tid) {
-      var nav = getNav();
       if (!tid) {
-        if (nav && typeof nav.goToNofidaRoute === "function") {
-          nav.goToNofidaRoute("#/dashboard");
-          return;
-        }
         window.location.hash = "/dashboard";
-        return;
-      }
-      if (nav && typeof nav.goToNofidaRoute === "function") {
-        nav.goToNofidaRoute("#/dashboard/fonts?team-id=" + tid, { source: "hub-native-fonts" });
         return;
       }
       window.location.hash = "/dashboard/fonts?team-id=" + tid;
@@ -1226,7 +1275,103 @@
    * Uses MutationObserver + multiple selector fallbacks.
    * ========================================================== */
   function tryInjectSidebar() {
+    if (S.sidebarInjected) return;
+    if (!isDashboard()) return;
+    var nav = getNav();
+    if (nav && typeof nav.refreshDashboardGroup === "function") {
+      nav.refreshDashboardGroup();
+      S.sidebarInjected = true;
+      return;
+    }
+
+    if (document.getElementById("nhb-sidebar-btn") && document.getElementById("nhb-sidebar-resources")) {
+      S.sidebarInjected = true;
+      return;
+    }
+
+    var host = findDashboardSidebarNav();
+    if (!host) return;
+
     S.sidebarInjected = true;
+
+    var btn = document.createElement("a");
+    btn.id = "nhb-sidebar-btn";
+    btn.href = "javascript:void(0)"; // eslint-disable-line no-script-url
+    btn.setAttribute("role", "menuitem");
+    btn.setAttribute("aria-label", "Библиотеки NOFIDA");
+    btn.textContent = "📚 Библиотеки NOFIDA";
+    btn.style.cssText =
+      "display:flex;align-items:center;padding:8px 12px;margin:4px 6px;" +
+      "border-radius:10px;font-size:13px;font-weight:700;" +
+      "color:" + BRAND.accent + ";text-decoration:none;cursor:pointer;" +
+      "background:rgba(191,255,0,.07);border:1px solid rgba(191,255,0,.18);" +
+      "transition:all .15s;font-family:" + BRAND.font + ";box-sizing:border-box";
+    btn.addEventListener("mouseenter", function () {
+      btn.style.background = "rgba(191,255,0,.14)";
+      btn.style.borderColor = "rgba(191,255,0,.38)";
+    });
+    btn.addEventListener("mouseleave", function () {
+      btn.style.background = "rgba(191,255,0,.07)";
+      btn.style.borderColor = "rgba(191,255,0,.18)";
+    });
+    btn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      state_teamId_refresh();
+      if (nav && typeof nav.goToNofidaRoute === "function") {
+        nav.goToNofidaRoute(HUB_HASH, { source: "hub-sidebar-fallback" });
+        return;
+      }
+      window.location.hash = "/nofida/libraries";
+    });
+    host.appendChild(btn);
+
+    var resourceWrap = document.createElement("div");
+    resourceWrap.id = "nhb-sidebar-resources";
+    resourceWrap.style.cssText =
+      "display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 0 6px;" +
+      "box-sizing:border-box";
+
+    [
+      { label: "Fonts", hash: "/nofida/fonts", action: "fonts" },
+      { label: "Media", hash: "/nofida/media" },
+      { label: "Figma", hash: "/nofida/import/figma" }
+    ].forEach(function (item) {
+      var link = document.createElement("a");
+      link.href = "javascript:void(0)"; // eslint-disable-line no-script-url
+      link.textContent = item.label;
+      link.setAttribute("role", "menuitem");
+      link.style.cssText =
+        "display:inline-flex;align-items:center;justify-content:center;" +
+        "min-height:28px;padding:0 10px;border-radius:999px;" +
+        "font-size:11px;font-weight:700;color:#bfdbfe;text-decoration:none;" +
+        "background:rgba(37,99,235,.11);border:1px solid rgba(37,99,235,.16);" +
+        "font-family:" + BRAND.font + ";box-sizing:border-box";
+      link.addEventListener("mouseenter", function () {
+        link.style.background = "rgba(37,99,235,.2)";
+        link.style.borderColor = "rgba(37,99,235,.34)";
+        link.style.color = BRAND.text;
+      });
+      link.addEventListener("mouseleave", function () {
+        link.style.background = "rgba(37,99,235,.11)";
+        link.style.borderColor = "rgba(37,99,235,.16)";
+        link.style.color = "#bfdbfe";
+      });
+      link.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        if (item.action === "fonts") {
+          openNativeFontsRoute();
+          return;
+        }
+        if (nav && typeof nav.goToNofidaRoute === "function") {
+          nav.goToNofidaRoute(item.hash, { source: "hub-sidebar-fallback" });
+          return;
+        }
+        window.location.hash = item.hash;
+      });
+      resourceWrap.appendChild(link);
+    });
+
+    host.appendChild(resourceWrap);
   }
 
   /* ============================================================
@@ -1235,19 +1380,16 @@
    * templates" section with internal-catalog openers.
    * ========================================================== */
   function tryPatchBottomGallery() {
+    if (S.galleryPatched) return;
     if (!isDashboard()) return;
 
-    /* Step 1: replace gallery links with an internal same-tab opener.
-       In some builds the original hub card is still external; in others it has
-       already been rewritten to /#/nofida/libraries but keeps target=_blank. */
-    var extLinks = Array.prototype.filter.call(document.querySelectorAll("a[href]"), function (link) {
-      var href = String(link.getAttribute("href") || "");
-      var text = String(link.textContent || "").trim();
-      var isGalleryCopy = /Библиотеки и шаблоны|Libraries.*templates/i.test(text);
-      var isExternalHub = /penpot\.app\/(?:penpothub|hub|libraries-templates)/i.test(href);
-      var isInternalHub = /(?:^|\/)?#\/nofida\/libraries(?:$|[/?#])/i.test(href);
-      return isGalleryCopy && (isExternalHub || isInternalHub);
-    });
+    /* Step 1: replace any external penpot.app links in the entire dashboard */
+    var extLinks = document.querySelectorAll(
+      "a[href*='penpot.app/penpothub'],a[href*='penpot.app/hub'],a[href*='penpot.app/libraries-templates']"
+    );
+    if (extLinks.length === 0) return;   /* section not rendered yet */
+
+    S.galleryPatched = true;
     extLinks.forEach(function (link) {
       var clone       = document.createElement("button");
       clone.type      = "button";
@@ -1271,10 +1413,6 @@
       });
       if (link.parentNode) link.parentNode.replaceChild(clone, link);
     });
-
-    if (S.galleryPatched) return;
-    if (extLinks.length === 0) return;   /* section not rendered yet */
-    S.galleryPatched = true;
 
     /* Step 2: inject a prominent "Библиотеки NOFIDA" card into the gallery
        grid / list that precedes or contains the section we just patched.    */
@@ -1500,7 +1638,7 @@
     /* Eagerly resolve team ID (async, covers new users without UUID in URL) */
     resolveTeamId();
 
-    ensureHubStyles();
+    buildOverlay();          /* pre-build hidden overlay */
     startObserver();         /* watch dashboard DOM for sidebar/gallery */
 
     window.addEventListener("hashchange", onHashChange);
