@@ -587,20 +587,30 @@ try {
     return !/(#\/nofida|#\/dashboard|#\/settings|\/#\/nofida|\/#\/dashboard|\/#\/settings)/i.test(href);
   });
 
-  await openHash(page, "#/settings/options");
+  // Full navigation required: hash-only change from NOFIDA help pages leaves Penpot's router
+  // in an unknown-route state; page.goto forces a clean SPA bootstrap and settings route.
+  await page.goto(`${BASE}/#/settings/options`, { waitUntil: "commit", timeout: 30000 });
   await waitForAccount(page);
   const accountBaseCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
   const accountShellCount = await page.locator("#nofida-shell").count();
 
-  await openHash(page, AI_SETTINGS_ROUTE);
-  await waitForAccountAI(page);
-  const accountAiCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
-  results.noShellInAccount = accountShellCount === 0 && await page.locator("#nofida-shell").count() === 0;
-  results.accountSidebarStable = accountAiCount >= accountBaseCount;
-  results.aiInAccount = /#\/settings\/options\?nofida=ai&tab=api/.test(page.url()) &&
-    await page.locator("#nofida-ai-account-page-host").count() === 1;
+  try {
+    await openHash(page, AI_SETTINGS_ROUTE);
+    await waitForAccountAI(page);
+    const accountAiCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
+    results.noShellInAccount = accountShellCount === 0 && await page.locator("#nofida-shell").count() === 0;
+    results.accountSidebarStable = accountAiCount >= accountBaseCount;
+    results.aiInAccount = /#\/settings\/options\?nofida=ai&tab=api/.test(page.url()) &&
+      await page.locator("#nofida-ai-account-page-host").count() === 1;
+  } catch (aiAccountErr) {
+    notes.push(`aiAccountCheck: ${aiAccountErr && aiAccountErr.message ? aiAccountErr.message : String(aiAccountErr)}`);
+  }
 
-  results.settingsStable60 = await settingsStabilityRun(page);
+  try {
+    results.settingsStable60 = await settingsStabilityRun(page);
+  } catch (settingsStabilityErr) {
+    notes.push(`settingsStabilityRun: ${settingsStabilityErr && settingsStabilityErr.message ? settingsStabilityErr.message : String(settingsStabilityErr)}`);
+  }
 
   // PART 2: 90-second stability run for plain #/settings/options (isolated — must not cascade)
   let accountPlainStability = {
