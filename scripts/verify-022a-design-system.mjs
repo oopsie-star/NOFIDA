@@ -204,6 +204,9 @@ async function collectSnapshot(page) {
       return count + Array.from(document.querySelectorAll(selector)).filter(visible).length;
     }, 0);
 
+    const chipName = document.querySelector(".nf-account-chip-topbar .nf-account-copy strong")
+      || document.querySelector(".nf-account-chip .nf-account-copy strong")
+      || document.querySelector(".nofida-footer-name");
     return {
       routeKind: shellRouteKind,
       shellCount: document.querySelectorAll("#nofida-shell").length,
@@ -214,6 +217,10 @@ async function collectSnapshot(page) {
       topbarVisible: visible(topbar),
       contentBg: content ? window.getComputedStyle(content).backgroundColor : "",
       pageBg: shell ? window.getComputedStyle(shell).backgroundColor : "",
+      hasDashboardLayout: !!document.getElementById("nf-dashboard-layout-wrapper"),
+      hasProjectGrid: !!document.getElementById("nf-project-grid"),
+      nfProjectCards: document.querySelectorAll("#nf-project-grid .nf-project-card").length,
+      accountChipText: chipName ? text(chipName) : "",
       projectRows: document.querySelectorAll(".main_ui_dashboard_projects__dashboard-project-row").length,
       projectCards: document.querySelectorAll(".main_ui_dashboard_grid__grid-item > div[role='button']").length,
       contextPanels: document.querySelectorAll("#nf-dashboard-context-panel .nf-panel").length,
@@ -235,9 +242,14 @@ async function collectSnapshot(page) {
 
 async function waitForDashboard(page) {
   await page.waitForFunction(() => {
-    return !!document.getElementById("nofida-shell")
-      && document.getElementById("nofida-shell")?.getAttribute("data-route-kind") === "native-dashboard"
-      && !!document.querySelector(".main_ui_dashboard__dashboard-content");
+    const shell = document.getElementById("nofida-shell");
+    if (!shell) return false;
+    const kind = shell.getAttribute("data-route-kind");
+    // 022B: shell-page mode renders the NOFIDA project grid directly
+    if (kind === "shell-page" && document.getElementById("nf-project-grid")) return true;
+    // legacy / native-dashboard fallback
+    if (kind === "native-dashboard" && document.querySelector(".main_ui_dashboard__dashboard-content")) return true;
+    return false;
   }, { timeout: 90000 });
   await page.waitForTimeout(4000);
 }
@@ -295,7 +307,7 @@ async function waitForEditor(page) {
   await page.waitForTimeout(5000);
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: ["--disable-infobars", "--no-sandbox"] });
 const context = await browser.newContext({
   ignoreHTTPSErrors: true,
   viewport: { width: 1600, height: 1100 }
@@ -386,12 +398,18 @@ try {
   results.blockedAnchors = await collectVisibleBlockedAnchors(page);
 
   console.log("");
+  // ── 022B assertions ──────────────────────────────────────────────────────
+  printLine("dashboard renders in shell-page mode (022B)", results.dashboard.routeKind === "shell-page", results.dashboard.routeKind);
+  printLine("dashboard layout wrapper (#nf-dashboard-layout-wrapper) present", results.dashboard.hasDashboardLayout);
+  printLine("project grid (#nf-project-grid) present", results.dashboard.hasProjectGrid);
+  printLine("4+ project cards rendered (real + template placeholders)", results.dashboard.nfProjectCards >= 4, `${results.dashboard.nfProjectCards} cards`);
+  printLine("account chip text is clean (no leading avatar letter)", !results.dashboard.accountChipText.match(/^[A-Z]\s/), `"${results.dashboard.accountChipText}"`);
+  // ── 022A / stable assertions ─────────────────────────────────────────────
   printLine("dashboard main background is light", /rgb\(247,\s*248,\s*251\)|rgb\(245,\s*247,\s*251\)/.test(results.dashboard.contentBg || results.dashboard.pageBg), `${results.dashboard.contentBg || results.dashboard.pageBg}`);
   printLine("sidebar width is 248px or expected token value", Math.abs(results.dashboard.sidebarWidth - 248) <= 18, `${results.dashboard.sidebarWidth}px`);
   printLine("topbar exists on dashboard/resource/help routes", results.dashboard.topbarVisible && results.libraries.topbarVisible && results.help.topbarVisible);
-  printLine("dashboard has project grid with card system", results.dashboard.projectRows > 0 && results.dashboard.projectCards > 0, `${results.dashboard.projectRows} rows / ${results.dashboard.projectCards} cards`);
-  printLine("dashboard has right context panel", results.dashboard.contextPanels >= 3, `${results.dashboard.contextPanels} panels`);
-  printLine("dashboard has resource strip", results.dashboard.resourceCards >= 4, `${results.dashboard.resourceCards} cards`);
+  printLine("dashboard has right context panel (3 sections)", results.dashboard.contextPanels >= 3, `${results.dashboard.contextPanels} panels`);
+  printLine("dashboard has resource strip (4 cards)", results.dashboard.resourceCards >= 4, `${results.dashboard.resourceCards} cards`);
   printLine("resource/help pages use same topbar/sidebar", results.libraries.sidebarCount === 1 && results.fontCatalog.sidebarCount === 1 && results.media.sidebarCount === 1 && results.figma.sidebarCount === 1 && results.help.sidebarCount === 1);
   printLine("no duplicate sidebar", [results.dashboard, results.libraries, results.fontCatalog, results.media, results.figma, results.help].every((sample) => sample.shellCount === 1 && sample.sidebarCount === 1));
   printLine("no old resource-specific sidebar", [results.dashboard, results.libraries, results.fontCatalog, results.media, results.figma, results.help].every((sample) => sample.legacyVisible === 0));

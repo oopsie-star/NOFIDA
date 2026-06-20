@@ -848,15 +848,15 @@
       "[class*='user-menu']"
     ]);
 
-    var text = normalizeTextContent(node);
-    var name = text ? text.split("  ").join(" ").trim() : "";
-    if (!name) name = "Аккаунт";
-
+    var raw = normalizeTextContent(node) || "";
+    // Penpot profile element prepends avatar initial as first token and appends noise phrases
+    var NOISE = /^(аккаунт|команды|nofida|penpot|профиль|меню|menu|team|account|команда)$/i;
+    var tokens = raw.split(/\s+/).filter(function (t) {
+      return t.length > 1 && !NOISE.test(t);
+    });
+    var name = tokens.join(" ").trim() || "Аккаунт";
     var initial = name.charAt(0).toUpperCase() || "N";
-    return {
-      name: name,
-      initial: initial
-    };
+    return { name: name, initial: initial };
   }
 
   function getIconMarkup(name, extraClass) {
@@ -1139,27 +1139,42 @@
     return els.shell;
   }
 
+  function _doRenderDashboard(route, projects) {
+    var active = getActiveNavState(route);
+    renderDashboardShell({
+      owner: "nofida-dashboard",
+      route: route,
+      activeId: active.activeId || "projects",
+      childActiveId: active.childActiveId || "all-projects",
+      title: "Проекты",
+      subtitle: "Создавайте, собирайте и передавайте проектные материалы в одном рабочем пространстве.",
+      hideFrameHeader: false,
+      contentHtml: buildNofidaDashboardHtml(projects),
+      headerActionsHtml: '<button type="button" class="nf-btn nf-btn-primary" data-nofida-action="new-project">' + getIconMarkup("plus", "nf-btn-inline-icon") + '<span>Новый проект</span></button>'
+    });
+  }
+
   function renderNativeDashboardShell(hash) {
     var route = normalizeHash(hash || getCurrentHash());
-    var active = getActiveNavState(route);
-    var els = renderShellChrome(route, "native-dashboard", active.activeId, active.childActiveId);
+    if (isNativeFontsHash(route) || looksLikeNativeFontsSurface()) {
+      cleanupNativeDashboardEnhancements();
+      return;
+    }
 
-    clearShellBodyClasses();
-    document.body.classList.add(BODY_CLASS_NATIVE);
-    els.frame.innerHTML = "";
+    var teamId = getCurrentTeamId() || "";
+    if (_dashCache && _dashCache.teamId === teamId) {
+      _doRenderDashboard(route, _dashCache.projects);
+      return;
+    }
 
-    window.requestAnimationFrame(function () {
-      if (isNativeFontsHash(route) || looksLikeNativeFontsSurface()) {
-        cleanupNativeDashboardEnhancements();
-        return;
-      }
-      enhanceNativeDashboard(route);
+    _doRenderDashboard(route, []);
+
+    fetchDashboardData(teamId, function (err, data) {
+      if (!isDashboardRoute(getCurrentHash()) || isNofidaResourceRoute(getCurrentHash())) return;
+      var projects = (data && data.projects) || [];
+      _dashCache = { teamId: teamId, projects: projects };
+      _doRenderDashboard(getCurrentHash(), projects);
     });
-
-    state.shellOwner = "";
-    state.shellRoute = route;
-    saveState();
-    return els.shell;
   }
 
   function updateDashboardShellActiveState(options) {
@@ -1284,6 +1299,179 @@
     ].join("");
   }
 
+  // ─── 022B: API-driven project dashboard ─────────────────────────────────
+
+  var _dashCache = null;
+
+  function makeTransitDecode(v) {
+    if (v === null || typeof v !== "object") {
+      if (typeof v === "string") {
+        if (v === "~:true") return true;
+        if (v === "~:false") return false;
+        if (v === "~:null") return null;
+        if (v.charAt(0) === "~" && v.charAt(1) === ":") return v.slice(2);
+        if (v.charAt(0) === "~" && v.charAt(1) === "u") return v.slice(2);
+        if (v.charAt(0) === "~" && v.charAt(1) === "m") return new Date(parseInt(v.slice(2), 10));
+      }
+      return v;
+    }
+    if (Array.isArray(v)) {
+      if (v.length >= 2 && v[0] === "^ ") {
+        var obj = {};
+        for (var i = 1; i < v.length; i += 2) {
+          var rawKey = makeTransitDecode(v[i]);
+          var key = typeof rawKey === "string" && rawKey.charAt(0) === "~" && rawKey.charAt(1) === ":"
+            ? rawKey.slice(2) : rawKey;
+          obj[key] = makeTransitDecode(v[i + 1]);
+        }
+        return obj;
+      }
+      return v.map(makeTransitDecode);
+    }
+    return v;
+  }
+
+  function decodeTransitResponse(text) {
+    try { return makeTransitDecode(JSON.parse(text)); } catch (e) { return null; }
+  }
+
+  function nfXhr(url, callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.setRequestHeader("Accept", "application/transit+json, application/json");
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        callback(null, decodeTransitResponse(xhr.responseText) || {});
+      } else {
+        callback(new Error("HTTP " + xhr.status));
+      }
+    };
+    xhr.onerror = function () { callback(new Error("Network error")); };
+    xhr.send();
+  }
+
+  function fetchDashboardData(teamId, callback) {
+    nfXhr("/api/rpc/command/get-profile", function (err, profile) {
+      if (err || !profile) { callback(null, { projects: [] }); return; }
+      var tid = teamId || profile["default-team-id"] || profile["defaultTeamId"] || "";
+      if (!tid) { callback(null, { projects: [] }); return; }
+      nfXhr("/api/rpc/command/get-all-projects?team_id=" + encodeURIComponent(tid), function (err2, data) {
+        if (err2 || !data) { callback(null, { projects: [] }); return; }
+        var projects = Array.isArray(data) ? data : (data.projects || []);
+        callback(null, { projects: projects });
+      });
+    });
+  }
+
+  var TEMPLATE_CARDS = [
+    { title: "Продуктовый дизайн", meta: "UI Kit · Стартовый шаблон", tag: "шаблон" },
+    { title: "Маркетинговые материалы", meta: "Баннеры · Презентации", tag: "шаблон" },
+    { title: "Веб-компоненты", meta: "Компонент-библиотека · Дизайн-система", tag: "шаблон" },
+    { title: "Мобильное приложение", meta: "iOS · Android · Адаптив", tag: "шаблон" }
+  ];
+
+  function buildFileCardHtml(project) {
+    var title = escapeHtml(project.name || "Проект");
+    var fileCount = project["files-count"] || project.filesCount || 0;
+    var meta = fileCount
+      ? (fileCount + " " + (fileCount === 1 ? "файл" : fileCount < 5 ? "файла" : "файлов"))
+      : "Нет файлов";
+    var date = "";
+    try {
+      var raw = project["modified-at"] || project.modifiedAt;
+      if (raw) date = new Date(raw).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+    } catch (e) {}
+    var teamId = getCurrentTeamId() || "";
+    var href = escapeHtml(teamId ? "#/dashboard/team/" + teamId + "/projects" : ROUTES.dashboard);
+    return [
+      '<button type="button" class="nf-project-card" data-nofida-route="' + href + '">',
+      '  <div class="nf-project-thumb">',
+      '    <div class="nf-project-thumb-placeholder">',
+      '      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a2 2 0 0 1 1.4.57l1.1 1.1a1 1 0 0 0 .7.29H16A1.5 1.5 0 0 1 17.5 8.5v6A2.5 2.5 0 0 1 15 17H5A2.5 2.5 0 0 1 2.5 14.5z"/></svg>',
+      '    </div>',
+      '  </div>',
+      '  <div class="nf-project-body">',
+      '    <h3 class="nf-project-title">' + title + '</h3>',
+      '    <div class="nf-project-meta"><span>' + escapeHtml(meta) + '</span>' + (date ? '<span>' + escapeHtml(date) + '</span>' : '') + '</div>',
+      '  </div>',
+      '</button>'
+    ].join("");
+  }
+
+  function buildTemplateCardHtml(tpl) {
+    return [
+      '<button type="button" class="nf-project-card nf-template-card" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '">',
+      '  <div class="nf-project-thumb">',
+      '    <div class="nf-project-thumb-placeholder">',
+      '      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.25 3h1.5v6.25H17v1.5h-6.25V17h-1.5v-6.25H3v-1.5h6.25z"/></svg>',
+      '    </div>',
+      '  </div>',
+      '  <div class="nf-project-body">',
+      '    <h3 class="nf-project-title">' + escapeHtml(tpl.title) + '</h3>',
+      '    <div class="nf-project-meta"><span>' + escapeHtml(tpl.meta) + '</span><span class="nf-chip nf-chip-green">' + escapeHtml(tpl.tag) + '</span></div>',
+      '  </div>',
+      '</button>'
+    ].join("");
+  }
+
+  function buildDashboardContextPanelHtml() {
+    return [
+      '<aside id="nf-dashboard-context-panel" class="nf-context-panel">',
+      '  <section class="nf-panel">',
+      '    <div class="nf-panel-header"><h2 class="nf-panel-title">Последняя активность</h2><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(getProjectsRoute(getCurrentHash())) + '">Открыть</button></div>',
+      '    <div class="nf-list">',
+      '      <div class="nf-list-item"><div class="nf-list-icon">' + getIconMarkup("workspace", "nf-list-icon-svg") + '</div><div><p class="nf-list-title">Создайте первый проект</p><p class="nf-list-meta">Активность появится после сохранения файлов команды.</p></div></div>',
+      '      <div class="nf-list-item"><div class="nf-list-icon">' + getIconMarkup("library", "nf-list-icon-svg") + '</div><div><p class="nf-list-title">Подготовьте библиотеку</p><p class="nf-list-meta">Добавьте стартовые ресурсы в рабочее пространство.</p></div></div>',
+      '    </div>',
+      '  </section>',
+      '  <section class="nf-panel">',
+      '    <div class="nf-panel-header"><h2 class="nf-panel-title">AI-подсказки</h2><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(ROUTES.aiSettings) + '">Настроить</button></div>',
+      '    <div class="nf-list">',
+      '      <button type="button" class="nf-suggestion-card" data-nofida-route="' + escapeHtml(ROUTES.aiSettings) + '"><span class="nf-list-icon">' + getIconMarkup("ai", "nf-list-icon-svg") + '</span><span><strong>Собрать рабочий бриф</strong><small>Запустите AI Assistant для структуры проекта и задач команды.</small></span></button>',
+      '      <button type="button" class="nf-suggestion-card" data-nofida-route="' + escapeHtml(ROUTES.fontCatalog) + '"><span class="nf-list-icon">' + getIconMarkup("type", "nf-list-icon-svg") + '</span><span><strong>Подобрать типографику</strong><small>Откройте каталог шрифтов и соберите продуктовую пару.</small></span></button>',
+      '      <button type="button" class="nf-suggestion-card" data-nofida-route="' + escapeHtml(ROUTES.media) + '"><span class="nf-list-icon">' + getIconMarkup("media", "nf-list-icon-svg") + '</span><span><strong>Проверить визуальные ресурсы</strong><small>Сверьте иконки, фоны и empty states перед релизом.</small></span></button>',
+      '    </div>',
+      '  </section>',
+      '  <section class="nf-panel">',
+      '    <div class="nf-panel-header"><h2 class="nf-panel-title">Закрепленные ресурсы</h2><button type="button" class="nf-panel-link" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '">Все ресурсы</button></div>',
+      '    <div class="nf-pinned-list">',
+      '      <button type="button" class="nf-pinned-item" data-nofida-route="' + escapeHtml(ROUTES.libraries) + '">' + getIconMarkup("library", "nf-pinned-icon") + '<span><strong>Библиотеки</strong><small>Компоненты, UI kits и шаблоны.</small></span></button>',
+      '      <button type="button" class="nf-pinned-item" data-nofida-route="' + escapeHtml(getNativeFontsRoute(getCurrentHash())) + '">' + getIconMarkup("type", "nf-pinned-icon") + '<span><strong>Шрифты команды</strong><small>Нативная загрузка и рекомендации NOFIDA.</small></span></button>',
+      '      <button type="button" class="nf-pinned-item" data-nofida-route="' + escapeHtml(ROUTES.media) + '">' + getIconMarkup("media", "nf-pinned-icon") + '<span><strong>Медиабанк</strong><small>Локальные ассеты и паттерны.</small></span></button>',
+      '    </div>',
+      '  </section>',
+      '</aside>'
+    ].join("");
+  }
+
+  function buildNofidaDashboardHtml(projects) {
+    var cards = projects.map(buildFileCardHtml);
+    var needed = Math.max(0, 4 - cards.length);
+    for (var t = 0; t < Math.min(needed, TEMPLATE_CARDS.length); t++) {
+      cards.push(buildTemplateCardHtml(TEMPLATE_CARDS[t]));
+    }
+    return [
+      '<div id="nf-dashboard-layout-wrapper" class="nf-dashboard-layout">',
+      '  <div class="nf-dashboard-main">',
+      '    <div class="nf-tabs">',
+      '      <button type="button" class="nf-tab is-active">Все проекты</button>',
+      '      <button type="button" class="nf-tab" disabled>В работе</button>',
+      '      <button type="button" class="nf-tab" disabled>На проверке</button>',
+      '      <button type="button" class="nf-tab" disabled>Завершённые</button>',
+      '      <button type="button" class="nf-tab" disabled>Архив</button>',
+      '    </div>',
+      '    <div id="nf-project-grid" class="nf-project-grid">',
+      cards.join(""),
+      '    </div>',
+      buildDashboardResourceStripMarkup(),
+      '  </div>',
+      buildDashboardContextPanelHtml(),
+      '</div>'
+    ].join("");
+  }
+
+  // ─── End 022B additions ───────────────────────────────────────────────────
+
   function cleanupNativeDashboardEnhancements() {
     Array.prototype.forEach.call(document.querySelectorAll("#nf-dashboard-context-panel, #nf-dashboard-resource-strip"), function (node) {
       if (node && node.parentNode) node.parentNode.removeChild(node);
@@ -1390,12 +1578,10 @@
     while (refreshTimers.length) {
       window.clearTimeout(refreshTimers.pop());
     }
-
-    [0, 160, 640, 1400].forEach(function (delay) {
+    [0, 400, 1200].forEach(function (delay) {
       refreshTimers.push(window.setTimeout(function () {
         if (!isDashboardRoute(getCurrentHash()) || isNofidaResourceRoute(getCurrentHash())) return;
         renderNativeDashboardShell(getCurrentHash());
-        enhanceNativeDashboard(getCurrentHash());
       }, delay));
     });
   }
