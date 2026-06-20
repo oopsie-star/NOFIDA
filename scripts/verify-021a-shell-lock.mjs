@@ -258,7 +258,8 @@ async function waitForAccount(page) {
 }
 
 async function accountSidebarStabilityRun(page) {
-  await openHash(page, "#/settings/options");
+  // Use full navigation for clean state (hash-only change after AI page can stall React).
+  await page.goto(`${BASE}/#/settings/options`, { waitUntil: "commit", timeout: 30000 });
   await waitForAccount(page);
   await page.waitForTimeout(3000); // let NOFIDA scripts initialize
 
@@ -427,11 +428,16 @@ page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`))
 page.on("console", (message) => {
   if (message.type() !== "error") return;
   const text = message.text();
-  // Known non-fatal: feature-flags 401 (text may or may not include URL)
+  // Known non-fatal: feature-flags 401 — check text and location URL
   if (/get-enabled-flags/i.test(text)) return;
+  // Playwright sets location().url to the failing resource URL for network errors
+  let locUrl = "";
+  try { locUrl = (message.location() || {}).url || ""; } catch (_e) {}
+  if (/get-enabled-flags/i.test(locUrl)) return;
   // Suppress console errors that reference any tracked non-fatal 401 path
   for (const path of nonFatalRequestPaths) {
     if (text.includes(path)) return;
+    if (locUrl && locUrl.includes(path)) return;
   }
   fatalConsole.push(`console:${text}`);
 });
@@ -596,8 +602,17 @@ try {
 
   results.settingsStable60 = await settingsStabilityRun(page);
 
-  // PART 2: 90-second stability run for plain #/settings/options
-  const accountPlainStability = await accountSidebarStabilityRun(page);
+  // PART 2: 90-second stability run for plain #/settings/options (isolated — must not cascade)
+  let accountPlainStability = {
+    shellAbsent: false, resourceNavAbsent: false, navStable: false,
+    widthStable: false, topStable: false, labelsStable: false,
+    nofidaOnce: false, noHostOnPlain: false
+  };
+  try {
+    accountPlainStability = await accountSidebarStabilityRun(page);
+  } catch (stabilityErr) {
+    notes.push(`accountSidebarStabilityRun: ${stabilityErr && stabilityErr.message ? stabilityErr.message : String(stabilityErr)}`);
+  }
   results.accountSidebarNoShell = accountPlainStability.shellAbsent;
   results.accountSidebarNoResourceNav = accountPlainStability.resourceNavAbsent;
   results.accountSidebarWidthStable90s = accountPlainStability.widthStable;
