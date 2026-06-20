@@ -595,13 +595,24 @@ try {
     return !/(#\/nofida|#\/dashboard|#\/settings|\/#\/nofida|\/#\/dashboard|\/#\/settings)/i.test(href);
   });
 
-  // At this point we are on a live Penpot SPA page (#/nofida/privacy) so openHash suffices.
-  // page.goto to the same-origin SPA re-initializes the SPA unnecessarily and risks a 90s timeout
-  // while the shell reinitializes; hash-navigation keeps the SPA alive and is instant.
+  // Account settings block — fully isolated so it cannot cascade into editor/stability.
+  let accountBaseCount = 0;
+  let accountShellCount = 0;
   await openHash(page, "#/settings/options");
-  await waitForAccount(page);
-  const accountBaseCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
-  const accountShellCount = await page.locator("#nofida-shell").count();
+  try {
+    await waitForAccount(page);
+    accountBaseCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
+    accountShellCount = await page.locator("#nofida-shell").count();
+  } catch (accountWaitErr) {
+    const diag = await page.evaluate(() => ({
+      hash: window.location.hash,
+      body: (document.body?.textContent || "").slice(0, 150).replace(/\s+/g, " ").trim(),
+      hasNav: !!document.querySelector("ul.main_ui_settings_sidebar__sidebar-nav-settings"),
+      hasShell: !!document.getElementById("nofida-shell"),
+      routeKind: document.getElementById("nofida-shell")?.getAttribute("data-route-kind") || ""
+    }));
+    notes.push(`waitForAccount: ${accountWaitErr.message} | ${JSON.stringify(diag)}`);
+  }
 
   try {
     await openHash(page, AI_SETTINGS_ROUTE);
@@ -613,7 +624,6 @@ try {
     results.noShellInAccount = accountShellCount === 0 && aiShellCount === 0;
     results.accountSidebarStable = accountAiCount >= accountBaseCount;
     results.aiInAccount = /#\/settings\/options\?nofida=ai&tab=api/.test(aiUrl) && aiHostCount === 1;
-    // Diagnostic: expose key values so failures are interpretable
     if (!results.aiInAccount) {
       notes.push(`aiInAccount=false: url=${aiUrl.slice(-60)} hostCount=${aiHostCount} baseCount=${accountBaseCount} aiCount=${accountAiCount} shellCount=${aiShellCount}`);
     }
