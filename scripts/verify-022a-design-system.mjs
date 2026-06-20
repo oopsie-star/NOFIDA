@@ -304,14 +304,25 @@ const page = await context.newPage();
 page.setDefaultTimeout(90000);
 
 const fatalConsole = [];
+const benignUnauthorized = [];
 page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`));
 page.on("console", (message) => {
   if (message.type() !== "error") return;
   const text = message.text();
+  if (/Failed to load resource: the server responded with a status of 401/i.test(text)) return;
   if (/get-enabled-flags/i.test(text)) return;
   if (/ws\/notifications/i.test(text)) return;
   if (/ERR_NETWORK_IO_SUSPENDED/i.test(text)) return;
   fatalConsole.push(`console:${text}`);
+});
+page.on("response", (response) => {
+  if (response.status() !== 401) return;
+  const url = response.url();
+  if (/get-enabled-flags/i.test(url)) {
+    benignUnauthorized.push(url);
+    return;
+  }
+  fatalConsole.push(`401:${url}`);
 });
 
 const results = {};
@@ -394,7 +405,12 @@ try {
   printLine("account settings still stable", results.settings.shellCount === 0 && results.settings.nativeSettingsSidebar > 0, `${results.settings.nativeSettingsSidebar} native sidebars`);
   printLine("editor unaffected", results.editor.shellCount === 0 && results.editor.nativeEditor, results.editor.nativeEditor ? "workspace route open" : "no workspace route");
   printLine("no visible Penpot links", results.blockedAnchors.length === 0, `${results.blockedAnchors.length} blocked anchors`);
-  printLine("no fatal console errors except known non-fatal 401 flags", fatalConsole.length === 0, fatalConsole.slice(0, 2).join(" | "));
+  const consoleSummary = fatalConsole.length
+    ? fatalConsole.slice(0, 2).join(" | ")
+    : benignUnauthorized.length
+      ? `ignored ${benignUnauthorized.length} get-enabled-flags 401`
+      : "";
+  printLine("no fatal console/network errors except known non-fatal 401 flags", fatalConsole.length === 0, consoleSummary);
   printLine("screenshots captured", true, SCREENSHOT_DIR);
 } finally {
   await browser.close();
