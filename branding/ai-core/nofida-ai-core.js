@@ -2140,6 +2140,12 @@
     collectScopedNodes(scope, "a[href]").forEach(function (link) {
       if (link.getAttribute("data-nofida-ext")) return;
       var href = link.getAttribute("href") || "";
+      if (/^(?:\/)?#\/(?:nofida|dashboard|settings)(?:$|[/?#])/i.test(href) ||
+          /^\/#\/(?:nofida|dashboard|settings)(?:$|[/?#])/i.test(href)) {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+        return;
+      }
       var isExt = PENPOT_EXT_DOMAINS.some(function (d) { return href.indexOf(d) >= 0; }) || isPenpotExternalHref(href);
       if (!isExt) return;
       link.setAttribute("data-nofida-ext", "1");
