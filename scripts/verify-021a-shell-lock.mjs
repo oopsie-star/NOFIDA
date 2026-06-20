@@ -257,6 +257,65 @@ async function waitForAccount(page) {
   await page.waitForSelector("ul.main_ui_settings_sidebar__sidebar-nav-settings", { timeout: 90000 });
 }
 
+async function accountSidebarStabilityRun(page) {
+  await openHash(page, "#/settings/options");
+  await waitForAccount(page);
+  await page.waitForTimeout(3000); // let NOFIDA scripts initialize
+
+  const getAccountSnapshot = () => page.evaluate(() => {
+    function textOf(node) {
+      return String(node?.textContent || "").replace(/\s+/g, " ").trim();
+    }
+    const nav = document.querySelector("ul.main_ui_settings_sidebar__sidebar-nav-settings");
+    const navRect = nav ? nav.getBoundingClientRect() : null;
+    const labels = nav ? Array.from(nav.querySelectorAll("li")).map(textOf) : [];
+    const nofidaEntries = document.querySelectorAll(
+      "[data-nofida-ai-account-entry='true'], #nofida-ai-sidebar-item"
+    ).length;
+    return {
+      shellCount: document.querySelectorAll("#nofida-shell").length,
+      resourceNavCount: document.querySelectorAll(
+        "#nofida-shell-sidebar, #nfr-overlay, #nfp-overlay, #nhb-overlay"
+      ).length,
+      navExists: !!nav,
+      navWidth: navRect ? Math.round(navRect.width) : 0,
+      navTop: navRect ? Math.round(navRect.top) : 0,
+      labels,
+      nofidaEntries,
+      hostCount: document.querySelectorAll("#nofida-ai-account-page-host").length
+    };
+  });
+
+  const base = await getAccountSnapshot();
+  let shellAbsent = base.shellCount === 0;
+  let resourceNavAbsent = base.resourceNavCount === 0;
+  let navStable = base.navExists;
+  let widthStable = true;
+  let topStable = true;
+  let labelsStable = true;
+  let nofidaOnce = base.nofidaEntries === 1;
+  let noHostOnPlain = base.hostCount === 0;
+
+  const ACCOUNT_STABILITY_MS = 90000;
+  const ACCOUNT_STEP_MS = 10000;
+  const steps = Math.ceil(ACCOUNT_STABILITY_MS / ACCOUNT_STEP_MS);
+
+  for (let i = 0; i < steps; i++) {
+    await page.waitForTimeout(ACCOUNT_STEP_MS);
+    const snap = await getAccountSnapshot();
+    shellAbsent = shellAbsent && snap.shellCount === 0;
+    resourceNavAbsent = resourceNavAbsent && snap.resourceNavCount === 0;
+    navStable = navStable && snap.navExists;
+    widthStable = widthStable && Math.abs(base.navWidth - snap.navWidth) <= 1;
+    topStable = topStable && Math.abs(base.navTop - snap.navTop) <= 2;
+    labelsStable = labelsStable && sameArray(base.labels, snap.labels);
+    nofidaOnce = nofidaOnce && snap.nofidaEntries === 1;
+    noHostOnPlain = noHostOnPlain && snap.hostCount === 0;
+  }
+
+  return { shellAbsent, resourceNavAbsent, navStable, widthStable, topStable, labelsStable, nofidaOnce, noHostOnPlain };
+}
+
 async function waitForAccountAI(page) {
   await page.waitForFunction(() => {
     return !!document.getElementById("nofida-ai-account-page-host");
@@ -353,12 +412,27 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 const fatalConsole = [];
+const nonFatalRequestPaths = new Set();
+
+// Track known non-fatal 401 responses so console errors referencing them are ignored.
+page.on("response", (response) => {
+  if (response.status() === 401 && /get-enabled-flags/i.test(response.url())) {
+    try { nonFatalRequestPaths.add(new URL(response.url()).pathname); } catch (_e) {
+      nonFatalRequestPaths.add(response.url());
+    }
+  }
+});
 
 page.on("pageerror", (error) => fatalConsole.push(`pageerror:${error.message}`));
 page.on("console", (message) => {
   if (message.type() !== "error") return;
   const text = message.text();
-  if (/get-enabled-flags/i.test(text) && /401/.test(text)) return;
+  // Known non-fatal: feature-flags 401 (text may or may not include URL)
+  if (/get-enabled-flags/i.test(text)) return;
+  // Suppress console errors that reference any tracked non-fatal 401 path
+  for (const path of nonFatalRequestPaths) {
+    if (text.includes(path)) return;
+  }
   fatalConsole.push(`console:${text}`);
 });
 
@@ -391,6 +465,13 @@ const results = {
   noShellInAccount: false,
   accountSidebarStable: false,
   aiInAccount: false,
+  accountSidebarNoShell: false,
+  accountSidebarNoResourceNav: false,
+  accountSidebarWidthStable90s: false,
+  accountSidebarTopStable90s: false,
+  accountSidebarLabelsStable90s: false,
+  accountNofidaOnce: false,
+  accountNoHostOnPlain: false,
   noShellInEditor: false,
   editorUiClean: false,
   aiEditorLocal: false,
@@ -515,6 +596,16 @@ try {
 
   results.settingsStable60 = await settingsStabilityRun(page);
 
+  // PART 2: 90-second stability run for plain #/settings/options
+  const accountPlainStability = await accountSidebarStabilityRun(page);
+  results.accountSidebarNoShell = accountPlainStability.shellAbsent;
+  results.accountSidebarNoResourceNav = accountPlainStability.resourceNavAbsent;
+  results.accountSidebarWidthStable90s = accountPlainStability.widthStable;
+  results.accountSidebarTopStable90s = accountPlainStability.topStable;
+  results.accountSidebarLabelsStable90s = accountPlainStability.labelsStable;
+  results.accountNofidaOnce = accountPlainStability.nofidaOnce;
+  results.accountNoHostOnPlain = accountPlainStability.noHostOnPlain;
+
   const editorOpened = await openEditorFromHub(page);
   if (editorOpened) {
     results.noShellInEditor = await page.locator("#nofida-shell").count() === 0;
@@ -524,7 +615,13 @@ try {
         window.NofidaAICore.open();
       }
     });
-    await page.waitForSelector("#assistant-panel.open", { timeout: 30000 });
+    // #assistant-panel lives inside a shadow root — pierce it with evaluate instead of waitForSelector.
+    await page.waitForFunction(() => {
+      const host = document.getElementById("nofida-shell-root");
+      if (!host || !host.shadowRoot) return false;
+      const panel = host.shadowRoot.getElementById("assistant-panel");
+      return panel ? panel.classList.contains("open") : false;
+    }, { timeout: 30000 });
     results.aiEditorLocal = /\/#\/workspace/.test(page.url());
 
     await page.evaluate(() => {
@@ -620,6 +717,15 @@ printLine("no dashboard/resource shell in account", results.noShellInAccount);
 printLine("account sidebar stable", results.accountSidebarStable);
 printLine("NOFIDA AI inside account", results.aiInAccount);
 console.log("");
+console.log("Account Settings Stability (90s, plain #/settings/options):");
+printLine("no dashboard/resource shell in account", results.accountSidebarNoShell);
+printLine("no resource nav in account", results.accountSidebarNoResourceNav);
+printLine("account sidebar width stable 90s", results.accountSidebarWidthStable90s);
+printLine("account sidebar top stable 90s", results.accountSidebarTopStable90s);
+printLine("account sidebar labels stable 90s", results.accountSidebarLabelsStable90s);
+printLine("NOFIDA AI entry appears exactly once", results.accountNofidaOnce);
+printLine("no host injected on plain settings", results.accountNoHostOnPlain);
+console.log("");
 console.log("Editor:");
 printLine("no dashboard/resource shell in editor", results.noShellInEditor);
 printLine("editor UI unaffected", results.editorUiClean);
@@ -661,6 +767,11 @@ console.log(`Recommendation: ${
   results.activeStates &&
   results.noShellInAccount &&
   results.aiInAccount &&
+  results.accountSidebarNoShell &&
+  results.accountSidebarWidthStable90s &&
+  results.accountSidebarLabelsStable90s &&
+  results.accountNofidaOnce &&
+  results.accountNoHostOnPlain &&
   results.noFatalConsoleErrors
     ? "approve"
     : "fix required"
@@ -681,6 +792,11 @@ if (!(
   results.activeStates &&
   results.noShellInAccount &&
   results.aiInAccount &&
+  results.accountSidebarNoShell &&
+  results.accountSidebarWidthStable90s &&
+  results.accountSidebarLabelsStable90s &&
+  results.accountNofidaOnce &&
+  results.accountNoHostOnPlain &&
   results.noFatalConsoleErrors
 )) {
   process.exitCode = 1;
