@@ -262,11 +262,8 @@ async function waitForAccount(page) {
   );
 }
 
-async function accountSidebarStabilityRun(page, teamId) {
-  // page.goto to settings as cold route renders Penpot 404; must route via dashboard first.
-  // waitUntil "commit" (not "load") so page.goto returns fast; waitForDashboardShell has full 90s.
-  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "commit", timeout: 60000 });
-  await waitForDashboardShell(page);
+async function accountSidebarStabilityRun(page) {
+  // The SPA is already running when this is called; openHash is sufficient.
   await openHash(page, "#/settings/options");
   await waitForAccount(page);
   await page.waitForTimeout(3000); // let NOFIDA scripts initialize
@@ -598,11 +595,9 @@ try {
     return !/(#\/nofida|#\/dashboard|#\/settings|\/#\/nofida|\/#\/dashboard|\/#\/settings)/i.test(href);
   });
 
-  // page.goto to #/settings/options as a cold route renders a Penpot 404 — must first land on
-  // a known Penpot route (dashboard) and then hash-navigate to account settings.
-  // waitUntil "commit" (not "load") so page.goto returns fast; waitForDashboardShell has full 90s.
-  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "commit", timeout: 60000 });
-  await waitForDashboardShell(page);
+  // At this point we are on a live Penpot SPA page (#/nofida/privacy) so openHash suffices.
+  // page.goto to the same-origin SPA re-initializes the SPA unnecessarily and risks a 90s timeout
+  // while the shell reinitializes; hash-navigation keeps the SPA alive and is instant.
   await openHash(page, "#/settings/options");
   await waitForAccount(page);
   const accountBaseCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
@@ -639,7 +634,7 @@ try {
     nofidaOnce: false, noHostOnPlain: false
   };
   try {
-    accountPlainStability = await accountSidebarStabilityRun(page, teamId);
+    accountPlainStability = await accountSidebarStabilityRun(page);
   } catch (stabilityErr) {
     notes.push(`accountSidebarStabilityRun: ${stabilityErr && stabilityErr.message ? stabilityErr.message : String(stabilityErr)}`);
   }
