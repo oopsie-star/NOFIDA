@@ -390,7 +390,7 @@
   function renderCatalog(items) {
     return items.map(function (item) {
       var href = item.internal_url || "#/nofida/libraries";
-      var source = item.internal_url ? "Открыть ресурсный центр" : "Открыть каталог";
+      var source = "Открыть ресурсы";
       var title = item.title || item.name || item.id || "Library";
       var meta = [item.type || "library", item.tier || "catalog", item.author || "Nofida"].join(" · ");
       return [
@@ -414,7 +414,7 @@
         nav.goToNofidaRoute(href, { source: "ai-resource-center" });
         return;
       }
-      window.location.href = href;
+      window.location.hash = String(href).replace(/^#/, "");
       return;
     }
     if (isPenpotExternalHref(href)) {
@@ -423,7 +423,7 @@
         nav.goToNofidaRoute(route, { source: "ai-resource-center" });
         return;
       }
-      window.location.href = route;
+      window.location.hash = String(route).replace(/^#/, "");
       return;
     }
     window.open(href, "_blank", "noopener,noreferrer");

@@ -3,32 +3,103 @@
 
   if (window.NofidaNavigation) return;
 
-  var STORAGE_KEY = "nofida-navigation-v019a";
-  var DASHBOARD_GROUP_ID = "nofida-nav-dashboard-group";
-  var STYLE_ID = "nofida-navigation-style";
-  var observer = null;
-  var observerRoot = null;
-  var observerTimer = null;
+  var ASSET_TAG = "__NOFIDA_ASSET_TAG__";
+  var ASSET_QUERY = ASSET_TAG ? "?v=" + ASSET_TAG : "";
+  var STORAGE_KEY = "nofida-navigation-v021a";
+  var SHELL_ID = "nofida-shell";
+  var SIDEBAR_ID = "nofida-shell-sidebar";
+  var NAV_ID = "nofida-shell-nav";
+  var MAIN_ID = "nofida-shell-main";
+  var FRAME_ID = "nofida-page-frame";
+  var PLACEHOLDER_OWNER = "navigation-placeholder";
+  var BODY_CLASS_NATIVE = "nofida-dashboard-shell-active";
+  var BODY_CLASS_PAGE = "nofida-shell-page-active";
+  var SEARCH_PLACEHOLDER = "Поиск";
+  var SAFE_LOCAL_TEAM_KEYS = [
+    "default-team-id",
+    "defaultTeamId",
+    "team-id",
+    "current-team-id",
+    "currentTeamId",
+    "selected-team-id",
+    "selectedTeamId"
+  ];
+  var refreshTimers = [];
   var clickBound = false;
 
   var ROUTES = {
     dashboard: "#/dashboard",
     settings: "#/settings/options",
     libraries: "#/nofida/libraries",
-    fonts: "#/nofida/fonts",
+    fontCatalog: "#/nofida/fonts",
     media: "#/nofida/media",
     figma: "#/nofida/import/figma",
     help: "#/nofida/help",
-    learn: "#/nofida/learn"
+    learn: "#/nofida/learn",
+    releases: "#/nofida/releases",
+    changelog: "#/nofida/changelog",
+    terms: "#/nofida/terms",
+    privacy: "#/nofida/privacy",
+    openSource: "#/nofida/open-source-notices",
+    repository: "#/nofida/repository",
+    community: "#/nofida/community"
   };
 
-  var SETTINGS_TAB_LABELS = {
-    api: "API Configuration",
-    models: "Model Library",
-    accounts: "External Accounts",
-    engine: "Engine",
-    prompts: "Prompts"
-  };
+  var NAV_TREE = [
+    {
+      section: "Основное",
+      items: [
+        {
+          id: "projects",
+          label: "Проекты",
+          childIds: ["all-projects", "drafts"],
+          children: [
+            { id: "all-projects", label: "Все проекты" },
+            {
+              id: "drafts",
+              label: "Черновики",
+              disabled: true,
+              disabledTitle: "Раздел черновиков откроется в панели проектов"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      section: "Ресурсы",
+      items: [
+        { id: "libraries", label: "Библиотеки" },
+        {
+          id: "fonts",
+          label: "Шрифты",
+          childIds: ["team-fonts", "font-catalog"],
+          children: [
+            { id: "team-fonts", label: "Шрифты команды" },
+            { id: "font-catalog", label: "Каталог шрифтов" }
+          ]
+        },
+        { id: "media", label: "Медиа" },
+        { id: "figma", label: "Импорт из Figma" }
+      ]
+    },
+    {
+      section: "Помощь",
+      items: [
+        { id: "help", label: "Справка" },
+        { id: "learn", label: "Обучение" },
+        { id: "releases", label: "Релизы" },
+        { id: "changelog", label: "Журнал изменений" }
+      ]
+    },
+    {
+      section: "Документы",
+      items: [
+        { id: "terms", label: "Условия" },
+        { id: "privacy", label: "Privacy / Data" },
+        { id: "open-source", label: "Open Source" }
+      ]
+    }
+  ];
 
   function loadState() {
     try {
@@ -53,249 +124,407 @@
   function normalizeHash(hash) {
     var value = String(hash || "").trim();
     if (!value) return ROUTES.dashboard;
+
+    if (value.indexOf("/#/") === 0) {
+      value = value.slice(2);
+    }
+
     var rootIndex = value.indexOf("#/");
     if (rootIndex >= 0) value = value.slice(rootIndex);
+
     if (value.charAt(0) !== "#") {
       value = value.charAt(0) === "/" ? "#" + value : "#/" + value.replace(/^#?\/?/, "");
     }
+
     return value.replace(/^##+/, "#");
   }
 
+  function getCurrentHash() {
+    return window.location.hash || "#/dashboard";
+  }
+
   function getHashPath(hash) {
-    var value = normalizeHash(hash || window.location.hash || ROUTES.dashboard);
-    var queryIndex = value.indexOf("?");
-    return queryIndex >= 0 ? value.slice(0, queryIndex) : value;
+    var current = normalizeHash(hash || getCurrentHash());
+    var queryIndex = current.indexOf("?");
+    return queryIndex >= 0 ? current.slice(0, queryIndex) : current;
   }
 
   function getHashParams(hash) {
-    var value = normalizeHash(hash || window.location.hash || ROUTES.dashboard);
-    var queryIndex = value.indexOf("?");
-    return new URLSearchParams(queryIndex >= 0 ? value.slice(queryIndex + 1) : "");
+    var current = normalizeHash(hash || getCurrentHash());
+    var queryIndex = current.indexOf("?");
+    return new URLSearchParams(queryIndex >= 0 ? current.slice(queryIndex + 1) : "");
   }
 
   function isDashboardRoute(hash) {
-    return /^#\/dashboard(?:$|[/?])/.test(normalizeHash(hash));
-  }
-
-  function isNativeFontsHash(hash) {
-    return /^#\/dashboard(?:\/team\/[0-9a-f-]{36})?\/fonts(?:$|[/?])/.test(getHashPath(hash)) ||
-      /^#\/dashboard\/fonts(?:$|\?)/.test(normalizeHash(hash));
-  }
-
-  function looksLikeNativeFontsSurface() {
-    return !!document.querySelector("#dashboard-fonts-title, .main_ui_dashboard_fonts__dashboard-container.main_ui_dashboard_fonts__dashboard-fonts");
+    return /^#\/dashboard(?:$|[/?])/.test(normalizeHash(hash || getCurrentHash()));
   }
 
   function isAccountSurface(hash) {
-    return /^#\/settings\/options(?:$|\?)/.test(normalizeHash(hash));
+    return /^#\/settings\/options(?:$|\?)/.test(normalizeHash(hash || getCurrentHash()));
   }
 
   function isEditorSurface(hash) {
-    return /^#\/(workspace|viewer|inspect)(?:$|[/?])/.test(normalizeHash(hash));
+    return /^#\/(workspace|viewer|inspect)(?:$|[/?])/.test(normalizeHash(hash || getCurrentHash()));
   }
 
-  function isResourceRoute(hash) {
-    return /^#\/nofida(?:$|[/?])/.test(getHashPath(hash));
+  function isNofidaResourceRoute(hash) {
+    return /^#\/nofida(?:$|[/?])/.test(getHashPath(hash || getCurrentHash()));
   }
 
   function isDashboardSurface(hash) {
-    return isDashboardRoute(hash) || isResourceRoute(hash);
+    return isDashboardRoute(hash) || isNofidaResourceRoute(hash);
   }
 
-  function getCurrentSurface(hash) {
-    if (isAccountSurface(hash)) return "account";
-    if (isEditorSurface(hash)) return "editor";
-    if (isDashboardSurface(hash)) return "dashboard";
+  function getSurface(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    if (isAccountSurface(current)) return "account";
+    if (isEditorSurface(current)) return "editor";
+    if (isDashboardSurface(current)) return "dashboard-resource";
     return "other";
   }
 
-  function rememberHash(hash) {
-    var current = normalizeHash(hash || window.location.hash || ROUTES.dashboard);
-    if (state.currentHash && state.currentHash !== current) {
-      state.previousHash = state.currentHash;
-    }
-    state.currentHash = current;
-
-    var teamId = getTeamId(current);
-    if (teamId) state.lastTeamId = teamId;
-
-    if (isDashboardRoute(current) && !isResourceRoute(current)) {
-      state.lastDashboardHash = current;
-    }
-    if (isAccountSurface(current)) state.lastAccountHash = current;
-    if (isEditorSurface(current)) state.lastEditorHash = current;
-
-    saveState();
+  function getCurrentSurface(hash) {
+    var surface = getSurface(hash);
+    if (surface === "dashboard-resource") return "dashboard";
+    return surface;
   }
 
-  function getTeamId(hash) {
-    var current = normalizeHash(hash || window.location.hash || ROUTES.dashboard);
+  function looksLikeUuid(value) {
+    return /^[0-9a-f-]{36}$/i.test(String(value || "").trim());
+  }
+
+  function extractUuidFromText(value) {
+    var match = String(value || "").match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return match ? match[0] : "";
+  }
+
+  function readTeamIdFromLocalStorageValue(rawValue) {
+    if (!rawValue) return "";
+    if (looksLikeUuid(rawValue)) return rawValue;
+
+    try {
+      var parsed = JSON.parse(rawValue);
+      if (looksLikeUuid(parsed)) return parsed;
+      if (parsed && typeof parsed === "object") {
+        var direct = SAFE_LOCAL_TEAM_KEYS
+          .map(function (key) { return parsed[key]; })
+          .find(looksLikeUuid);
+        if (direct) return direct;
+
+        var nestedKeys = Object.keys(parsed);
+        for (var index = 0; index < nestedKeys.length; index += 1) {
+          var nested = parsed[nestedKeys[index]];
+          if (nested && typeof nested === "object") {
+            var nestedDirect = SAFE_LOCAL_TEAM_KEYS
+              .map(function (key) { return nested[key]; })
+              .find(looksLikeUuid);
+            if (nestedDirect) return nestedDirect;
+          }
+        }
+      }
+    } catch (_error) {
+      /* noop */
+    }
+
+    return extractUuidFromText(rawValue);
+  }
+
+  function readSafeTeamIdFromLocalStorage() {
+    try {
+      for (var keyIndex = 0; keyIndex < SAFE_LOCAL_TEAM_KEYS.length; keyIndex += 1) {
+        var safeKey = SAFE_LOCAL_TEAM_KEYS[keyIndex];
+        var direct = readTeamIdFromLocalStorageValue(window.localStorage.getItem(safeKey));
+        if (direct) return direct;
+      }
+
+      for (var index = 0; index < window.localStorage.length; index += 1) {
+        var key = window.localStorage.key(index) || "";
+        if (!/(team|profile|dashboard|workspace)/i.test(key)) continue;
+        var candidate = readTeamIdFromLocalStorageValue(window.localStorage.getItem(key));
+        if (candidate) return candidate;
+      }
+    } catch (_error) {
+      /* noop */
+    }
+    return "";
+  }
+
+  function readTeamIdFromHash(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    var params = getHashParams(current);
+    var fromQuery = params.get("team-id");
+    if (looksLikeUuid(fromQuery)) return fromQuery;
+
     var match = current.match(/#\/dashboard\/team\/([0-9a-f-]{36})/i);
     if (match) return match[1];
 
-    var params = getHashParams(current);
-    var fromQuery = params.get("team-id");
-    if (fromQuery && /^[0-9a-f-]{36}$/i.test(fromQuery)) return fromQuery;
+    return "";
+  }
 
+  function readTeamIdFromLinks() {
     var links = document.querySelectorAll("a[href]");
     for (var index = 0; index < links.length; index += 1) {
       var href = links[index].getAttribute("href") || "";
-      var linkMatch = href.match(/dashboard\/team\/([0-9a-f-]{36})/i);
-      if (linkMatch) return linkMatch[1];
+      var match = href.match(/dashboard\/team\/([0-9a-f-]{36})/i) ||
+        href.match(/[?&]team-id=([0-9a-f-]{36})/i);
+      if (match) return match[1];
+    }
+    return "";
+  }
+
+  function getCurrentTeamId(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    var direct = readTeamIdFromHash(current);
+    if (direct) return direct;
+
+    var fromLastDashboard = readTeamIdFromHash(state.lastDashboardHash || "") ||
+      readTeamIdFromHash(state.lastProjectsHash || "");
+    if (fromLastDashboard) return fromLastDashboard;
+
+    if (looksLikeUuid(state.lastTeamId)) return state.lastTeamId;
+
+    var fromStorage = readSafeTeamIdFromLocalStorage();
+    if (fromStorage) return fromStorage;
+
+    return readTeamIdFromLinks();
+  }
+
+  function isProjectsHash(hash) {
+    var path = getHashPath(hash || getCurrentHash());
+    return /^#\/dashboard(?:\/team\/[0-9a-f-]{36})?(?:\/projects(?:\/[^/?]+)?|\/recent)?$/i.test(path) ||
+      path === "#/dashboard";
+  }
+
+  function isDraftsHash(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    return /(?:^|[/?&=])drafts(?:$|[/?&=])/i.test(current);
+  }
+
+  function isNativeFontsHash(hash) {
+    var path = getHashPath(hash || getCurrentHash());
+    return /^#\/dashboard(?:\/team\/[0-9a-f-]{36})?\/fonts$/i.test(path);
+  }
+
+  function looksLikeNativeFontsSurface() {
+    return !!document.querySelector(
+      "#dashboard-fonts-title, .main_ui_dashboard_fonts__dashboard-container.main_ui_dashboard_fonts__dashboard-fonts"
+    );
+  }
+
+  function getProjectsRoute(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    var currentTeamId = getCurrentTeamId(current);
+
+    if (isProjectsHash(current) && (!currentTeamId || readTeamIdFromHash(current) || current === ROUTES.dashboard)) {
+      return current;
     }
 
-    return state.lastTeamId || "";
+    if (state.lastProjectsHash && (!currentTeamId || readTeamIdFromHash(state.lastProjectsHash) === currentTeamId)) {
+      return state.lastProjectsHash;
+    }
+
+    if (currentTeamId) {
+      return "#/dashboard/team/" + currentTeamId + "/projects";
+    }
+
+    return ROUTES.dashboard;
   }
 
-  function getProjectsHash(hash) {
-    var teamId = getTeamId(hash);
-    return teamId ? "#/dashboard/team/" + teamId + "/projects" : ROUTES.dashboard;
+  function getNativeFontsRoute(hash) {
+    var teamId = getCurrentTeamId(hash);
+    return teamId ? "#/dashboard/fonts?team-id=" + teamId : ROUTES.dashboard;
   }
 
-  function getNativeFontsHash(hash) {
-    var teamId = getTeamId(hash);
-    return teamId ? "#/dashboard/fonts?team-id=" + teamId : getProjectsHash(hash);
+  function getDraftsRoute(hash) {
+    var teamId = getCurrentTeamId(hash);
+    if (!teamId) return "";
+    return "";
   }
 
-  function getRouteMeta(hash) {
-    var current = normalizeHash(hash || window.location.hash || ROUTES.dashboard);
+  function getRouteForItem(itemId, hash) {
+    switch (itemId) {
+      case "projects":
+      case "all-projects":
+        return getProjectsRoute(hash);
+      case "drafts":
+        return getDraftsRoute(hash);
+      case "libraries":
+        return ROUTES.libraries;
+      case "fonts":
+      case "team-fonts":
+        return getNativeFontsRoute(hash);
+      case "font-catalog":
+        return ROUTES.fontCatalog;
+      case "media":
+        return ROUTES.media;
+      case "figma":
+        return ROUTES.figma;
+      case "help":
+        return ROUTES.help;
+      case "learn":
+        return ROUTES.learn;
+      case "releases":
+        return ROUTES.releases;
+      case "changelog":
+        return ROUTES.changelog;
+      case "terms":
+        return ROUTES.terms;
+      case "privacy":
+        return ROUTES.privacy;
+      case "open-source":
+        return ROUTES.openSource;
+      default:
+        return "";
+    }
+  }
+
+  function getActiveNavState(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
     var path = getHashPath(current);
 
     if (isNativeFontsHash(current) || (isDashboardRoute(current) && looksLikeNativeFontsSurface())) {
+      return { activeId: "fonts", childActiveId: "team-fonts" };
+    }
+
+    if (isDraftsHash(current)) {
+      return { activeId: "projects", childActiveId: "drafts" };
+    }
+
+    if (isProjectsHash(current)) {
+      return { activeId: "projects", childActiveId: "all-projects" };
+    }
+
+    switch (path) {
+      case ROUTES.libraries:
+        return { activeId: "libraries", childActiveId: "" };
+      case ROUTES.fontCatalog:
+        return { activeId: "fonts", childActiveId: "font-catalog" };
+      case ROUTES.media:
+        return { activeId: "media", childActiveId: "" };
+      case ROUTES.figma:
+        return { activeId: "figma", childActiveId: "" };
+      case ROUTES.help:
+      case ROUTES.repository:
+      case ROUTES.community:
+        return { activeId: "help", childActiveId: "" };
+      case ROUTES.learn:
+        return { activeId: "learn", childActiveId: "" };
+      case ROUTES.releases:
+        return { activeId: "releases", childActiveId: "" };
+      case ROUTES.changelog:
+        return { activeId: "changelog", childActiveId: "" };
+      case ROUTES.terms:
+        return { activeId: "terms", childActiveId: "" };
+      case ROUTES.privacy:
+        return { activeId: "privacy", childActiveId: "" };
+      case ROUTES.openSource:
+        return { activeId: "open-source", childActiveId: "" };
+      default:
+        return { activeId: "", childActiveId: "" };
+    }
+  }
+
+  function getRouteMeta(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    var path = getHashPath(current);
+    var active = getActiveNavState(current);
+
+    if (active.activeId === "projects" && active.childActiveId === "drafts") {
       return {
-        menuId: "fonts",
-        label: "Шрифты",
-        breadcrumb: ["Панель", "Ресурсы", "Шрифты"]
+        menuId: "projects",
+        childMenuId: "drafts",
+        label: "Черновики",
+        breadcrumb: ["Панель", "Основное", "Проекты", "Черновики"]
       };
     }
 
-    if (isDashboardRoute(path)) {
+    if (active.activeId === "projects") {
       return {
         menuId: "projects",
+        childMenuId: "all-projects",
         label: "Проекты",
-        breadcrumb: ["Панель", "Проекты"]
+        breadcrumb: ["Панель", "Основное", "Проекты", "Все проекты"]
+      };
+    }
+
+    if (active.activeId === "fonts" && active.childActiveId === "team-fonts") {
+      return {
+        menuId: "fonts",
+        childMenuId: "team-fonts",
+        label: "Шрифты команды",
+        breadcrumb: ["Панель", "Ресурсы", "Шрифты", "Шрифты команды"]
+      };
+    }
+
+    if (active.activeId === "fonts" && active.childActiveId === "font-catalog") {
+      return {
+        menuId: "fonts",
+        childMenuId: "font-catalog",
+        label: "Каталог шрифтов",
+        breadcrumb: ["Панель", "Ресурсы", "Шрифты", "Каталог шрифтов"]
       };
     }
 
     if (path === ROUTES.libraries) {
-      return {
-        menuId: "libraries",
-        label: "Библиотеки",
-        breadcrumb: ["Панель", "Ресурсы", "Библиотеки"]
-      };
-    }
-    if (path === ROUTES.fonts) {
-      return {
-        menuId: "fonts",
-        label: "Шрифты",
-        breadcrumb: ["Панель", "Ресурсы", "Шрифты"]
-      };
+      return { menuId: "libraries", childMenuId: "", label: "Библиотеки", breadcrumb: ["Панель", "Ресурсы", "Библиотеки"] };
     }
     if (path === ROUTES.media) {
-      return {
-        menuId: "media",
-        label: "Медиа",
-        breadcrumb: ["Панель", "Ресурсы", "Медиа"]
-      };
+      return { menuId: "media", childMenuId: "", label: "Медиа", breadcrumb: ["Панель", "Ресурсы", "Медиа"] };
     }
     if (path === ROUTES.figma) {
-      return {
-        menuId: "figma",
-        label: "Импорт из Figma",
-        breadcrumb: ["Панель", "Импорт", "Figma"]
-      };
+      return { menuId: "figma", childMenuId: "", label: "Импорт из Figma", breadcrumb: ["Панель", "Ресурсы", "Импорт из Figma"] };
     }
     if (path === ROUTES.help) {
-      return {
-        menuId: "help",
-        label: "Справка",
-        breadcrumb: ["Панель", "Справка", "Центр справки"]
-      };
+      return { menuId: "help", childMenuId: "", label: "Справка", breadcrumb: ["Панель", "Помощь", "Справка"] };
     }
     if (path === ROUTES.learn) {
-      return {
-        menuId: "learn",
-        label: "Обучение",
-        breadcrumb: ["Панель", "Обучение", "Учебный центр"]
-      };
+      return { menuId: "learn", childMenuId: "", label: "Обучение", breadcrumb: ["Панель", "Помощь", "Обучение"] };
     }
-    if (path === "#/nofida/repository") {
-      return {
-        menuId: "help",
-        label: "Репозиторий",
-        breadcrumb: ["Панель", "Справка", "Репозиторий"]
-      };
+    if (path === ROUTES.releases) {
+      return { menuId: "releases", childMenuId: "", label: "Релизы", breadcrumb: ["Панель", "Помощь", "Релизы"] };
     }
-    if (path === "#/nofida/community") {
-      return {
-        menuId: "help",
-        label: "Сообщество",
-        breadcrumb: ["Панель", "Справка", "Сообщество"]
-      };
+    if (path === ROUTES.changelog) {
+      return { menuId: "changelog", childMenuId: "", label: "Журнал изменений", breadcrumb: ["Панель", "Помощь", "Журнал изменений"] };
     }
-    if (path === "#/nofida/releases") {
-      return {
-        menuId: "help",
-        label: "Обновления",
-        breadcrumb: ["Панель", "Справка", "Обновления"]
-      };
+    if (path === ROUTES.terms) {
+      return { menuId: "terms", childMenuId: "", label: "Условия", breadcrumb: ["Панель", "Документы", "Условия"] };
     }
-    if (path === "#/nofida/changelog") {
-      return {
-        menuId: "help",
-        label: "История изменений",
-        breadcrumb: ["Панель", "Справка", "История изменений"]
-      };
+    if (path === ROUTES.privacy) {
+      return { menuId: "privacy", childMenuId: "", label: "Privacy / Data", breadcrumb: ["Панель", "Документы", "Privacy / Data"] };
     }
-    if (path === "#/nofida/terms") {
-      return {
-        menuId: "help",
-        label: "Условия",
-        breadcrumb: ["Панель", "Справка", "Условия"]
-      };
+    if (path === ROUTES.openSource) {
+      return { menuId: "open-source", childMenuId: "", label: "Open Source", breadcrumb: ["Панель", "Документы", "Open Source"] };
     }
-    if (path === "#/nofida/privacy") {
-      return {
-        menuId: "help",
-        label: "Конфиденциальность",
-        breadcrumb: ["Панель", "Справка", "Конфиденциальность"]
-      };
+    if (path === ROUTES.repository) {
+      return { menuId: "help", childMenuId: "", label: "Репозиторий", breadcrumb: ["Панель", "Помощь", "Репозиторий"] };
     }
-    if (path === "#/nofida/open-source-notices") {
-      return {
-        menuId: "help",
-        label: "Лицензии",
-        breadcrumb: ["Панель", "Справка", "Лицензии"]
-      };
+    if (path === ROUTES.community) {
+      return { menuId: "help", childMenuId: "", label: "Сообщество", breadcrumb: ["Панель", "Помощь", "Сообщество"] };
     }
 
     if (isAccountSurface(current)) {
       var params = getHashParams(current);
-      if (params.get("nofida") === "ai") {
-        var tab = params.get("tab") || "api";
-        return {
-          menuId: "account-ai",
-          label: "NOFIDA AI",
-          breadcrumb: ["Аккаунт", "NOFIDA AI", SETTINGS_TAB_LABELS[tab] || "API Configuration"]
-        };
-      }
+      var tab = params.get("tab") || "api";
       return {
         menuId: "account",
-        label: "Аккаунт",
-        breadcrumb: ["Аккаунт", "Настройки"]
+        childMenuId: "",
+        label: params.get("nofida") === "ai" ? "NOFIDA AI" : "Настройки",
+        breadcrumb: ["Аккаунт", params.get("nofida") === "ai" ? "NOFIDA AI" : "Настройки", tab]
       };
     }
 
     if (isEditorSurface(current)) {
       return {
         menuId: "editor",
+        childMenuId: "",
         label: "Редактор",
-        breadcrumb: ["Редактор", "Файл"]
+        breadcrumb: ["Редактор"]
       };
     }
 
     return {
       menuId: "",
+      childMenuId: "",
       label: "",
       breadcrumb: []
     };
@@ -303,18 +532,47 @@
 
   function getResourceMenuItems(hash) {
     return [
-      { id: "projects", label: "Проекты", href: getProjectsHash(hash) },
+      { id: "projects", label: "Проекты", href: getProjectsRoute(hash) },
       { id: "libraries", label: "Библиотеки", href: ROUTES.libraries },
-      { id: "fonts", label: "Шрифты", href: getNativeFontsHash(hash) },
+      { id: "fonts", label: "Шрифты", href: getNativeFontsRoute(hash) },
       { id: "media", label: "Медиа", href: ROUTES.media },
       { id: "figma", label: "Импорт из Figma", href: ROUTES.figma },
       { id: "help", label: "Справка", href: ROUTES.help },
-      { id: "learn", label: "Обучение", href: ROUTES.learn }
+      { id: "learn", label: "Обучение", href: ROUTES.learn },
+      { id: "releases", label: "Релизы", href: ROUTES.releases },
+      { id: "changelog", label: "Журнал изменений", href: ROUTES.changelog },
+      { id: "terms", label: "Условия", href: ROUTES.terms },
+      { id: "privacy", label: "Privacy / Data", href: ROUTES.privacy },
+      { id: "open-source", label: "Open Source", href: ROUTES.openSource }
     ];
   }
 
   function getActiveResourceMenuId(hash) {
-    return getRouteMeta(hash).menuId;
+    return getActiveNavState(hash).activeId || "";
+  }
+
+  function rememberHash(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+
+    if (state.currentHash && state.currentHash !== current) {
+      state.previousHash = state.currentHash;
+    }
+    state.currentHash = current;
+
+    var teamId = getCurrentTeamId(current);
+    if (teamId) state.lastTeamId = teamId;
+
+    if (isDashboardRoute(current)) {
+      state.lastDashboardHash = current;
+      if (isProjectsHash(current) || isDraftsHash(current)) {
+        state.lastProjectsHash = current;
+      }
+    }
+
+    if (isAccountSurface(current)) state.lastAccountHash = current;
+    if (isEditorSurface(current)) state.lastEditorHash = current;
+
+    saveState();
   }
 
   function getRouteOrigin(hash) {
@@ -329,9 +587,9 @@
   }
 
   function getNavigationOrigin(currentHash) {
-    var current = normalizeHash(currentHash || window.location.hash || state.currentHash || ROUTES.dashboard);
+    var current = normalizeHash(currentHash || getCurrentHash() || state.currentHash || ROUTES.dashboard);
     var routeOrigin = getRouteOrigin(current);
-    if (isResourceRoute(current) && routeOrigin) return routeOrigin;
+    if (isNofidaResourceRoute(current) && routeOrigin) return routeOrigin;
     return {
       fromHash: current,
       fromSurface: getCurrentSurface(current),
@@ -339,14 +597,28 @@
     };
   }
 
+  function navigate(hash) {
+    if (!hash || typeof hash !== "string") return;
+    if (hash.indexOf("#/") === 0) {
+      window.location.hash = hash;
+      return;
+    }
+    if (hash.indexOf("/#/") === 0) {
+      window.location.href = hash;
+    }
+  }
+
   function goToNofidaRoute(route, options) {
-    var target = normalizeHash(route);
+    if (!route || typeof route !== "string") return;
+
+    var target = route.indexOf("/#/") === 0 ? route : normalizeHash(route);
+    var targetHash = target.indexOf("/#/") === 0 ? normalizeHash(target) : target;
     var opts = options || {};
 
-    if (opts.rememberOrigin !== false && (isResourceRoute(target) || isEditorSurface(target) || isAccountSurface(target))) {
+    if (opts.rememberOrigin !== false && (isNofidaResourceRoute(targetHash) || isEditorSurface(targetHash) || isAccountSurface(targetHash))) {
       var origin = opts.origin || getNavigationOrigin(opts.fromHash);
-      setRouteOrigin(target, {
-        fromHash: normalizeHash(origin.fromHash || window.location.hash || state.currentHash || ROUTES.dashboard),
+      setRouteOrigin(targetHash, {
+        fromHash: normalizeHash(origin.fromHash || getCurrentHash() || state.currentHash || ROUTES.dashboard),
         fromSurface: origin.fromSurface || getCurrentSurface(origin.fromHash),
         source: opts.source || origin.source || "",
         explicit: opts.explicit !== false,
@@ -355,199 +627,460 @@
     }
 
     if (opts.replace) {
-      history.replaceState(null, "", window.location.pathname + target);
-      rememberHash(target);
-      window.setTimeout(refreshDashboardGroup, 0);
-      return target;
+      history.replaceState(null, "", window.location.pathname + targetHash);
+      rememberHash(targetHash);
+      renderCurrentSurface(targetHash);
+      return targetHash;
     }
 
-    window.location.hash = target.slice(1);
+    navigate(target);
     return target;
   }
 
-  function getSafeBackTarget(currentHash, previousHash) {
-    var current = normalizeHash(currentHash || window.location.hash || state.currentHash || ROUTES.dashboard);
+  function getBackTarget(currentHash, previousHash) {
+    var current = normalizeHash(currentHash || getCurrentHash() || state.currentHash || ROUTES.dashboard);
     var previous = normalizeHash(previousHash || state.previousHash || "");
     var currentSurface = getCurrentSurface(current);
     var origin = getRouteOrigin(current);
 
     if (currentSurface === "account") {
-      return ROUTES.settings;
+      return {
+        hash: ROUTES.settings,
+        label: "Назад к настройкам",
+        surface: "account"
+      };
     }
 
     if (currentSurface === "editor") {
-      if (origin && origin.fromSurface === "editor" && origin.fromHash) return normalizeHash(origin.fromHash);
-      if (previous && getCurrentSurface(previous) === "editor") return previous;
-      return normalizeHash(state.lastEditorHash || "#/workspace");
-    }
-
-    if (isResourceRoute(current)) {
-      if (origin && origin.fromSurface === "editor" && origin.fromHash) return normalizeHash(origin.fromHash);
-      if (origin && origin.fromSurface === "account") return ROUTES.settings;
-      if (origin && origin.fromSurface === "dashboard" && origin.fromHash && !isResourceRoute(origin.fromHash)) {
-        return normalizeHash(origin.fromHash);
+      if (origin && origin.fromSurface === "editor" && origin.fromHash) {
+        return {
+          hash: normalizeHash(origin.fromHash),
+          label: "Назад в редактор",
+          surface: "editor"
+        };
       }
-      if (previous && getCurrentSurface(previous) === "dashboard" && !isResourceRoute(previous)) {
-        return previous;
+      if (previous && getCurrentSurface(previous) === "editor") {
+        return {
+          hash: previous,
+          label: "Назад в редактор",
+          surface: "editor"
+        };
       }
-      return normalizeHash(state.lastDashboardHash || getProjectsHash(current));
+      return {
+        hash: normalizeHash(state.lastEditorHash || "#/workspace"),
+        label: "Назад в редактор",
+        surface: "editor"
+      };
     }
 
-    if (currentSurface === "dashboard") {
-      if (previous && getCurrentSurface(previous) === "dashboard") return previous;
-      return normalizeHash(state.lastDashboardHash || getProjectsHash(current));
+    if (isNofidaResourceRoute(current)) {
+      if (origin && origin.fromSurface === "editor" && origin.fromHash) {
+        return {
+          hash: normalizeHash(origin.fromHash),
+          label: "Назад в редактор",
+          surface: "editor"
+        };
+      }
+      if (origin && origin.fromSurface === "account") {
+        return {
+          hash: ROUTES.settings,
+          label: "Назад к настройкам",
+          surface: "account"
+        };
+      }
+      if (origin && origin.fromSurface === "dashboard" && origin.fromHash && !isNofidaResourceRoute(origin.fromHash)) {
+        return {
+          hash: normalizeHash(origin.fromHash),
+          label: "Назад к проектам",
+          surface: "dashboard"
+        };
+      }
+      if (previous && getCurrentSurface(previous) === "dashboard" && !isNofidaResourceRoute(previous)) {
+        return {
+          hash: previous,
+          label: "Назад к проектам",
+          surface: "dashboard"
+        };
+      }
+      return {
+        hash: normalizeHash(state.lastDashboardHash || getProjectsRoute(current)),
+        label: "Назад к проектам",
+        surface: "dashboard"
+      };
     }
 
-    return ROUTES.dashboard;
-  }
-
-  function getBackLabel(currentHash, previousHash) {
-    var target = getSafeBackTarget(currentHash, previousHash);
-    var surface = getCurrentSurface(target);
-    if (surface === "editor") return "Назад в редактор";
-    if (surface === "account") return "Назад к настройкам";
-    return "Назад к проектам";
-  }
-
-  function getBackTargetInfo(currentHash, previousHash) {
-    var hash = getSafeBackTarget(currentHash, previousHash);
     return {
-      hash: hash,
-      label: getBackLabel(currentHash, previousHash),
-      surface: getCurrentSurface(hash)
+      hash: normalizeHash(state.lastDashboardHash || getProjectsRoute(current)),
+      label: "Назад к проектам",
+      surface: "dashboard"
     };
   }
 
+  function getSafeBackTarget(currentHash, previousHash) {
+    return getBackTarget(currentHash, previousHash).hash;
+  }
+
+  function getBackLabel(currentHash, previousHash) {
+    return getBackTarget(currentHash, previousHash).label;
+  }
+
+  function getBackTargetInfo(currentHash, previousHash) {
+    return getBackTarget(currentHash, previousHash);
+  }
+
   function goBack(currentHash, options) {
-    var target = getSafeBackTarget(currentHash);
-    return goToNofidaRoute(target, Object.assign({}, options || {}, {
+    var backTarget = getBackTarget(currentHash);
+    return goToNofidaRoute(backTarget.hash, Object.assign({}, options || {}, {
       rememberOrigin: false
     }));
   }
 
-  function ensureStyles() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent = [
-      "#nofida-nav-dashboard-group{display:flex;flex-direction:column;gap:6px;padding:8px 6px 0;box-sizing:border-box;list-style:none}",
-      "#nofida-nav-dashboard-group .nofida-nav-group-label{padding:0 6px;color:#93a8c7;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}",
-      "#nofida-nav-dashboard-group .nofida-nav-link{display:flex;align-items:center;min-height:32px;padding:7px 10px;border-radius:10px;border:1px solid transparent;color:#bfd3eb;text-decoration:none;font-size:12px;font-weight:700;transition:background .15s ease,border-color .15s ease,color .15s ease;box-sizing:border-box}",
-      "#nofida-nav-dashboard-group .nofida-nav-link:hover{background:rgba(37,99,235,.12);border-color:rgba(37,99,235,.24);color:#fff}",
-      "#nofida-nav-dashboard-group .nofida-nav-link.active{background:rgba(37,99,235,.16);border-color:rgba(37,99,235,.32);color:#fff}"
-    ].join("");
-    document.head.appendChild(style);
+  function escapeHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
-  function findDashboardSidebarNav() {
-    var selectors = [
-      ".main_ui_dashboard_sidebar__sidebar-nav",
-      "[class*='dashboard_sidebar'][class*='nav']",
-      "[class*='dashboard_sidebar'][class*='menu']",
-      "[class*='dashboard-sidebar'] nav",
-      "[class*='dashboard-sidebar'] ul"
-    ];
+  function isVisibleNode(node) {
+    if (!node) return false;
+    var style = window.getComputedStyle(node);
+    var rect = node.getBoundingClientRect();
+    return style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      rect.width > 0 &&
+      rect.height > 0;
+  }
+
+  function pickVisibleNode(selectors) {
     for (var index = 0; index < selectors.length; index += 1) {
       var node = document.querySelector(selectors[index]);
-      if (node) return node;
+      if (isVisibleNode(node)) return node;
     }
-    var navEls = document.querySelectorAll("nav, [role='navigation'], aside ul");
-    for (var navIndex = 0; navIndex < navEls.length; navIndex += 1) {
-      if (/черновики|drafts|проекты|projects/i.test(navEls[navIndex].textContent || "")) return navEls[navIndex];
-    }
-    return document.querySelector("[class*='dashboard_sidebar']");
+    return null;
   }
 
-  function buildDashboardGroup(nav) {
-    var existing = document.getElementById(DASHBOARD_GROUP_ID);
-    if (existing && existing.parentNode !== nav) existing.parentNode.removeChild(existing);
-    if (existing && existing.parentNode === nav) return existing;
+  function getWorkspaceInfo() {
+    var node = pickVisibleNode([
+      ".main_ui_dashboard_sidebar__team-name",
+      "[class*='dashboard_sidebar__team-name']",
+      "[class*='team-name']",
+      "[data-testid='team-name']"
+    ]);
 
-    var group = document.createElement(nav && nav.tagName === "UL" ? "li" : "div");
-    group.id = DASHBOARD_GROUP_ID;
-    nav.appendChild(group);
-    return group;
+    var name = node ? String(node.textContent || "").replace(/\s+/g, " ").trim() : "";
+    if (!name) name = "NOFIDA Workspace";
+
+    return {
+      name: name,
+      hasDropdown: !!(node && (node.closest("button") || node.querySelector("svg, [aria-haspopup='listbox'], [aria-haspopup='menu']")))
+    };
   }
 
-  function renderDashboardGroup() {
-    if (!isDashboardSurface(window.location.hash || state.currentHash || ROUTES.dashboard)) {
-      var oldGroup = document.getElementById(DASHBOARD_GROUP_ID);
-      if (oldGroup && oldGroup.parentNode) oldGroup.parentNode.removeChild(oldGroup);
+  function getUserInfo() {
+    var node = pickVisibleNode([
+      ".main_ui_dashboard_sidebar__profile",
+      ".main_ui_dashboard_sidebar__sidebar-team",
+      "[class*='dashboard_sidebar__profile']",
+      "[class*='profile']",
+      "[class*='account']",
+      "[class*='user-menu']"
+    ]);
+
+    var text = node ? String(node.textContent || "").replace(/\s+/g, " ").trim() : "";
+    var name = text ? text.split("  ").join(" ").trim() : "";
+    if (!name) name = "Аккаунт";
+
+    var initial = name.charAt(0).toUpperCase() || "N";
+    return {
+      name: name,
+      initial: initial
+    };
+  }
+
+  function ensureShell() {
+    var shell = document.getElementById(SHELL_ID);
+    if (!shell) {
+      shell = document.createElement("div");
+      shell.id = SHELL_ID;
+      shell.className = "nofida-shell";
+      shell.setAttribute("data-surface", "dashboard-resource");
+      shell.innerHTML = [
+        '<aside id="' + SIDEBAR_ID + '" class="nofida-shell-sidebar">',
+        '  <div class="nofida-shell-workspace"></div>',
+        '  <div class="nofida-shell-search">',
+        '    <input type="search" placeholder="' + escapeHtml(SEARCH_PLACEHOLDER) + '" aria-label="' + escapeHtml(SEARCH_PLACEHOLDER) + '" autocomplete="off" spellcheck="false">',
+        "  </div>",
+        '  <nav id="' + NAV_ID + '" class="nofida-shell-nav"></nav>',
+        '  <div class="nofida-shell-footer"></div>',
+        "</aside>",
+        '<main id="' + MAIN_ID + '" class="nofida-shell-main">',
+        '  <div id="' + FRAME_ID + '" class="nofida-page-frame"></div>',
+        "</main>"
+      ].join("");
+      document.body.appendChild(shell);
+    }
+
+    return {
+      shell: shell,
+      sidebar: document.getElementById(SIDEBAR_ID),
+      workspace: shell.querySelector(".nofida-shell-workspace"),
+      search: shell.querySelector(".nofida-shell-search input"),
+      nav: document.getElementById(NAV_ID),
+      footer: shell.querySelector(".nofida-shell-footer"),
+      main: document.getElementById(MAIN_ID),
+      frame: document.getElementById(FRAME_ID)
+    };
+  }
+
+  function clearShellBodyClasses() {
+    document.body.classList.remove(BODY_CLASS_NATIVE);
+    document.body.classList.remove(BODY_CLASS_PAGE);
+  }
+
+  function renderWorkspace(els) {
+    var workspace = getWorkspaceInfo();
+    els.workspace.innerHTML = [
+      '<div class="nofida-workspace-row">',
+      '  <img class="nofida-workspace-logo" src="/nofida/brand/icon.png' + escapeHtml(ASSET_QUERY) + '" alt="NOFIDA">',
+      '  <span class="nofida-workspace-name">' + escapeHtml(workspace.name) + "</span>",
+      workspace.hasDropdown ? '  <span class="nofida-workspace-caret" aria-hidden="true">▾</span>' : "",
+      "</div>"
+    ].join("");
+  }
+
+  function renderFooter(els) {
+    var user = getUserInfo();
+    els.footer.innerHTML = [
+      '<div class="nofida-footer-user">',
+      '  <span class="nofida-footer-avatar" aria-hidden="true">' + escapeHtml(user.initial) + "</span>",
+      '  <span class="nofida-footer-name">' + escapeHtml(user.name) + "</span>",
+      '  <button type="button" class="nofida-footer-settings" data-nofida-route="' + escapeHtml(ROUTES.settings) + '">Настройки</button>',
+      "</div>"
+    ].join("");
+  }
+
+  function renderNav(els, route, forcedActiveId, forcedChildActiveId) {
+    var active = forcedActiveId || forcedChildActiveId
+      ? { activeId: forcedActiveId || "", childActiveId: forcedChildActiveId || "" }
+      : getActiveNavState(route);
+
+    els.nav.innerHTML = NAV_TREE.map(function (section) {
+      return [
+        '<section class="nofida-nav-section">',
+        '  <div class="nofida-nav-section-title">' + escapeHtml(section.section) + "</div>",
+        section.items.map(function (item) {
+          var routeForItem = getRouteForItem(item.id, route);
+          var parentActive = active.activeId === item.id;
+          var childActive = item.childIds && item.childIds.indexOf(active.childActiveId) >= 0;
+          var parentClasses = ["nofida-nav-item"];
+          if (parentActive && !childActive) parentClasses.push("is-active");
+          if (parentActive || childActive) parentClasses.push("is-parent-active");
+          if (!routeForItem && item.children && item.children.length) parentClasses.push("is-disabled");
+
+          var parentButton = [
+            '<button type="button" class="' + parentClasses.join(" ") + '"',
+            routeForItem ? ' data-nofida-route="' + escapeHtml(routeForItem) + '"' : ' disabled="disabled"',
+            ' data-nofida-nav-id="' + escapeHtml(item.id) + '">',
+            '  <span class="nofida-nav-dot" aria-hidden="true"></span>',
+            '  <span>' + escapeHtml(item.label) + "</span>",
+            "</button>"
+          ].join("");
+
+          var children = (item.children || []).map(function (child) {
+            var childRoute = getRouteForItem(child.id, route);
+            var childClasses = ["nofida-nav-subitem"];
+            var isChildActive = active.childActiveId === child.id;
+            if (isChildActive) childClasses.push("is-active");
+            if (child.disabled || !childRoute) childClasses.push("is-disabled");
+            return [
+              '<button type="button" class="' + childClasses.join(" ") + '"',
+              childRoute && !child.disabled ? ' data-nofida-route="' + escapeHtml(childRoute) + '"' : ' disabled="disabled"',
+              child.disabledTitle ? ' title="' + escapeHtml(child.disabledTitle) + '"' : "",
+              ' data-nofida-nav-child-id="' + escapeHtml(child.id) + '">',
+              '  <span class="nofida-nav-dot" aria-hidden="true"></span>',
+              '  <span>' + escapeHtml(child.label) + "</span>",
+              "</button>"
+            ].join("");
+          }).join("");
+
+          return parentButton + children;
+        }).join(""),
+        "</section>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderFrameChrome(options) {
+    var route = normalizeHash(options.route || getCurrentHash());
+    var meta = getRouteMeta(route);
+    var backTarget = options.backTarget || getBackTarget(route);
+    var breadcrumb = Array.isArray(options.breadcrumb) ? options.breadcrumb : meta.breadcrumb;
+    var title = options.title || meta.label || "NOFIDA";
+    var subtitle = options.subtitle || "";
+    var showHeader = options.hideFrameHeader !== true;
+    var showBack = options.showBackButton !== false;
+
+    return [
+      showBack ? [
+        '<div class="nofida-page-backrow">',
+        '  <button type="button" class="nofida-page-back" data-nofida-back="safe" data-nofida-current="' + escapeHtml(route) + '">' + escapeHtml(backTarget.label) + "</button>",
+        "</div>"
+      ].join("") : "",
+      breadcrumb && breadcrumb.length ? '<div class="nofida-page-breadcrumb">' + breadcrumb.map(function (segment) {
+        return '<span>' + escapeHtml(segment) + "</span>";
+      }).join('<span>/</span>') + "</div>" : "",
+      showHeader ? [
+        '<header class="nofida-page-header">',
+        '  <h1 class="nofida-page-title">' + escapeHtml(title) + "</h1>",
+        subtitle ? '  <p class="nofida-page-subtitle">' + escapeHtml(subtitle) + "</p>" : "",
+        "</header>"
+      ].join("") : "",
+      options.contentHtml || ""
+    ].join("");
+  }
+
+  function renderShellChrome(route, mode, forcedActiveId, forcedChildActiveId) {
+    var els = ensureShell();
+    els.shell.setAttribute("data-surface", "dashboard-resource");
+    els.shell.setAttribute("data-route-kind", mode);
+    renderWorkspace(els);
+    renderFooter(els);
+    renderNav(els, route, forcedActiveId, forcedChildActiveId);
+    return els;
+  }
+
+  function renderDashboardShell(options) {
+    var opts = options || {};
+    var route = normalizeHash(opts.route || getCurrentHash());
+    var active = opts.activeId || opts.childActiveId
+      ? { activeId: opts.activeId || "", childActiveId: opts.childActiveId || "" }
+      : getActiveNavState(route);
+    var els = renderShellChrome(route, "shell-page", active.activeId, active.childActiveId);
+
+    clearShellBodyClasses();
+    document.body.classList.add(BODY_CLASS_PAGE);
+
+    els.frame.innerHTML = renderFrameChrome({
+      route: route,
+      breadcrumb: opts.breadcrumb,
+      title: opts.title,
+      subtitle: opts.subtitle,
+      contentHtml: opts.contentHtml,
+      hideFrameHeader: opts.hideFrameHeader,
+      showBackButton: opts.showBackButton,
+      backTarget: opts.backTarget
+    });
+
+    state.shellOwner = opts.owner || "";
+    state.shellRoute = route;
+    saveState();
+    return els.shell;
+  }
+
+  function renderNativeDashboardShell(hash) {
+    var route = normalizeHash(hash || getCurrentHash());
+    var active = getActiveNavState(route);
+    var els = renderShellChrome(route, "native-dashboard", active.activeId, active.childActiveId);
+
+    clearShellBodyClasses();
+    document.body.classList.add(BODY_CLASS_NATIVE);
+    els.frame.innerHTML = "";
+
+    state.shellOwner = "";
+    state.shellRoute = route;
+    saveState();
+    return els.shell;
+  }
+
+  function updateDashboardShellActiveState(options) {
+    var opts = options && typeof options === "object" ? options : {};
+    var route = normalizeHash(opts.route || getCurrentHash());
+    var shell = document.getElementById(SHELL_ID);
+    if (!shell) return;
+
+    var mode = shell.getAttribute("data-route-kind") || "shell-page";
+    var active = opts.activeId || opts.childActiveId
+      ? { activeId: opts.activeId || "", childActiveId: opts.childActiveId || "" }
+      : getActiveNavState(route);
+    renderShellChrome(route, mode, active.activeId, active.childActiveId);
+  }
+
+  function destroyDashboardShell() {
+    clearShellBodyClasses();
+    var shell = document.getElementById(SHELL_ID);
+    if (shell && shell.parentNode) shell.parentNode.removeChild(shell);
+    state.shellOwner = "";
+    state.shellRoute = "";
+    saveState();
+  }
+
+  function renderPlaceholderPage(hash) {
+    var route = normalizeHash(hash || getCurrentHash());
+    var meta = getRouteMeta(route);
+    renderDashboardShell({
+      owner: PLACEHOLDER_OWNER,
+      route: route,
+      activeId: meta.menuId,
+      childActiveId: meta.childMenuId,
+      breadcrumb: meta.breadcrumb,
+      title: meta.label || "NOFIDA",
+      subtitle: "",
+      contentHtml: '<div class="nofida-page-card">Загрузка страницы NOFIDA...</div>'
+    });
+  }
+
+  function scheduleDashboardRefresh() {
+    while (refreshTimers.length) {
+      window.clearTimeout(refreshTimers.pop());
+    }
+
+    [0, 160, 640, 1400].forEach(function (delay) {
+      refreshTimers.push(window.setTimeout(function () {
+        if (!isDashboardRoute(getCurrentHash()) || isNofidaResourceRoute(getCurrentHash())) return;
+        renderNativeDashboardShell(getCurrentHash());
+      }, delay));
+    });
+  }
+
+  function renderCurrentSurface(hash) {
+    var current = normalizeHash(hash || getCurrentHash());
+    var surface = getSurface(current);
+
+    if (surface === "account" || surface === "editor" || surface === "other") {
+      destroyDashboardShell();
       return;
     }
 
-    var nav = findDashboardSidebarNav();
-    if (!nav) return;
+    if (isDashboardRoute(current) && !isNofidaResourceRoute(current)) {
+      renderNativeDashboardShell(current);
+      scheduleDashboardRefresh();
+      return;
+    }
 
-    ensureStyles();
-    var group = buildDashboardGroup(nav);
-    var current = normalizeHash(window.location.hash || state.currentHash || ROUTES.dashboard);
-    var activeId = getActiveResourceMenuId(current);
-    var items = getResourceMenuItems(current);
-    var markup = [
-      '<div class="nofida-nav-group-label">Ресурсы</div>',
-      items.map(function (item) {
-        var active = item.id === activeId ? " active" : "";
-        return '<a class="nofida-nav-link' + active + '" href="' + item.href + '" data-nofida-route="' + item.href + '" data-nofida-source="dashboard-menu">' +
-          item.label + "</a>";
-      }).join("")
-    ].join("");
-
-    if (group.innerHTML === markup) return;
-    group.innerHTML = markup;
+    if (isNofidaResourceRoute(current)) {
+      if (state.shellOwner && state.shellOwner !== PLACEHOLDER_OWNER && state.shellRoute === current) {
+        updateDashboardShellActiveState({ route: current });
+        return;
+      }
+      renderPlaceholderPage(current);
+    }
   }
 
   function refreshDashboardGroup() {
-    renderDashboardGroup();
+    renderCurrentSurface(getCurrentHash());
   }
 
-  function scheduleDashboardGroupRefresh() {
-    if (observerTimer) window.clearTimeout(observerTimer);
-    observerTimer = window.setTimeout(function () {
-      observerTimer = null;
-      refreshDashboardGroup();
-    }, 160);
-  }
-
-  function stopObserver() {
-    if (observerTimer) {
-      window.clearTimeout(observerTimer);
-      observerTimer = null;
-    }
-    if (observer) observer.disconnect();
-    observer = null;
-    observerRoot = null;
-  }
-
-  function ensureObserver() {
-    if (!isDashboardSurface(window.location.hash || state.currentHash || ROUTES.dashboard) || !window.MutationObserver) {
-      stopObserver();
-      return;
-    }
-
-    var nextRoot = document.getElementById("app");
-    if (!nextRoot) {
-      stopObserver();
-      return;
-    }
-    if (observer && observerRoot === nextRoot) return;
-
-    stopObserver();
-    observerRoot = nextRoot;
-    observer = new MutationObserver(function (mutations) {
-      var relevant = mutations.some(function (mutation) {
-        if (!mutation.target || !mutation.target.closest) return false;
-        if (mutation.target.closest("#" + DASHBOARD_GROUP_ID)) return false;
-        return mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0;
-      });
-      if (relevant) scheduleDashboardGroupRefresh();
-    });
-    observer.observe(nextRoot, { childList: true, subtree: true });
+  function findDashboardSidebarNav() {
+    return document.querySelector(".main_ui_dashboard_sidebar__sidebar-nav");
   }
 
   function ensureClickHandling() {
     if (clickBound) return;
     clickBound = true;
+
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (!(target instanceof HTMLElement)) return;
@@ -568,58 +1101,67 @@
       var backButton = target.closest("[data-nofida-back='safe']");
       if (backButton) {
         event.preventDefault();
-        goBack(backButton.getAttribute("data-nofida-current") || window.location.hash || ROUTES.dashboard, {
+        goBack(backButton.getAttribute("data-nofida-current") || getCurrentHash(), {
           replace: backButton.getAttribute("data-nofida-replace") === "true"
         });
       }
     });
   }
 
-  function onRouteChange() {
-    rememberHash(window.location.hash || ROUTES.dashboard);
-    ensureObserver();
-    refreshDashboardGroup();
-  }
-
   function init() {
-    rememberHash(window.location.hash || ROUTES.dashboard);
+    rememberHash(getCurrentHash());
     ensureClickHandling();
-    ensureObserver();
-    refreshDashboardGroup();
-    window.addEventListener("hashchange", onRouteChange);
+    renderCurrentSurface(getCurrentHash());
+    window.addEventListener("hashchange", function () {
+      rememberHash(getCurrentHash());
+      renderCurrentSurface(getCurrentHash());
+    });
   }
 
   window.NofidaNavigation = {
     ROUTES: ROUTES,
     normalizeHash: normalizeHash,
+    getCurrentHash: getCurrentHash,
     getHashPath: getHashPath,
     getHashParams: getHashParams,
-    getProjectsHash: getProjectsHash,
-    getNativeFontsHash: getNativeFontsHash,
+    getCurrentTeamId: getCurrentTeamId,
+    getProjectsHash: getProjectsRoute,
+    getNativeFontsHash: getNativeFontsRoute,
+    getSurface: getSurface,
+    getCurrentSurface: getCurrentSurface,
     isDashboardSurface: isDashboardSurface,
     isAccountSurface: isAccountSurface,
     isEditorSurface: isEditorSurface,
-    isResourceRoute: isResourceRoute,
-    getCurrentSurface: getCurrentSurface,
+    isNofidaResourceRoute: isNofidaResourceRoute,
+    isResourceRoute: isNofidaResourceRoute,
+    getRouteForItem: getRouteForItem,
+    getActiveNavState: getActiveNavState,
     getRouteMeta: getRouteMeta,
     getResourceMenuItems: getResourceMenuItems,
     getActiveResourceMenuId: getActiveResourceMenuId,
+    navigate: navigate,
+    goToNofidaRoute: goToNofidaRoute,
+    renderDashboardShell: renderDashboardShell,
+    updateDashboardShellActiveState: updateDashboardShellActiveState,
+    destroyDashboardShell: destroyDashboardShell,
+    getBackTarget: getBackTarget,
     getSafeBackTarget: getSafeBackTarget,
     getBackLabel: getBackLabel,
     getBackTargetInfo: getBackTargetInfo,
-    goToNofidaRoute: goToNofidaRoute,
     goBack: goBack,
     rememberHash: rememberHash,
-    findDashboardSidebarNav: findDashboardSidebarNav,
     refreshDashboardGroup: refreshDashboardGroup,
+    findDashboardSidebarNav: findDashboardSidebarNav,
     getState: function () {
       return {
         currentHash: state.currentHash || "",
         previousHash: state.previousHash || "",
         lastDashboardHash: state.lastDashboardHash || "",
+        lastProjectsHash: state.lastProjectsHash || "",
         lastAccountHash: state.lastAccountHash || "",
         lastEditorHash: state.lastEditorHash || "",
-        lastTeamId: state.lastTeamId || ""
+        lastTeamId: state.lastTeamId || "",
+        shellOwner: state.shellOwner || ""
       };
     }
   };

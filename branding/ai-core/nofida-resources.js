@@ -1836,7 +1836,9 @@
   }
 
   function renderBody(pageId, token) {
+    if (!state.overlayEl) return;
     var content = state.overlayEl.querySelector("#nfr-content");
+    if (!content) return;
 
     if (pageId === "figma") {
       content.innerHTML = renderFigmaBody();
@@ -1878,9 +1880,7 @@
     loadJson("mediaCatalog", MEDIA_CATALOG_URL).catch(function () { return null; });
   }
 
-  function ensureOverlay() {
-    if (state.overlayEl) return state.overlayEl;
-
+  function ensureResourceStyles() {
     if (!document.getElementById("nfr-styles")) {
       var style = document.createElement("style");
       style.id = "nfr-styles";
@@ -1890,86 +1890,62 @@
 
     ensureToast();
     ensureDetailOverlay();
+  }
 
-    var overlay = document.createElement("div");
-    overlay.id = OVERLAY_ID;
-    overlay.setAttribute("hidden", "");
-    overlay.innerHTML = [
-      '<div class="nfr-shell">',
-      '  <div class="nfr-topbar">',
-      '    <div class="nfr-topcopy">',
-      '      <p class="nfr-breadcrumb" id="nfr-breadcrumb">Панель / Ресурсы</p>',
-      '      <span class="nfr-surface-pill">Панель</span>',
-      "    </div>",
-      '    <button class="nfr-back" id="nfr-back" type="button">Назад к проектам</button>',
-      "  </div>",
-      '  <div class="nfr-layout">',
-      '    <aside class="nfr-nav-panel">',
-      '      <p class="nfr-nav-kicker">Ресурсы</p>',
-      '      <div class="nfr-nav-list" id="nfr-nav"></div>',
-      "    </aside>",
-      '    <main class="nfr-main" aria-live="polite">',
-      '      <section class="nfr-hero">',
-      '        <div class="nfr-hero-head">',
-      '          <span class="nfr-badge" id="nfr-badge">Ресурсы</span>',
-      '          <h1 id="nfr-title">Ресурсы NOFIDA</h1>',
-      "        </div>",
-      '        <p class="nfr-intro" id="nfr-intro"></p>',
-      '        <div id="nfr-actions"></div>',
-      '        <div class="nfr-notice" id="nfr-notice"></div>',
-      "      </section>",
-      '      <section id="nfr-content"></section>',
-      '      <p class="nfr-footer-note" id="nfr-footer-note">Ресурсы NOFIDA доступны внутри рабочего пространства.</p>',
-      "    </main>",
-      "  </div>",
+  function buildShellContent() {
+    return [
+      '<div id="nfr-shell-root">',
+      '  <div id="nfr-actions"></div>',
+      '  <div class="nfr-notice" id="nfr-notice"></div>',
+      '  <section id="nfr-content"></section>',
+      '  <p class="nfr-footer-note" id="nfr-footer-note"></p>',
       "</div>"
     ].join("");
-
-    document.body.appendChild(overlay);
-    overlay.querySelector("#nfr-back").addEventListener("click", closeToPrevious);
-    state.overlayEl = overlay;
-    return overlay;
   }
 
   function renderPage(pageId) {
+    var nav = getNav();
     var page = PAGES[pageId];
-    if (!page) return;
+    var currentHash = getPageHash(pageId);
+    var routeMeta = nav ? nav.getRouteMeta(currentHash) : null;
+    if (!page || !nav || !routeMeta) return;
 
-    var overlay = ensureOverlay();
+    ensureResourceStyles();
+    nav.renderDashboardShell({
+      owner: "resources",
+      route: currentHash,
+      activeId: routeMeta.menuId,
+      childActiveId: routeMeta.childMenuId,
+      breadcrumb: routeMeta.breadcrumb,
+      title: page.title,
+      subtitle: page.intro,
+      contentHtml: buildShellContent()
+    });
+
+    state.overlayEl = document.getElementById("nfr-shell-root");
+    if (!state.overlayEl) return;
+
     var token = Date.now();
     state.renderToken = token;
     state.currentPageId = pageId;
 
-    overlay.querySelector("#nfr-nav").innerHTML = renderNav(pageId);
-    overlay.querySelector("#nfr-breadcrumb").textContent = getBreadcrumb(pageId);
-    overlay.querySelector("#nfr-badge").textContent = page.badge;
-    overlay.querySelector("#nfr-title").textContent = page.title;
-    overlay.querySelector("#nfr-intro").textContent = page.intro;
-    overlay.querySelector("#nfr-actions").innerHTML = renderActions(page.actions || []);
-    overlay.querySelector("#nfr-notice").textContent = page.notice || "";
-    overlay.querySelector("#nfr-back").textContent = getBackInfo(pageId).label;
-    overlay.querySelector("#nfr-footer-note").textContent =
+    state.overlayEl.querySelector("#nfr-actions").innerHTML = renderActions(page.actions || []);
+    var noticeEl = state.overlayEl.querySelector("#nfr-notice");
+    noticeEl.textContent = page.notice || "";
+    noticeEl.hidden = !page.notice;
+    state.overlayEl.querySelector("#nfr-footer-note").textContent =
       pageId === "figma"
         ? "План переноса формируется локально и не меняет файлы проекта автоматически."
         : "Ресурсы NOFIDA доступны внутри рабочего пространства.";
 
-    bindActionHandlers(overlay.querySelector("#nfr-actions"));
+    bindActionHandlers(state.overlayEl.querySelector("#nfr-actions"));
     renderBody(pageId, token);
-    overlay.scrollTop = 0;
-  }
-
-  function showPage(pageId) {
-    var overlay = ensureOverlay();
-    renderPage(pageId);
-    overlay.removeAttribute("hidden");
-    document.body.style.overflow = "hidden";
   }
 
   function hidePages() {
-    if (!state.overlayEl) return;
-    state.overlayEl.setAttribute("hidden", "");
+    state.overlayEl = null;
+    state.currentPageId = "";
     closeDetails();
-    document.body.style.overflow = "";
   }
 
   function closeToPrevious() {
@@ -2092,7 +2068,7 @@
     var nativeSurfaceActive = isNativeFontsHash(hash) || looksLikeNativeFontsSurface();
 
     if (pageId) {
-      showPage(pageId);
+      renderPage(pageId);
     } else {
       rememberAppHash(hash);
       hidePages();
@@ -2114,14 +2090,14 @@
       closeDetails();
       return;
     }
-    if (!state.overlayEl || state.overlayEl.hasAttribute("hidden")) return;
+    if (!state.currentPageId) return;
     closeToPrevious();
   }
 
   function init() {
     rememberAppHash(window.location.hash || "#/dashboard");
     rememberTeamId();
-    ensureOverlay();
+    ensureResourceStyles();
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("keydown", onKeyDown);
     onHashChange();

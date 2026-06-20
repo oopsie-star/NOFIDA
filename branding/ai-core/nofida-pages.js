@@ -606,27 +606,6 @@
     return "#/nofida/" + pageId;
   }
 
-  function getBackInfo(pageId) {
-    var nav = getNav();
-    var currentHash = getPageHash(pageId);
-    if (!nav) {
-      return {
-        hash: normalizeHash(state.lastAppHash || "#/dashboard"),
-        label: "Назад к проектам"
-      };
-    }
-    return nav.getBackTargetInfo(currentHash, window.location.hash || currentHash);
-  }
-
-  function getBreadcrumb(pageId) {
-    var nav = getNav();
-    if (!nav) return "Панель / Справка";
-    var routeMeta = nav.getRouteMeta(getPageHash(pageId));
-    return routeMeta && Array.isArray(routeMeta.breadcrumb) && routeMeta.breadcrumb.length
-      ? routeMeta.breadcrumb.join(" / ")
-      : "Панель / Справка";
-  }
-
   function renderLinks(links) {
     if (!Array.isArray(links) || links.length === 0) return "";
     return [
@@ -669,43 +648,42 @@
     }).join("");
   }
 
-  function renderNav(currentPageId) {
-    var nav = getNav();
-    if (!nav) {
-      return NAV_ITEMS.map(function (item) {
-        var classes = ["nfp-nav-link"];
-        if (item.id === currentPageId) classes.push("active");
-        return '<a class="' + classes.join(" ") + '" href="#/nofida/' + item.id + '">' +
-          escapeHtml(item.label) + "</a>";
-      }).join("");
-    }
-
-    var currentHash = getPageHash(currentPageId);
-    var activeId = nav.getActiveResourceMenuId(currentHash);
-    return nav.getResourceMenuItems(currentHash).map(function (item) {
-      var classes = ["nfp-nav-link"];
-      if (item.id === activeId) classes.push("active");
-      return '<a class="' + classes.join(" ") + '" href="' + escapeHtml(item.href) + '" data-nofida-route="' +
-        escapeHtml(item.href) + '">' + escapeHtml(item.label) + "</a>";
-    }).join("");
+  function buildShellContent() {
+    return [
+      '<div id="nfp-shell-root">',
+      '  <div class="nfp-actions-wrap" id="nfp-actions-wrap"></div>',
+      '  <div class="nfp-notice" id="nfp-notice" hidden></div>',
+      '  <section class="nfp-grid" id="nfp-grid"></section>',
+      '  <p class="nfp-footer-note" id="nfp-footer-note"></p>',
+      "</div>"
+    ].join("");
   }
 
   function renderPage(pageId) {
+    var nav = getNav();
     var page = PAGES[pageId];
-    if (!page || !state.overlayEl) return;
+    var currentHash = getPageHash(pageId);
+    var routeMeta = nav ? nav.getRouteMeta(currentHash) : null;
+    if (!page || !nav || !routeMeta) return;
+
+    nav.renderDashboardShell({
+      owner: "pages",
+      route: currentHash,
+      activeId: routeMeta.menuId,
+      childActiveId: routeMeta.childMenuId,
+      breadcrumb: routeMeta.breadcrumb,
+      title: page.title,
+      subtitle: page.intro,
+      contentHtml: buildShellContent()
+    });
+
+    state.overlayEl = document.getElementById("nfp-shell-root");
+    if (!state.overlayEl) return;
+
     state.currentPageId = pageId;
+    state.overlayEl.querySelector("#nfp-actions-wrap").innerHTML = renderActions(page.actions || []);
 
-    var overlay = state.overlayEl;
-    overlay.querySelector("#nfp-nav").innerHTML = renderNav(pageId);
-    overlay.querySelector("#nfp-breadcrumb").textContent = getBreadcrumb(pageId);
-    overlay.querySelector("#nfp-badge").textContent = page.badge || "Internal page";
-    overlay.querySelector("#nfp-title").textContent = page.title;
-    overlay.querySelector("#nfp-intro").textContent = page.intro;
-    overlay.querySelector("#nfp-actions-wrap").innerHTML = renderActions(page.actions || []);
-    var backInfo = getBackInfo(pageId);
-    overlay.querySelector("#nfp-back").textContent = backInfo.label;
-
-    var noticeEl = overlay.querySelector("#nfp-notice");
+    var noticeEl = state.overlayEl.querySelector("#nfp-notice");
     if (page.notice) {
       noticeEl.textContent = page.notice;
       noticeEl.hidden = false;
@@ -714,74 +692,16 @@
       noticeEl.textContent = "";
     }
 
-    overlay.querySelector("#nfp-grid").innerHTML = renderSections(page.sections || []);
-    overlay.querySelector("#nfp-footer-note").textContent =
+    state.overlayEl.querySelector("#nfp-grid").innerHTML = renderSections(page.sections || []);
+    state.overlayEl.querySelector("#nfp-footer-note").textContent =
       pageId === "terms" || pageId === "privacy"
         ? "Placeholder only. Replace after legal review."
         : "Страница NOFIDA внутри рабочего пространства.";
-    overlay.scrollTop = 0;
-  }
-
-  function buildOverlay() {
-    if (state.overlayEl) return state.overlayEl;
-
-    var overlay = document.createElement("div");
-    overlay.id = OVERLAY_ID;
-    overlay.setAttribute("hidden", "");
-    overlay.innerHTML = [
-      '<div class="nfp-shell">',
-      '  <div class="nfp-topbar">',
-      '    <div class="nfp-topcopy">',
-      '      <p class="nfp-breadcrumb" id="nfp-breadcrumb">Панель / Справка</p>',
-      '      <span class="nfp-surface-pill">Панель</span>',
-      "    </div>",
-      '    <button class="nfp-back" id="nfp-back" type="button">Назад к проектам</button>',
-      "  </div>",
-      '  <div class="nfp-layout">',
-      '    <aside class="nfp-nav-panel">',
-      '      <p class="nfp-nav-kicker">Ресурсы</p>',
-      '      <div class="nfp-nav" id="nfp-nav"></div>',
-      "    </aside>",
-      '    <main class="nfp-main" aria-live="polite">',
-      '      <section class="nfp-hero">',
-      '        <div class="nfp-hero-head">',
-      '          <span class="nfp-badge" id="nfp-badge">Internal page</span>',
-      '          <h1 id="nfp-title">NOFIDA</h1>',
-      "        </div>",
-      '        <p class="nfp-intro" id="nfp-intro"></p>',
-      '        <div class="nfp-actions-wrap" id="nfp-actions-wrap"></div>',
-      '        <div class="nfp-notice" id="nfp-notice" hidden></div>',
-      "      </section>",
-      '      <section class="nfp-grid" id="nfp-grid"></section>',
-      '      <p class="nfp-footer-note" id="nfp-footer-note"></p>',
-      "    </main>",
-      "  </div>",
-      "</div>"
-    ].join("");
-
-    document.body.appendChild(overlay);
-    overlay.querySelector("#nfp-back").addEventListener("click", closeToPrevious);
-
-    state.overlayEl = overlay;
-    return overlay;
-  }
-
-  function showPage(pageId) {
-    var overlay = buildOverlay();
-    renderPage(pageId);
-    overlay.removeAttribute("hidden");
-    document.body.style.overflow = "hidden";
-    window.requestAnimationFrame(function () {
-      if (state.overlayEl && !state.overlayEl.hasAttribute("hidden")) {
-        document.body.style.overflow = "hidden";
-      }
-    });
   }
 
   function hidePages() {
-    if (!state.overlayEl) return;
-    state.overlayEl.setAttribute("hidden", "");
-    document.body.style.overflow = "";
+    state.currentPageId = "";
+    state.overlayEl = null;
   }
 
   function closeToPrevious() {
@@ -801,7 +721,7 @@
     var pageId = getPageIdFromHash(hash);
 
     if (pageId) {
-      showPage(pageId);
+      renderPage(pageId);
       return;
     }
 
@@ -811,13 +731,12 @@
 
   function onKeyDown(ev) {
     if (ev.key !== "Escape") return;
-    if (!state.overlayEl || state.overlayEl.hasAttribute("hidden")) return;
+    if (!state.currentPageId) return;
     closeToPrevious();
   }
 
   function init() {
     rememberAppHash(window.location.hash || "#/dashboard");
-    buildOverlay();
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("keydown", onKeyDown);
     onHashChange();
