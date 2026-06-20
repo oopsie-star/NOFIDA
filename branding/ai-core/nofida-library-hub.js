@@ -562,6 +562,7 @@
     var e = S.installed[item.id];
     if (!e) return;
     resolveTeamId().then(function (tid) {
+      var nav = getNav();
       var params = [];
       if (tid) params.push("team-id=" + encodeURIComponent(tid));
       params.push("file-id=" + encodeURIComponent(e.fileId));
@@ -570,7 +571,14 @@
       } else if (item.open_default_page) {
         params.push("nhb-page=" + encodeURIComponent(item.open_default_page));
       }
-      window.location.href = "/#/workspace?" + params.join("&");
+      if (nav && typeof nav.goToNofidaRoute === "function") {
+        nav.goToNofidaRoute("#/workspace?" + params.join("&"), {
+          source: "hub-open-file",
+          rememberOrigin: false
+        });
+        return;
+      }
+      window.location.hash = "/workspace?" + params.join("&");
     });
   }
 
@@ -983,101 +991,85 @@
     "@media(max-width:640px){.nhb-shell{padding:16px 12px 44px}.nhb-topbar{flex-direction:column;align-items:stretch}.nhb-back{width:100%}.nhb-grid{grid-template-columns:1fr}}"
   ].join("");
 
-  function buildOverlay() {
-    if (S.overlayEl) return S.overlayEl;
-
+  function ensureHubStyles() {
     var style = document.createElement("style");
-    style.id  = "nhb-styles";
+    if (document.getElementById("nhb-styles")) return;
+    style.id = "nhb-styles";
     style.textContent = HUB_CSS;
     document.head.appendChild(style);
+  }
 
+  function buildShellContent() {
     var filterHtml = CATEGORIES.map(function (c) {
       return '<button class="nhb-flt' + (c.id === "all" ? " on" : "") +
         '" data-f="' + e(c.id) + '">' + e(c.label) + '</button>';
     }).join("");
 
-    var div = document.createElement("div");
-    div.id = "nhb-overlay";
-    div.setAttribute("hidden", "");
-    div.innerHTML = [
-      '<div class="nhb-shell">',
-      '  <div class="nhb-topbar">',
-      '    <div class="nhb-topcopy">',
-      '      <p class="nhb-breadcrumb" id="nhb-breadcrumb">Панель / Ресурсы / Библиотеки</p>',
-      '      <span class="nhb-surface-pill">Панель</span>',
+    return [
+      '<div id="nhb-shell-root">',
+      '  <div class="nhb-hdr">',
+      '    <div class="nhb-hdr-left">',
+      '      <span class="nhb-dot"></span>',
+      '      <h2 class="nhb-h1">Каталог ресурсов</h2>',
+      '      <span class="nhb-sub">Глобальный каталог ресурсов для панели NOFIDA. Открытие файла в редакторе происходит только по явной команде.</span>',
       '    </div>',
-      '    <button class="nhb-back" id="nhb-back" type="button">Назад к проектам</button>',
+      '    <div style="display:flex;align-items:center;gap:8px">',
+      '      <button class="nhb-open-proj" id="nhb-open-proj" type="button" title="Открыть проект Библиотеки NOFIDA в вашем дашборде">Открыть мои добавленные</button>',
+      '    </div>',
       '  </div>',
-      '  <div class="nhb-layout">',
-      '    <aside class="nhb-nav-panel">',
-      '      <p class="nhb-nav-kicker">Ресурсы</p>',
-      '      <div class="nhb-nav-list" id="nhb-nav"></div>',
-      '    </aside>',
-      '    <main class="nhb-inner">',
-      '      <div class="nhb-hdr">',
-      '        <div class="nhb-hdr-left">',
-      '          <span class="nhb-dot"></span>',
-      '          <h1 class="nhb-h1">Библиотеки NOFIDA</h1>',
-      '          <span class="nhb-sub">Глобальный каталог ресурсов для панели NOFIDA. Открытие файла в редакторе происходит только по явной команде.</span>',
-      '        </div>',
-      '        <div style="display:flex;align-items:center;gap:8px">',
-      '          <button class="nhb-open-proj" id="nhb-open-proj" type="button"',
-      '            title="Открыть проект Библиотеки NOFIDA в вашем дашборде">',
-      '            Открыть мои добавленные</button>',
-      '        </div>',
-      '      </div>',
-      '      <div class="nhb-ctrl">',
-      '        <input class="nhb-search" id="nhb-search" type="search"',
-      '          placeholder="Поиск библиотек, иконок, шаблонов…" autocomplete="off" />',
-      '        <div class="nhb-filters" id="nhb-filters">' + filterHtml + '</div>',
-      '      </div>',
-      '      <div class="nhb-status" id="nhb-status">Загрузка каталога…</div>',
-      '      <div class="nhb-grid"  id="nhb-grid"></div>',
-      '    </main>',
+      '  <div class="nhb-ctrl">',
+      '    <input class="nhb-search" id="nhb-search" type="search" placeholder="Поиск библиотек, иконок, шаблонов…" autocomplete="off" />',
+      '    <div class="nhb-filters" id="nhb-filters">' + filterHtml + '</div>',
       '  </div>',
-      '</div>'
+      '  <div class="nhb-status" id="nhb-status">Загрузка каталога…</div>',
+      '  <div class="nhb-grid" id="nhb-grid"></div>',
+      "</div>"
     ].join("");
+  }
 
-    document.body.appendChild(div);
-    S.overlayEl = div;
+  function bindShellEvents() {
+    var root = document.getElementById("nhb-shell-root");
+    if (!root) return null;
+    S.overlayEl = root;
+    if (root.getAttribute("data-nhb-bound") === "true") return root;
+    root.setAttribute("data-nhb-bound", "true");
 
-    /* ── wire overlay-internal events ── */
-    div.querySelector("#nhb-back").addEventListener("click", hideHub);
-
-    div.querySelector("#nhb-open-proj").addEventListener("click", function () {
+    root.querySelector("#nhb-open-proj").addEventListener("click", function () {
       hideHub();
-      /* Navigate to user's hub project on the dashboard */
       resolveTeamId().then(function (tid) {
-        if (!tid) return;
-        /* If we already know the hub project id, navigate directly */
+        var nav = getNav();
         var projId = S.hubProjectId;
-        if (projId) {
-          window.location.href = "/#/dashboard/team/" + tid + "/projects/" + projId;
-        } else {
-          /* Fall back to team projects page */
-          window.location.href = "/#/dashboard/team/" + tid + "/projects";
+        if (!tid) return;
+        if (projId && nav && typeof nav.goToNofidaRoute === "function") {
+          nav.goToNofidaRoute("#/dashboard/team/" + tid + "/projects/" + projId);
+          return;
         }
+        if (nav && typeof nav.goToNofidaRoute === "function") {
+          nav.goToNofidaRoute("#/dashboard/team/" + tid + "/projects");
+          return;
+        }
+        window.location.hash = "/dashboard/team/" + tid + "/projects";
       });
     });
 
-    div.querySelector("#nhb-search").addEventListener("input", function (ev) {
+    root.querySelector("#nhb-search").addEventListener("input", function (ev) {
       S.searchQuery = ev.target.value;
       refreshGrid();
       updateStatusBar();
     });
 
-    div.querySelector("#nhb-filters").addEventListener("click", function (ev) {
+    root.querySelector("#nhb-filters").addEventListener("click", function (ev) {
       var btn = ev.target.closest(".nhb-flt");
       if (!btn) return;
       S.activeFilter = btn.getAttribute("data-f") || "all";
-      div.querySelectorAll(".nhb-flt").forEach(function (b) {
+      root.querySelectorAll(".nhb-flt").forEach(function (b) {
         b.classList.toggle("on", b.getAttribute("data-f") === S.activeFilter);
       });
       refreshGrid();
       updateStatusBar();
     });
 
-    div.querySelector("#nhb-grid").addEventListener("click", function (ev) {
+    root.querySelector("#nhb-grid").addEventListener("click", function (ev) {
       var btn = ev.target.closest(".nhb-btn");
       if (!btn || btn.disabled) return;
       var act    = btn.getAttribute("data-act");
@@ -1107,22 +1099,23 @@
         });
       }
     });
-
-    div.querySelector("#nhb-nav").addEventListener("click", function (ev) {
-      var link = ev.target && ev.target.closest ? ev.target.closest(".nhb-nav-link") : null;
-      if (!link || link.getAttribute("data-act") !== "fonts") return;
-      ev.preventDefault();
-      openNativeFontsRoute();
-    });
-
-    return div;
+    return root;
   }
 
   function showHub() {
-    var overlay = buildOverlay();
-    updateHubChrome();
-    overlay.removeAttribute("hidden");
-    document.body.style.overflow = "hidden";
+    var nav = getNav();
+    ensureHubStyles();
+    if (!nav) return;
+    nav.renderDashboardShell({
+      owner: "hub",
+      route: HUB_HASH,
+      activeId: "libraries",
+      breadcrumb: ["Панель", "Ресурсы", "Библиотеки"],
+      title: "Библиотеки NOFIDA",
+      subtitle: "Глобальный каталог ресурсов для панели NOFIDA. Открытие файла в редакторе происходит только по явной команде.",
+      contentHtml: buildShellContent()
+    });
+    bindShellEvents();
     /* Resolve team ID async — needed when user lands on /#/dashboard without UUID */
     resolveTeamId().then(function (tid) {
       if (tid && !S.teamId) S.teamId = tid;
@@ -1131,10 +1124,7 @@
   }
 
   function hideHub() {
-    if (S.overlayEl) {
-      S.overlayEl.setAttribute("hidden", "");
-    }
-    document.body.style.overflow = "";
+    S.overlayEl = null;
     if ((window.location.hash || "") === HUB_HASH) {
       var nav = getNav();
       if (nav) {
@@ -1156,8 +1146,17 @@
 
   function openNativeFontsRoute() {
     return resolveTeamId().then(function (tid) {
+      var nav = getNav();
       if (!tid) {
+        if (nav && typeof nav.goToNofidaRoute === "function") {
+          nav.goToNofidaRoute("#/dashboard");
+          return;
+        }
         window.location.hash = "/dashboard";
+        return;
+      }
+      if (nav && typeof nav.goToNofidaRoute === "function") {
+        nav.goToNofidaRoute("#/dashboard/fonts?team-id=" + tid, { source: "hub-native-fonts" });
         return;
       }
       window.location.hash = "/dashboard/fonts?team-id=" + tid;
@@ -1275,103 +1274,7 @@
    * Uses MutationObserver + multiple selector fallbacks.
    * ========================================================== */
   function tryInjectSidebar() {
-    if (S.sidebarInjected) return;
-    if (!isDashboard()) return;
-    var nav = getNav();
-    if (nav && typeof nav.refreshDashboardGroup === "function") {
-      nav.refreshDashboardGroup();
-      S.sidebarInjected = true;
-      return;
-    }
-
-    if (document.getElementById("nhb-sidebar-btn") && document.getElementById("nhb-sidebar-resources")) {
-      S.sidebarInjected = true;
-      return;
-    }
-
-    var host = findDashboardSidebarNav();
-    if (!host) return;
-
     S.sidebarInjected = true;
-
-    var btn = document.createElement("a");
-    btn.id = "nhb-sidebar-btn";
-    btn.href = "javascript:void(0)"; // eslint-disable-line no-script-url
-    btn.setAttribute("role", "menuitem");
-    btn.setAttribute("aria-label", "Библиотеки NOFIDA");
-    btn.textContent = "📚 Библиотеки NOFIDA";
-    btn.style.cssText =
-      "display:flex;align-items:center;padding:8px 12px;margin:4px 6px;" +
-      "border-radius:10px;font-size:13px;font-weight:700;" +
-      "color:" + BRAND.accent + ";text-decoration:none;cursor:pointer;" +
-      "background:rgba(191,255,0,.07);border:1px solid rgba(191,255,0,.18);" +
-      "transition:all .15s;font-family:" + BRAND.font + ";box-sizing:border-box";
-    btn.addEventListener("mouseenter", function () {
-      btn.style.background = "rgba(191,255,0,.14)";
-      btn.style.borderColor = "rgba(191,255,0,.38)";
-    });
-    btn.addEventListener("mouseleave", function () {
-      btn.style.background = "rgba(191,255,0,.07)";
-      btn.style.borderColor = "rgba(191,255,0,.18)";
-    });
-    btn.addEventListener("click", function (ev) {
-      ev.preventDefault();
-      state_teamId_refresh();
-      if (nav && typeof nav.goToNofidaRoute === "function") {
-        nav.goToNofidaRoute(HUB_HASH, { source: "hub-sidebar-fallback" });
-        return;
-      }
-      window.location.hash = "/nofida/libraries";
-    });
-    host.appendChild(btn);
-
-    var resourceWrap = document.createElement("div");
-    resourceWrap.id = "nhb-sidebar-resources";
-    resourceWrap.style.cssText =
-      "display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 0 6px;" +
-      "box-sizing:border-box";
-
-    [
-      { label: "Fonts", hash: "/nofida/fonts", action: "fonts" },
-      { label: "Media", hash: "/nofida/media" },
-      { label: "Figma", hash: "/nofida/import/figma" }
-    ].forEach(function (item) {
-      var link = document.createElement("a");
-      link.href = "javascript:void(0)"; // eslint-disable-line no-script-url
-      link.textContent = item.label;
-      link.setAttribute("role", "menuitem");
-      link.style.cssText =
-        "display:inline-flex;align-items:center;justify-content:center;" +
-        "min-height:28px;padding:0 10px;border-radius:999px;" +
-        "font-size:11px;font-weight:700;color:#bfdbfe;text-decoration:none;" +
-        "background:rgba(37,99,235,.11);border:1px solid rgba(37,99,235,.16);" +
-        "font-family:" + BRAND.font + ";box-sizing:border-box";
-      link.addEventListener("mouseenter", function () {
-        link.style.background = "rgba(37,99,235,.2)";
-        link.style.borderColor = "rgba(37,99,235,.34)";
-        link.style.color = BRAND.text;
-      });
-      link.addEventListener("mouseleave", function () {
-        link.style.background = "rgba(37,99,235,.11)";
-        link.style.borderColor = "rgba(37,99,235,.16)";
-        link.style.color = "#bfdbfe";
-      });
-      link.addEventListener("click", function (ev) {
-        ev.preventDefault();
-        if (item.action === "fonts") {
-          openNativeFontsRoute();
-          return;
-        }
-        if (nav && typeof nav.goToNofidaRoute === "function") {
-          nav.goToNofidaRoute(item.hash, { source: "hub-sidebar-fallback" });
-          return;
-        }
-        window.location.hash = item.hash;
-      });
-      resourceWrap.appendChild(link);
-    });
-
-    host.appendChild(resourceWrap);
   }
 
   /* ============================================================
@@ -1380,16 +1283,19 @@
    * templates" section with internal-catalog openers.
    * ========================================================== */
   function tryPatchBottomGallery() {
-    if (S.galleryPatched) return;
     if (!isDashboard()) return;
 
-    /* Step 1: replace any external penpot.app links in the entire dashboard */
-    var extLinks = document.querySelectorAll(
-      "a[href*='penpot.app/penpothub'],a[href*='penpot.app/hub'],a[href*='penpot.app/libraries-templates']"
-    );
-    if (extLinks.length === 0) return;   /* section not rendered yet */
-
-    S.galleryPatched = true;
+    /* Step 1: replace gallery links with an internal same-tab opener.
+       In some builds the original hub card is still external; in others it has
+       already been rewritten to /#/nofida/libraries but keeps target=_blank. */
+    var extLinks = Array.prototype.filter.call(document.querySelectorAll("a[href]"), function (link) {
+      var href = String(link.getAttribute("href") || "");
+      var text = String(link.textContent || "").trim();
+      var isGalleryCopy = /Библиотеки и шаблоны|Libraries.*templates/i.test(text);
+      var isExternalHub = /penpot\.app\/(?:penpothub|hub|libraries-templates)/i.test(href);
+      var isInternalHub = /(?:^|\/)?#\/nofida\/libraries(?:$|[/?#])/i.test(href);
+      return isGalleryCopy && (isExternalHub || isInternalHub);
+    });
     extLinks.forEach(function (link) {
       var clone       = document.createElement("button");
       clone.type      = "button";
@@ -1413,6 +1319,10 @@
       });
       if (link.parentNode) link.parentNode.replaceChild(clone, link);
     });
+
+    if (S.galleryPatched) return;
+    if (extLinks.length === 0) return;   /* section not rendered yet */
+    S.galleryPatched = true;
 
     /* Step 2: inject a prominent "Библиотеки NOFIDA" card into the gallery
        grid / list that precedes or contains the section we just patched.    */
@@ -1638,7 +1548,7 @@
     /* Eagerly resolve team ID (async, covers new users without UUID in URL) */
     resolveTeamId();
 
-    buildOverlay();          /* pre-build hidden overlay */
+    ensureHubStyles();
     startObserver();         /* watch dashboard DOM for sidebar/gallery */
 
     window.addEventListener("hashchange", onHashChange);

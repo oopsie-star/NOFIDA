@@ -390,7 +390,7 @@
   function renderCatalog(items) {
     return items.map(function (item) {
       var href = item.internal_url || "#/nofida/libraries";
-      var source = item.internal_url ? "Открыть ресурсный центр" : "Открыть каталог";
+      var source = "Открыть ресурсы";
       var title = item.title || item.name || item.id || "Library";
       var meta = [item.type || "library", item.tier || "catalog", item.author || "Nofida"].join(" · ");
       return [
@@ -414,7 +414,7 @@
         nav.goToNofidaRoute(href, { source: "ai-resource-center" });
         return;
       }
-      window.location.href = href;
+      window.location.hash = String(href).replace(/^#/, "");
       return;
     }
     if (isPenpotExternalHref(href)) {
@@ -423,7 +423,7 @@
         nav.goToNofidaRoute(route, { source: "ai-resource-center" });
         return;
       }
-      window.location.href = route;
+      window.location.hash = String(route).replace(/^#/, "");
       return;
     }
     window.open(href, "_blank", "noopener,noreferrer");
@@ -1041,20 +1041,20 @@
 
     if (!isAccountSettingsRoute() || !nav) {
       restoreNativeSettingsCurrentState();
-      if (state.accountSettings.sidebarItem && state.accountSettings.sidebarItem.parentNode) {
-        state.accountSettings.sidebarItem.parentNode.removeChild(state.accountSettings.sidebarItem);
-      }
+      var staleEntry = document.getElementById("nofida-ai-sidebar-item");
+      if (staleEntry && staleEntry.parentNode) staleEntry.parentNode.removeChild(staleEntry);
       state.accountSettings.sidebarItem = null;
       return;
     }
 
     ensureAccountSidebarStyles();
 
-    var item = state.accountSettings.sidebarItem;
+    var item = document.getElementById("nofida-ai-sidebar-item") || state.accountSettings.sidebarItem;
     if (!item || item.parentNode !== nav) {
       if (item && item.parentNode) item.parentNode.removeChild(item);
       item = document.createElement("li");
       item.id = "nofida-ai-sidebar-item";
+      item.setAttribute("data-nofida-ai-account-entry", "true");
       item.className = "main_ui_settings_sidebar__settings-item";
       item.setAttribute("role", "button");
       item.tabIndex = 0;
@@ -1154,6 +1154,19 @@
       return;
     }
 
+    if (!isAccountAIPageActive()) {
+      // Plain #/settings/options: never inject host/banner — sidebar item is the only NOFIDA
+      // presence allowed. Remove any stale host from a prior ?nofida=ai visit.
+      restoreAccountSettingsSiblings();
+      if (state.accountSettings.host && state.accountSettings.host.parentNode) {
+        state.accountSettings.host.parentNode.removeChild(state.accountSettings.host);
+      }
+      state.accountSettings.host = null;
+      state.accountSettings.container = null;
+      return;
+    }
+
+    // Only reached when ?nofida=ai is present — full AI settings page.
     var requestedTab = getHashParams().get("tab");
     if (isKnownSettingsTab(requestedTab)) state.settingsUi.activeTab = requestedTab;
 
@@ -1161,69 +1174,54 @@
     if (!container) return;
 
     var host = state.accountSettings.host;
-    if (!host || host.parentNode !== container) {
+    if (!host || host.getAttribute("data-nofida-ai-account-host") !== "true" || host.parentNode !== container) {
       if (host && host.parentNode) host.parentNode.removeChild(host);
       host = document.createElement("section");
       host.id = "nofida-ai-account-page-host";
+      host.setAttribute("data-nofida-ai-account-host", "true");
       container.insertBefore(host, container.firstChild || null);
       state.accountSettings.host = host;
       state.accountSettings.container = container;
     }
 
-    var summary = buildAccountSettingsSummary();
-    var activePage = isAccountAIPageActive();
-
-    if (activePage && !state.settings && !state.settingsLoading) {
+    if (!state.settings && !state.settingsLoading) {
       ensureSettingsLoaded(false).catch(function () {});
     }
 
-    if (!activePage && !state.settings && !state.settingsLoading) {
-      ensureSettingsLoaded(false).catch(function () {});
-    }
+    setAccountSettingsPageMode(true);
 
-    setAccountSettingsPageMode(activePage);
     var activeTabLabel = (SETTINGS_TABS.find(function (tab) {
       return tab.id === state.settingsUi.activeTab;
     }) || SETTINGS_TABS[0] || { label: "API Configuration" }).label;
 
     var bodyHtml = "";
-    if (activePage) {
-      if (state.settingsLoading && !state.settings) {
-        bodyHtml = '<div class="loading-panel">Loading AI settings…</div>';
-      } else if (state.settingsError && !state.settings) {
-        bodyHtml = '<div class="empty-state">' + escapeHtml(state.settingsError) + "</div>";
-      } else {
-        bodyHtml = getSharedSettingsPanelHtml();
-      }
+    if (state.settingsLoading && !state.settings) {
+      bodyHtml = '<div class="loading-panel">Loading AI settings…</div>';
+    } else if (state.settingsError && !state.settings) {
+      bodyHtml = '<div class="empty-state">' + escapeHtml(state.settingsError) + "</div>";
+    } else {
+      bodyHtml = getSharedSettingsPanelHtml();
     }
 
     var markup = [
       "<style>", getAccountSettingsScopedStyles(), "</style>",
-      activePage ? [
-        '<section class="account-shell page">',
-        '  <div class="account-head">',
-        '    <div>',
-        '      <span class="eyebrow">Account / NOFIDA AI / ' + escapeHtml(activeTabLabel) + "</span>",
-        '      <h2>NOFIDA AI Provider Settings</h2>',
-        '      <p>Server-side provider keys, OpenRouter-backed model library, engine routing, tests, and role assignments are managed here inside your account settings.</p>',
-        "    </div>",
-        '    <div class="provider-actions">',
-        '      <button class="btn ghost" type="button" data-action="close-account-ai-settings">Назад к настройкам</button>',
-        '      <button class="btn primary" type="button" data-action="refresh-settings">Обновить</button>',
-        "    </div>",
-        "  </div>",
-        '  <div class="settings-tabs">' + SETTINGS_TABS.map(function (tab) {
-          return '<button class="settings-tab' + (tab.id === state.settingsUi.activeTab ? " active" : "") + '" type="button" data-settings-tab="' + escapeHtml(tab.id) + '">' + escapeHtml(tab.label) + "</button>";
-        }).join("") + "</div>",
-        '  <div class="settings-body">' + bodyHtml + "</div>",
-        "</section>"
-      ].join("") : [
-        '<section class="account-shell launcher">',
-        '  <span class="eyebrow">NOFIDA AI</span>',
-        '  <span class="launcher-label">Настройки поставщиков в аккаунте</span>',
-        '  <button class="btn primary tiny" type="button" data-action="open-account-ai-settings" data-settings-tab="api">Открыть</button>',
-        '</section>'
-      ].join("")
+      '<section class="account-shell page">',
+      '  <div class="account-head">',
+      '    <div>',
+      '      <span class="eyebrow">Account / NOFIDA AI / ' + escapeHtml(activeTabLabel) + "</span>",
+      '      <h2>NOFIDA AI Provider Settings</h2>',
+      '      <p>Server-side provider keys, OpenRouter-backed model library, engine routing, tests, and role assignments are managed here inside your account settings.</p>',
+      "    </div>",
+      '    <div class="provider-actions">',
+      '      <button class="btn ghost" type="button" data-action="close-account-ai-settings">Назад к настройкам</button>',
+      '      <button class="btn primary" type="button" data-action="refresh-settings">Обновить</button>',
+      "    </div>",
+      "  </div>",
+      '  <div class="settings-tabs">' + SETTINGS_TABS.map(function (tab) {
+        return '<button class="settings-tab' + (tab.id === state.settingsUi.activeTab ? " active" : "") + '" type="button" data-settings-tab="' + escapeHtml(tab.id) + '">' + escapeHtml(tab.label) + "</button>";
+      }).join("") + "</div>",
+      '  <div class="settings-body">' + bodyHtml + "</div>",
+      "</section>"
     ].join("");
 
     if (host.getAttribute("data-nofida-markup") !== markup) {
@@ -1257,6 +1255,17 @@
         state.accountSettings.refreshPasses += 1;
         renderAccountSettingsHost();
         updateAccountSidebarItem();
+
+        // On plain settings (no AI page), stop once sidebar item is stable in nav.
+        // This prevents repeated DOM checks that could subtly shift layout on slow renders.
+        if (!isAccountAIPageActive()) {
+          var sItem = state.accountSettings.sidebarItem;
+          if ((sItem && sItem.parentNode) || state.accountSettings.refreshPasses >= 60) {
+            state.accountSettings.loopActive = false;
+            state.accountSettings.refreshFrame = 0;
+            return;
+          }
+        }
       }
 
       state.accountSettings.refreshFrame = requestAnimationFrame(tick);
@@ -2138,8 +2147,14 @@
 
   function interceptPenpotExternalLinks(scope) {
     collectScopedNodes(scope, "a[href]").forEach(function (link) {
-      if (link.getAttribute("data-nofida-ext")) return;
       var href = link.getAttribute("href") || "";
+      if (/^(?:\/)?#\/(?:nofida|dashboard|settings)(?:$|[/?#])/i.test(href) ||
+          /^\/#\/(?:nofida|dashboard|settings)(?:$|[/?#])/i.test(href)) {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+        return;
+      }
+      if (link.getAttribute("data-nofida-ext")) return;
       var isExt = PENPOT_EXT_DOMAINS.some(function (d) { return href.indexOf(d) >= 0; }) || isPenpotExternalHref(href);
       if (!isExt) return;
       link.setAttribute("data-nofida-ext", "1");
@@ -2182,9 +2197,38 @@
     _extLinkObserver = new MutationObserver(function (mutations) {
       var roots = [];
       mutations.forEach(function (mutation) {
+        if (mutation.type === "attributes") {
+          var attrTarget = mutation.target;
+          if (!attrTarget || attrTarget.nodeType !== 1) return;
+          if (attrTarget.closest && attrTarget.closest("#nofida-shell-root")) return;
+          // Immediately strip target=_blank from internal links — no debounce needed.
+          if (mutation.attributeName === "target" && attrTarget.tagName === "A") {
+            var href = attrTarget.getAttribute("href") || "";
+            if (/^(?:\/)?#\/(?:nofida|dashboard|settings|workspace)(?:$|[/?#])/i.test(href) ||
+                /^\/#\/(?:nofida|dashboard|settings|workspace)(?:$|[/?#])/i.test(href)) {
+              attrTarget.removeAttribute("target");
+              attrTarget.removeAttribute("rel");
+              return;
+            }
+          }
+          roots.push(attrTarget);
+          return;
+        }
         Array.prototype.forEach.call(mutation.addedNodes || [], function (node) {
           if (!node || node.nodeType !== 1) return;
           if (node.closest && node.closest("#nofida-shell-root")) return;
+          // Immediately fix internal _blank links on any newly added node tree.
+          var linksToFix = node.tagName === "A"
+            ? (node.getAttribute("target") === "_blank" ? [node] : [])
+            : (node.querySelectorAll ? Array.prototype.slice.call(node.querySelectorAll('a[target="_blank"]')) : []);
+          linksToFix.forEach(function (link) {
+            var href = link.getAttribute("href") || "";
+            if (/^(?:\/)?#\/(?:nofida|dashboard|settings|workspace)(?:$|[/?#])/i.test(href) ||
+                /^\/#\/(?:nofida|dashboard|settings|workspace)(?:$|[/?#])/i.test(href)) {
+              link.removeAttribute("target");
+              link.removeAttribute("rel");
+            }
+          });
           roots.push(node);
         });
       });
@@ -2195,7 +2239,12 @@
         interceptPenpotExternalLinks(roots);
       }, 160);
     });
-    _extLinkObserver.observe(nextRoot, { childList: true, subtree: true });
+    _extLinkObserver.observe(nextRoot, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["href", "target", "rel"]
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────
