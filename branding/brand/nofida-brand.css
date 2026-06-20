@@ -854,6 +854,117 @@ body.default.nofida-shell-page-active #app {
   border-bottom: 1px solid var(--nf-border);
 }
 
+.nf-tab {
+  position: relative;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--nf-text-muted);
+  font-family: var(--nf-font);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nf-tab.is-active {
+  color: var(--nf-brand-strong);
+}
+
+.nf-tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 99px;
+  background: var(--nf-brand);
+}
+
+.nf-tab:hover:not(.is-active) {
+  color: var(--nf-text-soft);
+}
+
+.nf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--nf-grid-gap);
+}
+
+.nf-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nf-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.nf-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  border-radius: var(--nf-radius-lg);
+  border: 1px dashed var(--nf-border-strong);
+  background: var(--nf-surface-soft);
+  text-align: center;
+}
+
+.nf-empty-state-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--nf-radius-md);
+  background: var(--nf-brand-soft);
+  color: var(--nf-brand);
+  display: grid;
+  place-items: center;
+}
+
+.nf-empty-state-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--nf-text);
+}
+
+.nf-empty-state-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--nf-text-muted);
+  max-width: 380px;
+}
+
+.nf-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 2147483605;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: #ffffff;
+  color: var(--nf-text);
+  font-family: var(--nf-font);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--nf-shadow-md);
+  white-space: nowrap;
+}
+
+.nf-divider {
+  height: 1px;
+  background: var(--nf-border);
+  border: 0;
+  margin: 0;
+}
+
 .nf-chip {
   height: 22px;
   padding: 0 8px;
