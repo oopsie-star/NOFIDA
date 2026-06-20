@@ -254,12 +254,19 @@ async function waitForHelpPage(page) {
 }
 
 async function waitForAccount(page) {
-  await page.waitForSelector("ul.main_ui_settings_sidebar__sidebar-nav-settings", { timeout: 90000 });
+  // waitForSelector (visible) can fail in headless if layout collapses — use waitForFunction
+  // which only checks DOM presence and skips Playwright's visibility heuristic.
+  await page.waitForFunction(
+    () => document.querySelectorAll("ul.main_ui_settings_sidebar__sidebar-nav-settings").length > 0,
+    { timeout: 90000 }
+  );
 }
 
-async function accountSidebarStabilityRun(page) {
-  // Use full navigation for clean state (hash-only change after AI page can stall React).
-  await page.goto(`${BASE}/#/settings/options`, { waitUntil: "commit", timeout: 30000 });
+async function accountSidebarStabilityRun(page, teamId) {
+  // page.goto to settings as cold route renders Penpot 404; must route via dashboard first.
+  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "load", timeout: 60000 });
+  await waitForDashboardShell(page);
+  await openHash(page, "#/settings/options");
   await waitForAccount(page);
   await page.waitForTimeout(3000); // let NOFIDA scripts initialize
 
@@ -587,9 +594,11 @@ try {
     return !/(#\/nofida|#\/dashboard|#\/settings|\/#\/nofida|\/#\/dashboard|\/#\/settings)/i.test(href);
   });
 
-  // Full navigation required: hash-only change from NOFIDA help pages leaves Penpot's router
-  // in an unknown-route state; page.goto forces a clean SPA bootstrap and settings route.
-  await page.goto(`${BASE}/#/settings/options`, { waitUntil: "commit", timeout: 30000 });
+  // page.goto to #/settings/options as a cold route renders a Penpot 404 — must first land on
+  // a known Penpot route (dashboard) and then hash-navigate to account settings.
+  await page.goto(`${BASE}/#/dashboard/team/${teamId}/projects`, { waitUntil: "load", timeout: 60000 });
+  await waitForDashboardShell(page);
+  await openHash(page, "#/settings/options");
   await waitForAccount(page);
   const accountBaseCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
   const accountShellCount = await page.locator("#nofida-shell").count();
@@ -598,10 +607,16 @@ try {
     await openHash(page, AI_SETTINGS_ROUTE);
     await waitForAccountAI(page);
     const accountAiCount = await page.locator("ul.main_ui_settings_sidebar__sidebar-nav-settings li").count();
-    results.noShellInAccount = accountShellCount === 0 && await page.locator("#nofida-shell").count() === 0;
+    const aiShellCount = await page.locator("#nofida-shell").count();
+    const aiHostCount = await page.locator("#nofida-ai-account-page-host").count();
+    const aiUrl = page.url();
+    results.noShellInAccount = accountShellCount === 0 && aiShellCount === 0;
     results.accountSidebarStable = accountAiCount >= accountBaseCount;
-    results.aiInAccount = /#\/settings\/options\?nofida=ai&tab=api/.test(page.url()) &&
-      await page.locator("#nofida-ai-account-page-host").count() === 1;
+    results.aiInAccount = /#\/settings\/options\?nofida=ai&tab=api/.test(aiUrl) && aiHostCount === 1;
+    // Diagnostic: expose key values so failures are interpretable
+    if (!results.aiInAccount) {
+      notes.push(`aiInAccount=false: url=${aiUrl.slice(-60)} hostCount=${aiHostCount} baseCount=${accountBaseCount} aiCount=${accountAiCount} shellCount=${aiShellCount}`);
+    }
   } catch (aiAccountErr) {
     notes.push(`aiAccountCheck: ${aiAccountErr && aiAccountErr.message ? aiAccountErr.message : String(aiAccountErr)}`);
   }
@@ -619,7 +634,7 @@ try {
     nofidaOnce: false, noHostOnPlain: false
   };
   try {
-    accountPlainStability = await accountSidebarStabilityRun(page);
+    accountPlainStability = await accountSidebarStabilityRun(page, teamId);
   } catch (stabilityErr) {
     notes.push(`accountSidebarStabilityRun: ${stabilityErr && stabilityErr.message ? stabilityErr.message : String(stabilityErr)}`);
   }
@@ -631,37 +646,50 @@ try {
   results.accountNofidaOnce = accountPlainStability.nofidaOnce;
   results.accountNoHostOnPlain = accountPlainStability.noHostOnPlain;
 
-  const editorOpened = await openEditorFromHub(page);
+  const editorOpened = await openEditorFromHub(page).catch((err) => {
+    notes.push(`openEditorFromHub: ${err && err.message ? err.message : String(err)}`);
+    return false;
+  });
   if (editorOpened) {
     results.noShellInEditor = await page.locator("#nofida-shell").count() === 0;
     results.editorUiClean = results.noShellInEditor;
-    await page.evaluate(() => {
-      if (window.NofidaAICore && typeof window.NofidaAICore.open === "function") {
-        window.NofidaAICore.open();
-      }
-    });
-    // #assistant-panel lives inside a shadow root — pierce it with evaluate instead of waitForSelector.
-    await page.waitForFunction(() => {
-      const host = document.getElementById("nofida-shell-root");
-      if (!host || !host.shadowRoot) return false;
-      const panel = host.shadowRoot.getElementById("assistant-panel");
-      return panel ? panel.classList.contains("open") : false;
-    }, { timeout: 30000 });
-    results.aiEditorLocal = /\/#\/workspace/.test(page.url());
 
-    await page.evaluate(() => {
-      if (window.NofidaNavigation && typeof window.NofidaNavigation.goToNofidaRoute === "function") {
-        window.NofidaNavigation.goToNofidaRoute("#/nofida/libraries", {
-          source: "verify-021a-editor"
-        });
-      }
-    });
-    await waitForLibraries(page);
-    const fromEditorSnap = await collectShellSnapshot(page);
-    results.noDuplicateSidebar = results.noDuplicateSidebar && fromEditorSnap.legacyVisible === 0;
-    results.editorUiClean = results.editorUiClean && fromEditorSnap.backLabel === "Назад в редактор";
-    await page.click("[data-nofida-back='safe']");
-    await waitForEditor(page);
+    // AI panel lives in shadow root — isolated so cascade cannot kill stability runs.
+    try {
+      await page.evaluate(() => {
+        if (window.NofidaAICore && typeof window.NofidaAICore.open === "function") {
+          window.NofidaAICore.open();
+        }
+      });
+      // #assistant-panel lives inside a shadow root — pierce it with evaluate instead of waitForSelector.
+      await page.waitForFunction(() => {
+        const host = document.getElementById("nofida-shell-root");
+        if (!host || !host.shadowRoot) return false;
+        const panel = host.shadowRoot.getElementById("assistant-panel");
+        return panel ? panel.classList.contains("open") : false;
+      }, { timeout: 30000 });
+      results.aiEditorLocal = /\/#\/workspace/.test(page.url());
+    } catch (aiPanelErr) {
+      notes.push(`aiEditorPanel: ${aiPanelErr && aiPanelErr.message ? aiPanelErr.message : String(aiPanelErr)}`);
+    }
+
+    try {
+      await page.evaluate(() => {
+        if (window.NofidaNavigation && typeof window.NofidaNavigation.goToNofidaRoute === "function") {
+          window.NofidaNavigation.goToNofidaRoute("#/nofida/libraries", {
+            source: "verify-021a-editor"
+          });
+        }
+      });
+      await waitForLibraries(page);
+      const fromEditorSnap = await collectShellSnapshot(page);
+      results.noDuplicateSidebar = results.noDuplicateSidebar && fromEditorSnap.legacyVisible === 0;
+      results.editorUiClean = results.editorUiClean && fromEditorSnap.backLabel === "Назад в редактор";
+      await page.click("[data-nofida-back='safe']");
+      await waitForEditor(page);
+    } catch (editorNavErr) {
+      notes.push(`editorNavBack: ${editorNavErr && editorNavErr.message ? editorNavErr.message : String(editorNavErr)}`);
+    }
   } else {
     notes.push("editor route was not accessible from the hub open action");
   }
