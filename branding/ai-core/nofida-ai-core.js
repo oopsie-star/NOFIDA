@@ -2188,6 +2188,13 @@
     _extLinkObserver = new MutationObserver(function (mutations) {
       var roots = [];
       mutations.forEach(function (mutation) {
+        if (mutation.type === "attributes") {
+          var target = mutation.target;
+          if (!target || target.nodeType !== 1) return;
+          if (target.closest && target.closest("#nofida-shell-root")) return;
+          roots.push(target);
+          return;
+        }
         Array.prototype.forEach.call(mutation.addedNodes || [], function (node) {
           if (!node || node.nodeType !== 1) return;
           if (node.closest && node.closest("#nofida-shell-root")) return;
@@ -2201,7 +2208,12 @@
         interceptPenpotExternalLinks(roots);
       }, 160);
     });
-    _extLinkObserver.observe(nextRoot, { childList: true, subtree: true });
+    _extLinkObserver.observe(nextRoot, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["href", "target", "rel"]
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────
