@@ -592,3 +592,267 @@ body.default.nofida-dashboard-shell-active [class*="dashboard-grid"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ==========================================================================
+   NOFIDA Editor Sidebar — PATCH 024A
+   Collapsible left sidebar for the editor/workspace surface.
+   Uses body classes to offset the Penpot workspace canvas; the sidebar
+   itself is position:fixed so it never physically overlaps the canvas.
+   ========================================================================== */
+
+:root {
+  --nf-editor-sidebar-expanded: 248px;
+  --nf-editor-sidebar-collapsed: 64px;
+  --nf-editor-sidebar-hidden: 0px;
+  --nf-editor-sidebar-transition: 180ms ease;
+  --nf-editor-sidebar-bg: #0b1423;
+  --nf-editor-sidebar-border: rgba(148, 163, 184, 0.14);
+}
+
+/* ---- Restore button (floating, shown only when sidebar is hidden) --------- */
+
+#nf-editor-sidebar-restore {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 44px;
+  background: var(--nf-editor-sidebar-bg);
+  border: 1px solid var(--nf-editor-sidebar-border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+#nf-editor-sidebar-restore:hover {
+  color: #e5edf8;
+  background: #101f33;
+}
+
+/* ---- Sidebar shell -------------------------------------------------------- */
+
+#nf-editor-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 20;
+  width: var(--nf-editor-sidebar-collapsed);
+  background: var(--nf-editor-sidebar-bg);
+  border-right: 1px solid var(--nf-editor-sidebar-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: width var(--nf-editor-sidebar-transition);
+}
+
+#nf-editor-sidebar[data-state="expanded"] {
+  width: var(--nf-editor-sidebar-expanded);
+}
+
+#nf-editor-sidebar[data-state="collapsed"] {
+  width: var(--nf-editor-sidebar-collapsed);
+}
+
+#nf-editor-sidebar[data-state="hidden"] {
+  width: var(--nf-editor-sidebar-hidden);
+}
+
+/* ---- Header -------------------------------------------------------------- */
+
+.nf-esb-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--nf-editor-sidebar-border);
+  flex: 0 0 auto;
+  min-height: 52px;
+  overflow: hidden;
+}
+
+.nf-esb-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+
+.nf-esb-wordmark {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #e5edf8;
+  white-space: nowrap;
+  overflow: hidden;
+  font-family: Inter, system-ui, sans-serif;
+  transition: opacity var(--nf-editor-sidebar-transition),
+              max-width var(--nf-editor-sidebar-transition);
+  max-width: 200px;
+  opacity: 1;
+}
+
+#nf-editor-sidebar[data-state="collapsed"] .nf-esb-wordmark {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nf-esb-toggle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.nf-esb-toggle:hover {
+  color: #e5edf8;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+/* ---- Navigation ---------------------------------------------------------- */
+
+.nf-esb-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.15) transparent;
+}
+
+.nf-esb-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-family: Inter, system-ui, sans-serif;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nf-esb-nav-item:hover {
+  background: rgba(148, 163, 184, 0.08);
+  color: #e5edf8;
+}
+
+.nf-esb-nav-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.nf-esb-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nf-esb-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--nf-editor-sidebar-transition),
+              max-width var(--nf-editor-sidebar-transition);
+  max-width: 200px;
+  opacity: 1;
+}
+
+#nf-editor-sidebar[data-state="collapsed"] .nf-esb-label {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- Footer (hide button) ------------------------------------------------ */
+
+.nf-esb-footer {
+  flex: 0 0 auto;
+  padding: 6px 8px 10px;
+  border-top: 1px solid var(--nf-editor-sidebar-border);
+}
+
+.nf-esb-hide-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: Inter, system-ui, sans-serif;
+  width: 100%;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nf-esb-hide-btn:hover {
+  background: rgba(148, 163, 184, 0.06);
+  color: #94a3b8;
+}
+
+/* ---- Canvas offset via body classes -------------------------------------- */
+/* Shift the Penpot workspace container to the right of the NOFIDA sidebar.
+   The sidebar is position:fixed so without these rules the canvas would be
+   partially hidden under it. */
+
+body.nf-editor-sidebar-expanded .main_ui_workspace__workspace,
+body.nf-editor-sidebar-expanded [class*="workspace__workspace"] {
+  margin-left: var(--nf-editor-sidebar-expanded) !important;
+  width: calc(100vw - var(--nf-editor-sidebar-expanded)) !important;
+  transition: margin-left var(--nf-editor-sidebar-transition),
+              width var(--nf-editor-sidebar-transition) !important;
+}
+
+body.nf-editor-sidebar-collapsed .main_ui_workspace__workspace,
+body.nf-editor-sidebar-collapsed [class*="workspace__workspace"] {
+  margin-left: var(--nf-editor-sidebar-collapsed) !important;
+  width: calc(100vw - var(--nf-editor-sidebar-collapsed)) !important;
+  transition: margin-left var(--nf-editor-sidebar-transition),
+              width var(--nf-editor-sidebar-transition) !important;
+}
+
+body.nf-editor-sidebar-hidden .main_ui_workspace__workspace,
+body.nf-editor-sidebar-hidden [class*="workspace__workspace"] {
+  margin-left: 0 !important;
+  width: 100vw !important;
+  transition: margin-left var(--nf-editor-sidebar-transition),
+              width var(--nf-editor-sidebar-transition) !important;
+}
