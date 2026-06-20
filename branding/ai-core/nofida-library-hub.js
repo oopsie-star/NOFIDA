@@ -1283,7 +1283,6 @@
    * templates" section with internal-catalog openers.
    * ========================================================== */
   function tryPatchBottomGallery() {
-    if (S.galleryPatched) return;
     if (!isDashboard()) return;
 
     /* Step 1: replace gallery links with an internal same-tab opener.
@@ -1297,9 +1296,6 @@
       var isInternalHub = /(?:^|\/)?#\/nofida\/libraries(?:$|[/?#])/i.test(href);
       return isGalleryCopy && (isExternalHub || isInternalHub);
     });
-    if (extLinks.length === 0) return;   /* section not rendered yet */
-
-    S.galleryPatched = true;
     extLinks.forEach(function (link) {
       var clone       = document.createElement("button");
       clone.type      = "button";
@@ -1323,6 +1319,10 @@
       });
       if (link.parentNode) link.parentNode.replaceChild(clone, link);
     });
+
+    if (S.galleryPatched) return;
+    if (extLinks.length === 0) return;   /* section not rendered yet */
+    S.galleryPatched = true;
 
     /* Step 2: inject a prominent "Библиотеки NOFIDA" card into the gallery
        grid / list that precedes or contains the section we just patched.    */
