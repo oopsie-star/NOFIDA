@@ -828,6 +828,20 @@ body.default.nofida-dashboard-shell-active [class*="dashboard-grid"] {
   color: #94a3b8;
 }
 
+/* ---- Suppress old dashboard shell in editor ----------------------------- */
+/* The dashboard shell (#nofida-shell, z-index 9997) must not appear in the
+   editor. The nofida-navigation.js already calls destroyDashboardShell() on
+   editor routes, but as a CSS failsafe we forcibly hide it whenever any
+   editor sidebar body class is active. */
+
+body.nf-editor-sidebar-expanded #nofida-shell,
+body.nf-editor-sidebar-collapsed #nofida-shell,
+body.nf-editor-sidebar-hidden #nofida-shell {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* ---- Canvas offset via body classes -------------------------------------- */
 /* Shift the Penpot workspace container to the right of the NOFIDA sidebar.
    The sidebar is position:fixed so without these rules the canvas would be

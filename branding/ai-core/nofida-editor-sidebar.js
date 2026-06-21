@@ -292,6 +292,13 @@
 
   /* -------------------------------------------------- lifecycle management */
 
+  function ensureShellDestroyed() {
+    var nav = window.NofidaNavigation;
+    if (nav && typeof nav.destroyDashboardShell === "function") {
+      nav.destroyDashboardShell();
+    }
+  }
+
   function destroySidebar() {
     clearBodyClasses();
     var sidebar = document.getElementById(SIDEBAR_ID);
@@ -310,6 +317,14 @@
 
     if (onEditor && !isEditorActive) {
       isEditorActive = true;
+
+      /* Destroy the dashboard shell — nofida-navigation.js already does this
+         on hashchange, but we call it again here with retries to handle any
+         timing race where the shell is re-created after the hash settles. */
+      ensureShellDestroyed();
+      setTimeout(ensureShellDestroyed, 200);
+      setTimeout(ensureShellDestroyed, 600);
+
       currentState = readState();
       createSidebar(currentState);
       setSidebarState(currentState);
