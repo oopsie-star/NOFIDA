@@ -349,8 +349,13 @@ function createDefaultSettings() {
     modelAssignments: {},
     engine: {
       temperature: 0.25,
-      maxTokens: 1200,
-      timeoutMs: 45000,
+      // build_screen emits a full Screen Spec JSON tree (up to ~140 nodes) —
+      // 1200 tokens truncates that mid-document; 45s is tight for a large
+      // generation through an OpenRouter proxy hop. Both were sized for
+      // short text replies, before build_screen was reachable from ordinary
+      // free-text requests (see intent-router.mjs's editor-context default).
+      maxTokens: 4096,
+      timeoutMs: 90000,
       retries: 1,
       fallbackModelOrder: [],
     },
@@ -512,16 +517,110 @@ function sanitizeFallbackOrder(assignments, registryModels) {
     .filter(Boolean);
 }
 
+// `message` is normally a plain string (unchanged for every existing caller).
+// Callers that need to attach reference images pass { text, images } instead,
+// where images is [{ mimeType, dataBase64 }]. Each provider builds its own
+// multimodal content shape from the same normalized form.
+function normalizeMessage(message) {
+  if (message && typeof message === "object" && !Array.isArray(message)) {
+    return {
+      text: typeof message.text === "string" ? message.text : "",
+      images: Array.isArray(message.images)
+        ? message.images.filter((img) => img && typeof img.dataBase64 === "string" && typeof img.mimeType === "string")
+        : [],
+    };
+  }
+  return { text: String(message || ""), images: [] };
+}
+
+function buildOpenAiContent(normalized) {
+  if (!normalized.images.length) return normalized.text;
+  const parts = [];
+  if (normalized.text) parts.push({ type: "text", text: normalized.text });
+  for (const img of normalized.images) {
+    parts.push({ type: "image_url", image_url: { url: `data:${img.mimeType};base64,${img.dataBase64}` } });
+  }
+  return parts;
+}
+
+function buildAnthropicContent(normalized) {
+  if (!normalized.images.length) return normalized.text;
+  const parts = [];
+  if (normalized.text) parts.push({ type: "text", text: normalized.text });
+  for (const img of normalized.images) {
+    parts.push({ type: "image", source: { type: "base64", media_type: img.mimeType, data: img.dataBase64 } });
+  }
+  return parts;
+}
+
+function buildGeminiParts(normalized) {
+  const parts = [];
+  if (normalized.text) parts.push({ text: normalized.text });
+  for (const img of normalized.images) {
+    parts.push({ inlineData: { mimeType: img.mimeType, data: img.dataBase64 } });
+  }
+  return parts.length ? parts : [{ text: "" }];
+}
+
+// `history` is prior thread turns: [{ role: "user"|"assistant", text, images? }, ...],
+// oldest first. Each provider maps it into its own multi-turn message shape,
+// then appends the current message last. Empty/missing history is a no-op —
+// every existing single-shot caller keeps working unchanged.
+function buildOpenAiHistoryMessages(history) {
+  return (history || []).map((turn) => ({
+    role: turn.role === "assistant" ? "assistant" : "user",
+    content: buildOpenAiContent(normalizeMessage(turn)),
+  }));
+}
+
+function buildAnthropicHistoryMessages(history) {
+  return (history || []).map((turn) => ({
+    role: turn.role === "assistant" ? "assistant" : "user",
+    content: buildAnthropicContent(normalizeMessage(turn)),
+  }));
+}
+
+function buildGeminiHistoryContents(history) {
+  return (history || []).map((turn) => ({
+    role: turn.role === "assistant" ? "model" : "user",
+    parts: buildGeminiParts(normalizeMessage(turn)),
+  }));
+}
+
 async function callOpenAICompatible({
   apiKey,
   baseUrl,
   model,
+  providerId,
   message,
   systemPrompt,
+  history,
   maxTokens,
   temperature,
   timeoutMs,
 }) {
+  const body = {
+    model,
+    temperature,
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...buildOpenAiHistoryMessages(history),
+      { role: "user", content: buildOpenAiContent(normalizeMessage(message)) },
+    ],
+  };
+  // Reasoning-capable models (OpenRouter's unified "reasoning" field — MiMo,
+  // QwQ, R1-style, etc.) will spend as much of max_tokens as they're allowed
+  // to "think" before answering. A generous max_tokens for a large structured
+  // output (e.g. build_screen's Screen Spec JSON) gives them room to reason
+  // for tens of seconds to minutes — a real model behaviour, not a hang —
+  // which blew through every timeout we tried. Capping reasoning effort
+  // keeps generation latency bounded without shrinking the output budget.
+  // OpenRouter-only: other openai-compatible endpoints may reject an unknown
+  // field, so this must not be sent to them.
+  if (providerId === "openrouter") {
+    body.reasoning = { effort: "low", exclude: true };
+  }
   const response = await fetch(`${normalizeBaseUrl(baseUrl)}/chat/completions`, {
     method: "POST",
     headers: {
@@ -529,15 +628,7 @@ async function callOpenAICompatible({
       Authorization: `Bearer ${apiKey}`,
     },
     signal: AbortSignal.timeout(timeoutMs),
-    body: JSON.stringify({
-      model,
-      temperature,
-      max_tokens: maxTokens,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
 
   const text = await response.text();
@@ -556,7 +647,25 @@ async function callOpenAICompatible({
     throw makeConfigError("provider_response_invalid", "Provider returned invalid JSON.", 502);
   }
 
-  const answer = data?.choices?.[0]?.message?.content;
+  const choice = data?.choices?.[0];
+  const answer = choice?.message?.content;
+  // DIAGNOSTIC (temporary): reasoning models (OpenRouter's "reasoning"
+  // capability, e.g. MiMo/QwQ/R1-style) can spend the whole max_tokens
+  // budget "thinking" in a separate reasoning/reasoning_content field before
+  // ever emitting the actual answer, leaving `content` empty or cut off —
+  // and finish_reason: "length" is the tell. We were reading only `content`
+  // and had no visibility into either signal. Logging both until we've
+  // confirmed which failure mode we're actually hitting.
+  try {
+    const reasoningLen = typeof choice?.message?.reasoning === "string" ? choice.message.reasoning.length
+      : typeof choice?.message?.reasoning_content === "string" ? choice.message.reasoning_content.length
+      : 0;
+    const contentLen = typeof answer === "string" ? answer.length : 0;
+    if (choice?.finish_reason === "length" || (reasoningLen > 0 && contentLen === 0)) {
+      process.stderr.write(`[ai-diagnostic] model=${model} finish_reason=${choice?.finish_reason} reasoningLen=${reasoningLen} contentLen=${contentLen} usage=${JSON.stringify(data?.usage || {})}\n`);
+    }
+  } catch (_diagErr) { /* diagnostics must never break the real call */ }
+
   return typeof answer === "string" ? answer : Array.isArray(answer) ? answer.join("\n") : "";
 }
 
@@ -566,6 +675,7 @@ async function callAnthropic({
   model,
   message,
   systemPrompt,
+  history,
   maxTokens,
   temperature,
   timeoutMs,
@@ -583,7 +693,10 @@ async function callAnthropic({
       system: systemPrompt,
       temperature,
       max_tokens: maxTokens,
-      messages: [{ role: "user", content: message }],
+      messages: [
+        ...buildAnthropicHistoryMessages(history),
+        { role: "user", content: buildAnthropicContent(normalizeMessage(message)) },
+      ],
     }),
   });
 
@@ -616,6 +729,7 @@ async function callGemini({
   model,
   message,
   systemPrompt,
+  history,
   maxTokens,
   temperature,
   timeoutMs,
@@ -627,7 +741,10 @@ async function callGemini({
     signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: message }] }],
+      contents: [
+        ...buildGeminiHistoryContents(history),
+        { role: "user", parts: buildGeminiParts(normalizeMessage(message)) },
+      ],
       generationConfig: {
         temperature,
         maxOutputTokens: maxTokens,
@@ -823,8 +940,8 @@ export function createAISettingsService(log = () => {}) {
     };
   }
 
-  async function getSettingsView() {
-    const [settings, registry] = await Promise.all([loadSettingsRaw(), getModelRegistry()]);
+  async function getSettingsView(options = {}) {
+    const [settings, registry] = await Promise.all([loadSettingsRaw(), getModelRegistry(options)]);
     return {
       providerMode: settings.providerMode,
       providers: PROVIDER_IDS.map((providerId) => sanitizeProviderRecord(settings.providers[providerId])),
@@ -1274,13 +1391,15 @@ export function createAISettingsService(log = () => {}) {
     throw makeConfigError("missing_model_assignment", "No model assigned. Open Settings → Model Library.", 409);
   }
 
-  async function invokeProvider({ runtime, modelId, message, systemPrompt, maxTokens, temperature, timeoutMs }) {
+  async function invokeProvider({ runtime, modelId, message, systemPrompt, history, maxTokens, temperature, timeoutMs }) {
     const payload = {
       apiKey: runtime.apiKey,
       baseUrl: runtime.baseUrl,
       model: getProviderModelId(runtime.providerId, modelId),
+      providerId: runtime.providerId,
       message,
       systemPrompt,
+      history,
       maxTokens,
       temperature,
       timeoutMs,
@@ -1291,7 +1410,7 @@ export function createAISettingsService(log = () => {}) {
     return callOpenAICompatible(payload);
   }
 
-  async function callWithResolvedModel({ resolved, message, systemPrompt }) {
+  async function callWithResolvedModel({ resolved, message, systemPrompt, history }) {
     const settings = await loadSettingsRaw();
     const registry = await getModelRegistry();
     const primaryRuntime = getProviderRuntime(settings, resolved.providerId);
@@ -1324,6 +1443,7 @@ export function createAISettingsService(log = () => {}) {
               modelId,
               message,
               systemPrompt,
+              history,
               maxTokens: settings.engine.maxTokens,
               temperature: settings.engine.temperature,
               timeoutMs: settings.engine.timeoutMs,

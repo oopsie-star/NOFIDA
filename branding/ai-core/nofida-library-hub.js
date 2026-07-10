@@ -37,19 +37,19 @@
   var HUB_PROJECT  = "NOFIDA Hub";
 
   var BRAND = {
-    bg:           "#0b1020",
-    surface:      "#131e35",
-    surfaceHard:  "#10192f",
-    border:       "rgba(37,99,235,.24)",
-    primary:      "#2563eb",
-    primaryHov:   "#1d4ed8",
-    accent:       "#bfff00",
-    accentInk:    "#0b1020",
-    text:         "#f8fafc",
-    muted:        "#94a3b8",
-    success:      "#22c55e",
-    warning:      "#f59e0b",
-    error:        "#f43f5e",
+    bg:           "#0c1018",
+    surface:      "#161c28",
+    surfaceHard:  "#12161f",
+    border:       "rgba(94,126,166,.20)",
+    primary:      "#5E7EA6",
+    primaryHov:   "#6E8CB2",
+    accent:       "#6BA98F",
+    accentInk:    "#0c1018",
+    text:         "#e9edf3",
+    muted:        "#8a93a3",
+    success:      "#7CB79E",
+    warning:      "#C9A468",
+    error:        "#C97070",
     font:         'Montserrat,Inter,"Segoe UI",system-ui,sans-serif'
   };
 
@@ -901,15 +901,15 @@
     ".nhb-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}",
     ".nhb-topcopy{display:flex;flex-direction:column;gap:6px}",
     ".nhb-breadcrumb{margin:0;color:#8fa4c2;font-size:12px;font-weight:700;line-height:1.4}",
-    ".nhb-surface-pill{display:inline-flex;align-items:center;width:fit-content;min-height:24px;padding:0 9px;border-radius:999px;border:1px solid rgba(96,165,250,.18);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
+    ".nhb-surface-pill{display:inline-flex;align-items:center;width:fit-content;min-height:24px;padding:0 9px;border-radius:999px;border:1px solid rgba(123,155,192,.18);background:rgba(15,23,42,.72);color:#cbd5e1;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}",
     ".nhb-back{border:1px solid rgba(120,142,170,.24);background:#0d1524;color:#d8e4f0;border-radius:999px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}",
-    ".nhb-back:hover{border-color:rgba(96,165,250,.42);background:#12203a;color:#fff}",
+    ".nhb-back:hover{border-color:rgba(123,155,192,.42);background:#12203a;color:#fff}",
     ".nhb-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}",
     ".nhb-nav-panel{position:sticky;top:14px;border-radius:18px;padding:14px;border:1px solid rgba(90,112,140,.22);background:rgba(11,18,32,.88);box-shadow:0 16px 36px rgba(0,0,0,.26)}",
     ".nhb-nav-kicker{margin:0 0 8px;color:#93a8c7;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}",
     ".nhb-nav-list{display:flex;flex-direction:column;gap:8px}",
     ".nhb-nav-link{display:block;padding:9px 10px;border-radius:12px;border:1px solid transparent;color:#a9b9cf;text-decoration:none;font-size:13px;line-height:1.35}",
-    ".nhb-nav-link:hover,.nhb-nav-link.active{background:#12203a;border-color:rgba(96,165,250,.28);color:#fff}",
+    ".nhb-nav-link:hover,.nhb-nav-link.active{background:#12203a;border-color:rgba(123,155,192,.28);color:#fff}",
     ".nhb-inner{min-width:0}",
     /* header */
     ".nhb-hdr{display:flex;align-items:center;justify-content:space-between;",
@@ -941,7 +941,7 @@
     ".nhb-card{background:" + BRAND.surface + ";border:1px solid " + BRAND.border + ";",
       "border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px;",
       "transition:border-color .14s,transform .14s}",
-    ".nhb-card:hover{border-color:rgba(37,99,235,.55);transform:translateY(-2px)}",
+    ".nhb-card:hover{border-color:rgba(94,126,166,.55);transform:translateY(-2px)}",
     ".nhb-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px}",
     ".nhb-type{font-size:10px;font-weight:700;letter-spacing:.1em;",
       "text-transform:uppercase;color:" + BRAND.accent + "}",
@@ -950,8 +950,8 @@
     ".nhb-meta span{font-size:11px;color:" + BRAND.muted + "}",
     ".nhb-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;",
       "letter-spacing:.06em;text-transform:uppercase}",
-    ".nhb-ok{background:rgba(34,197,94,.14);color:" + BRAND.success + "}",
-    ".nhb-warn{background:rgba(245,158,11,.12);color:" + BRAND.warning + "}",
+    ".nhb-ok{background:rgba(124,183,158,.14);color:" + BRAND.success + "}",
+    ".nhb-warn{background:rgba(201,164,104,.12);color:" + BRAND.warning + "}",
     ".nhb-dim{background:rgba(148,163,184,.1);color:" + BRAND.muted + "}",
     /* buttons */
     ".nhb-btn{border:0;border-radius:10px;padding:9px 14px;font-size:13px;",
@@ -959,12 +959,12 @@
       "margin-top:auto;font-family:inherit}",
     ".nhb-btn-add{background:" + BRAND.primary + ";color:#fff}",
     ".nhb-btn-add:hover{background:" + BRAND.primaryHov + "}",
-    ".nhb-btn-open{background:rgba(34,197,94,.14);color:" + BRAND.success + ";",
-      "border:1px solid rgba(34,197,94,.28)}",
-    ".nhb-btn-open:hover{background:rgba(34,197,94,.24)}",
-    ".nhb-btn-err{background:rgba(244,63,94,.14);color:" + BRAND.error + ";",
-      "border:1px solid rgba(244,63,94,.28)}",
-    ".nhb-btn-err:hover{background:rgba(244,63,94,.24)}",
+    ".nhb-btn-open{background:rgba(124,183,158,.14);color:" + BRAND.success + ";",
+      "border:1px solid rgba(124,183,158,.28)}",
+    ".nhb-btn-open:hover{background:rgba(124,183,158,.24)}",
+    ".nhb-btn-err{background:rgba(201,112,112,.14);color:" + BRAND.error + ";",
+      "border:1px solid rgba(201,112,112,.28)}",
+    ".nhb-btn-err:hover{background:rgba(201,112,112,.24)}",
     ".nhb-btn-dim{background:" + BRAND.surfaceHard + ";color:" + BRAND.muted + ";",
       "cursor:not-allowed;opacity:.75}",
     ".nhb-spin{animation:nhb-pulse 1.1s ease-in-out infinite}",
@@ -979,9 +979,9 @@
       "cursor:pointer;background:rgba(148,163,184,.1);color:" + BRAND.muted + ";",
       "flex-shrink:0;transition:all .14s;line-height:1}",
     ".nhb-btn-icon:hover{background:rgba(148,163,184,.2);color:" + BRAND.text + "}",
-    ".nhb-btn-reimport-primary{background:rgba(245,158,11,.14);color:" + BRAND.warning + ";",
-      "border:1px solid rgba(245,158,11,.28)}",
-    ".nhb-btn-reimport-primary:hover{background:rgba(245,158,11,.24)}",
+    ".nhb-btn-reimport-primary{background:rgba(201,164,104,.14);color:" + BRAND.warning + ";",
+      "border:1px solid rgba(201,164,104,.28)}",
+    ".nhb-btn-reimport-primary:hover{background:rgba(201,164,104,.24)}",
     ".nhb-btn-sm{padding:7px 10px;font-size:11px;flex-shrink:0;flex:0 0 auto}",
     /* open-hub-project link */
     ".nhb-open-proj{background:0;border:0;color:" + BRAND.muted + ";font-size:12px;",
@@ -1360,7 +1360,7 @@
     card.innerHTML =
       '<span style="font-size:18px">📚</span>' +
       '<div>' +
-        '<div style="font-size:13px;font-weight:700;color:#bfff00">NOFIDA Hub</div>' +
+        '<div style="font-size:13px;font-weight:700;color:#6BA98F">NOFIDA Hub</div>' +
         '<div style="font-size:11px;color:#94a3b8">Откройте библиотеки, шаблоны, UI-киты и design-system ресурсы внутри пространства NOFIDA.</div>' +
       '</div>';
     card.addEventListener("click", function () {
@@ -1418,11 +1418,11 @@
     fallback.className = "nhb-thumb-fallback";
     fallback.innerHTML =
       '<span style="font-size:28px;line-height:1;display:block;margin-bottom:4px">📋</span>' +
-      '<span style="font-size:11px;font-weight:700;color:#bfff00;letter-spacing:.06em;' +
+      '<span style="font-size:11px;font-weight:700;color:#6BA98F;letter-spacing:.06em;' +
       'text-transform:uppercase">NOFIDA Hub</span>';
     fallback.style.cssText =
       "position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;" +
-      "justify-content:center;background:linear-gradient(135deg,#0b1020 0%,#131e35 100%);" +
+      "justify-content:center;background:linear-gradient(135deg,#0c1018 0%,#161c28 100%);" +
       "border-radius:inherit;pointer-events:none";
 
     /* Ensure container is positioned */
@@ -1531,7 +1531,7 @@
     var toast = document.createElement("div");
     toast.style.cssText =
       "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);" +
-      "background:#1f2937;color:#f8fafc;padding:12px 20px;border-radius:12px;" +
+      "background:#1a1f29;color:#f8fafc;padding:12px 20px;border-radius:12px;" +
       "font-size:13px;z-index:2147483600;font-family:" + BRAND.font + ";" +
       "box-shadow:0 8px 32px rgba(0,0,0,.5)";
     toast.textContent = text;

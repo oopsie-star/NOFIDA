@@ -7,8 +7,8 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0b1020; --surface: #131e35; --border: rgba(37,99,235,.22);
-    --primary: #2563eb; --accent: #10b981; --text: #f8fafc; --muted: #94a3b8;
+    --bg: #0c1018; --surface: #161c28; --border: rgba(94,126,166,.22);
+    --primary: #5E7EA6; --accent: #6BA98F; --text: #f8fafc; --muted: #94a3b8;
     --font: Montserrat, Inter, "Segoe UI", system-ui, sans-serif;
   }
   body { background: var(--bg); color: var(--text); font-family: var(--font);
@@ -17,12 +17,12 @@
     padding: 16px 40px; display: flex; align-items: center; gap: 16px; }
   header .logo { font-size: 18px; font-weight: 900; color: var(--text); text-decoration: none; }
   header .badge { font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 999px;
-    background: rgba(16,185,129,.16); color: #6ee7b7; letter-spacing: .08em; text-transform: uppercase; }
+    background: rgba(107,169,143,.16); color: #A8CBB8; letter-spacing: .08em; text-transform: uppercase; }
   nav.topnav { margin-left: auto; display: flex; gap: 8px; }
   nav.topnav a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;
     padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; transition: all .15s; }
   nav.topnav a:hover, nav.topnav a.active { color: var(--text); border-color: var(--border);
-    background: rgba(37,99,235,.1); }
+    background: rgba(94,126,166,.1); }
   .hero { padding: 48px 40px 32px; border-bottom: 1px solid var(--border); }
   .hero h1 { font-size: 28px; font-weight: 900; margin-bottom: 10px; }
   .hero p { color: var(--muted); font-size: 14px; max-width: 560px; }
@@ -35,7 +35,7 @@
   .channel p { color: var(--muted); font-size: 13px; line-height: 1.55; flex: 1; }
   .channel .ch-status { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
     display: inline-flex; align-items: center; gap: 5px; width: fit-content; }
-  .ch-status.active { background: rgba(16,185,129,.14); color: #6ee7b7; }
+  .ch-status.active { background: rgba(107,169,143,.14); color: #A8CBB8; }
   .ch-status.active::before { content: ""; width: 6px; height: 6px; border-radius: 999px;
     background: var(--accent); }
   .section-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
@@ -61,11 +61,11 @@
     border-radius: 9px; font-size: 13px; font-weight: 700; text-decoration: none;
     border: none; cursor: pointer; transition: all .15s; font-family: var(--font); }
   .btn-primary { background: var(--primary); color: #fff; }
-  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:hover { background: #6E8CB2; }
   .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
-  .btn-ghost:hover { background: rgba(37,99,235,.1); }
-  .about-section { background: linear-gradient(135deg, rgba(37,99,235,.1), rgba(16,185,129,.06));
-    border: 1px solid rgba(37,99,235,.28); border-radius: 16px; padding: 32px; margin-bottom: 48px; }
+  .btn-ghost:hover { background: rgba(94,126,166,.1); }
+  .about-section { background: linear-gradient(135deg, rgba(94,126,166,.1), rgba(107,169,143,.06));
+    border: 1px solid rgba(94,126,166,.28); border-radius: 16px; padding: 32px; margin-bottom: 48px; }
   .about-section h2 { font-size: 20px; font-weight: 900; margin-bottom: 14px; }
   .about-section p { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
   .about-section p:last-child { margin-bottom: 0; }
@@ -198,7 +198,7 @@ function handleSubmit(ev) {
   setTimeout(function() {
     btn.disabled = false;
     btn.textContent = "Отправить запрос";
-    status.style.color = "#6ee7b7";
+    status.style.color = "#A8CBB8";
     status.textContent = "✓ Запрос отправлен. Мы свяжемся с вами в ближайшее время.";
     ev.target.reset();
   }, 1200);

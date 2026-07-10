@@ -31,6 +31,7 @@
     dashboard: "#/dashboard",
     settings: "#/settings/options",
     libraries: "#/nofida/libraries",
+    plugins: "#/nofida/plugins",
     fontCatalog: "#/nofida/fonts",
     media: "#/nofida/media",
     figma: "#/nofida/import/figma",
@@ -69,6 +70,7 @@
       section: "Ресурсы",
       items: [
         { id: "libraries", label: "Библиотеки" },
+        { id: "plugins", label: "Плагины" },
         {
           id: "fonts",
           label: "Шрифты",
@@ -350,6 +352,8 @@
         return getDraftsRoute(hash);
       case "libraries":
         return ROUTES.libraries;
+      case "plugins":
+        return ROUTES.plugins;
       case "fonts":
       case "team-fonts":
         return getNativeFontsRoute(hash);
@@ -397,6 +401,8 @@
     switch (path) {
       case ROUTES.libraries:
         return { activeId: "libraries", childActiveId: "" };
+      case ROUTES.plugins:
+        return { activeId: "plugins", childActiveId: "" };
       case ROUTES.fontCatalog:
         return { activeId: "fonts", childActiveId: "font-catalog" };
       case ROUTES.media:
@@ -468,6 +474,9 @@
     if (path === ROUTES.libraries) {
       return { menuId: "libraries", childMenuId: "", label: "Библиотеки", breadcrumb: ["Панель", "Ресурсы", "Библиотеки"] };
     }
+    if (path === ROUTES.plugins) {
+      return { menuId: "plugins", childMenuId: "", label: "Плагины", breadcrumb: ["Панель", "Ресурсы", "Плагины"] };
+    }
     if (path === ROUTES.media) {
       return { menuId: "media", childMenuId: "", label: "Медиа", breadcrumb: ["Панель", "Ресурсы", "Медиа"] };
     }
@@ -534,6 +543,7 @@
     return [
       { id: "projects", label: "Проекты", href: getProjectsRoute(hash) },
       { id: "libraries", label: "Библиотеки", href: ROUTES.libraries },
+      { id: "plugins", label: "Плагины", href: ROUTES.plugins },
       { id: "fonts", label: "Шрифты", href: getNativeFontsRoute(hash) },
       { id: "media", label: "Медиа", href: ROUTES.media },
       { id: "figma", label: "Импорт из Figma", href: ROUTES.figma },
@@ -1112,9 +1122,31 @@
     rememberHash(getCurrentHash());
     ensureClickHandling();
     renderCurrentSurface(getCurrentHash());
-    window.addEventListener("hashchange", function () {
+
+    function onLocationMightHaveChanged() {
       rememberHash(getCurrentHash());
       renderCurrentSurface(getCurrentHash());
+    }
+
+    window.addEventListener("hashchange", onLocationMightHaveChanged);
+    window.addEventListener("popstate", onLocationMightHaveChanged);
+
+    // Penpot's own router navigates via the History API (pushState /
+    // replaceState) rather than by reassigning location.hash — so opening a
+    // file from the dashboard, or leaving a file back to the dashboard,
+    // changes the visible URL without ever firing "hashchange" (and
+    // pushState/replaceState fire no native event of their own either).
+    // Without this, #nofida-shell goes stale: it keeps rendering whatever
+    // surface it last saw on a real page load, e.g. the dashboard sidebar
+    // still showing — and overlapping — on top of the editor. Patch both
+    // methods once so every in-app navigation re-runs our own surface check.
+    ["pushState", "replaceState"].forEach(function (method) {
+      var original = history[method];
+      history[method] = function () {
+        var result = original.apply(this, arguments);
+        onLocationMightHaveChanged();
+        return result;
+      };
     });
   }
 

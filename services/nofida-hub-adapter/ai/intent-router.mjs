@@ -13,15 +13,23 @@ import {
   normalizeScope,
 } from "./prompt-registry.mjs";
 
+// Short imperative/continuation phrases — only meaningful as "build_screen"
+// when there is an actual previous screen spec in context to act on. A bare
+// "реализуй"/"implement it" with nothing built yet is too ambiguous to route
+// anywhere but free_chat.
+const IMPLEMENT_CONTINUATION_RE = /^(реализуй|сделай(\s+это)?|примени|воплоти|внедри|implement(\s+it)?|do\s+it|go\s+ahead|build\s+it|apply\s+it)[.!\s]*$/;
+
 // Lightweight free-text classifier.
 // Returns a known task type when the prompt contains strong keyword signals,
 // or null when the match is ambiguous (stays as free_chat).
-function classifyFreeText(text) {
-  const t = String(text || "").toLowerCase();
+function classifyFreeText(text, context) {
+  const t = String(text || "").toLowerCase().trim();
+  if (context?.previousScreenSpec && IMPLEMENT_CONTINUATION_RE.test(t)) return "build_screen";
   if (/audit|review|fix|issue|problem|проверь|аудит|проблем|исправ/.test(t)) return "design_audit";
   if (/librar|catalog|kit|saas|component|recommend|подбери|библиотек|каталог/.test(t))
     return "library_recommendation";
   if (/summary|overview|what.*file|что.*файл|сводк|обзор/.test(t)) return "file_summary";
+  if (/собери\s+экран|создай\s+экран|сделай\s+экран|нарисуй\s+экран|build\s+(a\s+)?screen|create\s+(a\s+)?screen|design\s+(a\s+|the\s+)?screen/.test(t)) return "build_screen";
   if (/screen\s+plan|flow.*plan|wireframe|план\s+экран|структур.*экран/.test(t)) return "screen_plan";
   if (/copy\s+review|headline|cta\s|microcopy|проверь\s+тексты|копирайт/.test(t)) return "copy_review";
   if (/access|\ba11y\b|contrast\s+check|wcag/.test(t)) return "accessibility_review";
@@ -72,8 +80,17 @@ export function routeTask({ taskType: rawTaskType, userPrompt, scope: rawScope, 
   let taskType = normalizeTaskType(rawTaskType);
 
   if (!taskType) {
-    // Free-text path: try to classify, fall back to free_chat
-    taskType = (userPrompt ? classifyFreeText(userPrompt) : null) || "free_chat";
+    // Free-text path: try a specific classification first (audit, library,
+    // summary, copy, a11y, layer ops...). If nothing specific matched and
+    // there's an open file, default to build_screen — not free_chat.
+    // free_chat is hardcoded to "never apply changes, describe plans only",
+    // which is exactly the "here's what YOU should do manually" behaviour
+    // this product must never produce for an ordinary "make me a screen/
+    // background/..." request. free_chat stays the fallback only when there
+    // truly is no file open to build into (dashboard scope, nothing to act on).
+    const classified = userPrompt ? classifyFreeText(userPrompt, context) : null;
+    const hasEditorContext = Boolean(context?.file);
+    taskType = classified || (hasEditorContext ? "build_screen" : "free_chat");
   }
 
   // Resolve scope

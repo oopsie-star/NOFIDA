@@ -11,7 +11,7 @@
 
 html,
 body.default {
-  background-color: #0b1020 !important;
+  background-color: #0c1018 !important;
 }
 
 html body.default,
@@ -19,69 +19,69 @@ body.default,
 body.default .default,
 body.default #app,
 body.default #modal {
-  --color-background-default: #0b1020 !important;
-  --color-background-primary: #0b1020 !important;
-  --color-background-secondary: #060c18 !important;
-  --color-background-tertiary: #131e35 !important;
-  --color-background-quaternary: #1f2937 !important;
+  --color-background-default: #0c1018 !important;
+  --color-background-primary: #0c1018 !important;
+  --color-background-secondary: #0a0d12 !important;
+  --color-background-tertiary: #161c28 !important;
+  --color-background-quaternary: #1a1f29 !important;
 
   --color-foreground-primary: #f8fafc !important;
   --color-foreground-secondary: #94a3b8 !important;
-  --color-foreground-error: #ff6b8f !important;
+  --color-foreground-error: #D68C8C !important;
 
-  --color-accent-primary: #2563eb !important;
-  --color-accent-primary-muted: rgba(37, 99, 235, 0.18) !important;
-  --color-accent-secondary: #1d4ed8 !important;
-  --color-accent-tertiary: #bfff00 !important;
-  --color-accent-quaternary: #7dd3fc !important;
-  --color-accent-overlay: rgba(37, 99, 235, 0.48) !important;
-  --color-accent-select: rgba(37, 99, 235, 0.12) !important;
-  --color-accent-background-select: rgba(37, 99, 235, 0.32) !important;
-  --color-accent-action: #60a5fa !important;
-  --color-accent-action-hover: #93c5fd !important;
+  --color-accent-primary: #5E7EA6 !important;
+  --color-accent-primary-muted: rgba(94,126,166, 0.18) !important;
+  --color-accent-secondary: #6E8CB2 !important;
+  --color-accent-tertiary: #6BA98F !important;
+  --color-accent-quaternary: #A8BFD4 !important;
+  --color-accent-overlay: rgba(94,126,166, 0.48) !important;
+  --color-accent-select: rgba(94,126,166, 0.12) !important;
+  --color-accent-background-select: rgba(94,126,166, 0.32) !important;
+  --color-accent-action: #7B9BC0 !important;
+  --color-accent-action-hover: #A8BFD4 !important;
   --color-accent-off: #e2e8f0 !important;
-  --color-accent-success: #22c55e !important;
-  --color-accent-warning: #f59e0b !important;
-  --color-accent-error: #f43f5e !important;
-  --color-accent-info: #38bdf8 !important;
-  --color-accent-default: #1f2937 !important;
+  --color-accent-success: #7CB79E !important;
+  --color-accent-warning: #C9A468 !important;
+  --color-accent-error: #C97070 !important;
+  --color-accent-info: #7B9BC0 !important;
+  --color-accent-default: #1a1f29 !important;
 
   --color-background-success: #072d1e !important;
   --color-background-warning: #3d2501 !important;
   --color-background-error: #4a1123 !important;
   --color-background-info: #0f2c4d !important;
-  --color-background-disabled: #1f2937 !important;
+  --color-background-disabled: #1a1f29 !important;
   --color-icon-default: #94a3b8 !important;
   --color-shadow-dark: rgba(2, 6, 23, 0.72) !important;
   --color-shadow-light: rgba(2, 6, 23, 0.36) !important;
   --color-overlay-default: rgba(6, 12, 24, 0.72) !important;
   --color-overlay-onboarding: rgba(6, 12, 24, 0.92) !important;
   --color-token-background: #0f1730 !important;
-  --color-token-border: #1d4ed8 !important;
-  --color-token-accent: #60a5fa !important;
+  --color-token-border: #6E8CB2 !important;
+  --color-token-accent: #7B9BC0 !important;
   --color-token-foreground: #dbeafe !important;
 
-  --canvas-background-color: #0b1020 !important;
-  --panel-background-color: #131e35 !important;
-  --app-background: #0b1020 !important;
-  --loader-background: #0b1020 !important;
-  --menu-background-color: #131e35 !important;
-  --modal-background-color: #10192f !important;
-  --modal-border-color: rgba(37, 99, 235, 0.24) !important;
-  --sidebar-element-background-color-hover: #131e35 !important;
-  --sidebar-element-background-color-selected: rgba(37, 99, 235, 0.16) !important;
+  --canvas-background-color: #0c1018 !important;
+  --panel-background-color: #161c28 !important;
+  --app-background: #0c1018 !important;
+  --loader-background: #0c1018 !important;
+  --menu-background-color: #161c28 !important;
+  --modal-background-color: #12161f !important;
+  --modal-border-color: rgba(94,126,166, 0.24) !important;
+  --sidebar-element-background-color-hover: #161c28 !important;
+  --sidebar-element-background-color-selected: rgba(94,126,166, 0.16) !important;
   --sidebar-element-foreground-color-hover: #f8fafc !important;
-  --sidebar-element-foreground-color-selected: #bfff00 !important;
-  --search-bar-background-color: #131e35 !important;
-  --input-background-color: #131e35 !important;
-  --input-background-color-active: #131e35 !important;
-  --input-background-color-disabled: #10192f !important;
-  --low-emphasis-background: #10192f !important;
+  --sidebar-element-foreground-color-selected: #6BA98F !important;
+  --search-bar-background-color: #161c28 !important;
+  --input-background-color: #161c28 !important;
+  --input-background-color-active: #161c28 !important;
+  --input-background-color-disabled: #12161f !important;
+  --low-emphasis-background: #12161f !important;
 
-  --button-primary-background-color-rest: #2563eb !important;
-  --button-primary-border-color-rest: #2563eb !important;
-  --button-primary-background-color-hover: #1d4ed8 !important;
-  --button-primary-border-color-hover: #1d4ed8 !important;
+  --button-primary-background-color-rest: #5E7EA6 !important;
+  --button-primary-border-color-rest: #5E7EA6 !important;
+  --button-primary-background-color-hover: #6E8CB2 !important;
+  --button-primary-border-color-hover: #6E8CB2 !important;
   --button-primary-foreground-color-rest: #f8fafc !important;
   --button-primary-foreground-color-hover: #f8fafc !important;
 
@@ -95,7 +95,7 @@ body.default .main_ui_dashboard__dashboard-content,
 body.default .main_ui_auth__auth-page-container,
 body.default .main_ui_auth_login__login-section,
 body.default .main_ui_auth__auth-page-right {
-  background-color: #0b1020 !important;
+  background-color: #0c1018 !important;
   color: #f8fafc !important;
 }
 
@@ -213,9 +213,9 @@ nav a svg[class*="logo"],
   --nofida-shell-text: #e5edf8;
   --nofida-shell-muted: #94a3b8;
   --nofida-shell-dim: #64748b;
-  --nofida-shell-accent: #8fd400;
-  --nofida-shell-accent-soft: rgba(143, 212, 0, 0.12);
-  --nofida-shell-blue: #2f6df6;
+  --nofida-shell-accent: #6BA98F;
+  --nofida-shell-accent-soft: rgba(107,169,143, 0.12);
+  --nofida-shell-blue: #5E7EA6;
   --nofida-sidebar-width: 280px;
   --nofida-radius: 14px;
 }
@@ -368,9 +368,9 @@ nav a svg[class*="logo"],
 
 .nofida-nav-item.is-active,
 .nofida-nav-subitem.is-active {
-  background: rgba(47, 109, 246, 0.18);
+  background: rgba(94,126,166, 0.18);
   color: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.20);
+  box-shadow: inset 0 0 0 1px rgba(123,155,192, 0.20);
 }
 
 .nofida-nav-item.is-parent-active {
@@ -419,7 +419,7 @@ nav a svg[class*="logo"],
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  background: rgba(47, 109, 246, 0.18);
+  background: rgba(94,126,166, 0.18);
   color: #ffffff;
   font-size: 12px;
   font-weight: 800;
@@ -534,34 +534,34 @@ nav a svg[class*="logo"],
   gap: 14px;
 }
 
-body.default.nofida-shell-page-active {
+body.nofida-shell-page-active {
   overflow: hidden !important;
 }
 
-body.default.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] {
+body.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] {
   background: transparent;
   pointer-events: none;
 }
 
-body.default.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] .nofida-shell-sidebar {
+body.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] .nofida-shell-sidebar {
   pointer-events: auto;
 }
 
-body.default.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] .nofida-shell-main {
+body.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] .nofida-shell-main {
   background: transparent;
   pointer-events: none;
 }
 
-body.default.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] .nofida-page-frame {
+body.nofida-dashboard-shell-active #nofida-shell[data-route-kind="native-dashboard"] .nofida-page-frame {
   display: none;
 }
 
-body.default.nofida-dashboard-shell-active .main_ui_dashboard_sidebar__dashboard-sidebar,
-body.default.nofida-dashboard-shell-active [class*="dashboard_sidebar__dashboard-sidebar"] {
+body.nofida-dashboard-shell-active .main_ui_dashboard_sidebar__dashboard-sidebar,
+body.nofida-dashboard-shell-active [class*="dashboard_sidebar__dashboard-sidebar"] {
   display: none !important;
 }
 
-body.default.nofida-dashboard-shell-active .main_ui_dashboard__dashboard-content {
+body.nofida-dashboard-shell-active .main_ui_dashboard__dashboard-content {
   margin-left: var(--nofida-sidebar-width) !important;
   width: calc(100vw - var(--nofida-sidebar-width)) !important;
   max-width: none !important;
@@ -572,8 +572,8 @@ body.default.nofida-dashboard-shell-active .main_ui_dashboard__dashboard-content
   background: #070d1a !important;
 }
 
-body.default.nofida-dashboard-shell-active .main_ui_dashboard_grid__dashboard-grid,
-body.default.nofida-dashboard-shell-active [class*="dashboard-grid"] {
+body.nofida-dashboard-shell-active .main_ui_dashboard_grid__dashboard-grid,
+body.nofida-dashboard-shell-active [class*="dashboard-grid"] {
   width: min(1180px, calc(100vw - var(--nofida-sidebar-width) - 72px)) !important;
   margin-left: auto !important;
   margin-right: auto !important;

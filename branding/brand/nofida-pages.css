@@ -6,9 +6,9 @@
   color: #f8fafc;
   font-family: Montserrat, Inter, "Segoe UI", system-ui, sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.14), transparent 34%),
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.18), transparent 30%),
-    linear-gradient(180deg, #08111f 0%, #0b1020 42%, #0a1324 100%);
+    radial-gradient(circle at top left, rgba(107,169,143, 0.14), transparent 34%),
+    radial-gradient(circle at top right, rgba(94,126,166, 0.18), transparent 30%),
+    linear-gradient(180deg, #08111f 0%, #0c1018 42%, #0a1324 100%);
 }
 
 #nfp-overlay[hidden] {
@@ -50,7 +50,7 @@
   min-height: 24px;
   padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid rgba(96, 165, 250, 0.18);
+  border: 1px solid rgba(123,155,192, 0.18);
   background: rgba(15, 23, 42, 0.72);
   color: #cbd5e1;
   font-size: 10px;
@@ -76,7 +76,7 @@
 .nfp-back:hover,
 .nfp-close:hover {
   color: #f8fafc;
-  border-color: rgba(37, 99, 235, 0.34);
+  border-color: rgba(94,126,166, 0.34);
   background: rgba(12, 24, 42, 0.92);
 }
 
@@ -90,7 +90,7 @@
 .nfp-nav-panel,
 .nfp-hero,
 .nfp-card {
-  border: 1px solid rgba(37, 99, 235, 0.2);
+  border: 1px solid rgba(94,126,166, 0.2);
   box-shadow: 0 18px 50px rgba(3, 7, 18, 0.34);
 }
 
@@ -132,7 +132,7 @@
 .nfp-nav-link:hover,
 .nfp-nav-link.active {
   color: #f8fafc;
-  border-color: rgba(37, 99, 235, 0.28);
+  border-color: rgba(94,126,166, 0.28);
   background: rgba(19, 30, 53, 0.92);
   transform: translateX(2px);
 }
@@ -163,8 +163,8 @@
   align-items: center;
   padding: 5px 9px;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.12);
-  color: #bfdbfe;
+  background: rgba(94,126,166, 0.12);
+  color: #C7D6E5;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -214,14 +214,14 @@
 }
 
 .nfp-btn-primary {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, #5E7EA6, #6E8CB2);
   color: #ffffff;
-  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
+  box-shadow: 0 14px 28px rgba(94,126,166, 0.24);
 }
 
 .nfp-btn-secondary {
   color: #e2e8f0;
-  border: 1px solid rgba(37, 99, 235, 0.24);
+  border: 1px solid rgba(94,126,166, 0.24);
   background: rgba(11, 16, 32, 0.66);
 }
 
@@ -229,7 +229,7 @@
   margin-top: 18px;
   padding: 14px 16px;
   border-radius: 18px;
-  border: 1px solid rgba(245, 158, 11, 0.28);
+  border: 1px solid rgba(201,164,104, 0.28);
   background: rgba(120, 53, 15, 0.22);
   color: #fde68a;
   font-size: 13px;
@@ -275,9 +275,9 @@
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  color: #bfdbfe;
+  color: #C7D6E5;
   text-decoration: none;
-  border: 1px solid rgba(37, 99, 235, 0.22);
+  border: 1px solid rgba(94,126,166, 0.22);
   background: rgba(7, 12, 24, 0.64);
   font-size: 12px;
   font-weight: 700;
@@ -286,8 +286,8 @@
 
 .nfp-links a:hover {
   color: #f8fafc;
-  border-color: rgba(37, 99, 235, 0.44);
-  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(94,126,166, 0.44);
+  background: rgba(94,126,166, 0.18);
 }
 
 .nfp-footer-note {

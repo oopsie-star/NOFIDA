@@ -7,8 +7,8 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0b1020; --surface: #131e35; --border: rgba(37,99,235,.22);
-    --primary: #2563eb; --accent: #10b981; --text: #f8fafc; --muted: #94a3b8;
+    --bg: #0c1018; --surface: #161c28; --border: rgba(94,126,166,.22);
+    --primary: #5E7EA6; --accent: #6BA98F; --text: #f8fafc; --muted: #94a3b8;
     --font: Montserrat, Inter, "Segoe UI", system-ui, sans-serif;
   }
   body { background: var(--bg); color: var(--text); font-family: var(--font);
@@ -17,12 +17,12 @@
     padding: 16px 40px; display: flex; align-items: center; gap: 16px; }
   header .logo { font-size: 18px; font-weight: 900; color: var(--text); text-decoration: none; }
   header .badge { font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 999px;
-    background: rgba(37,99,235,.18); color: #bfdbfe; letter-spacing: .08em; text-transform: uppercase; }
+    background: rgba(94,126,166,.18); color: #C7D6E5; letter-spacing: .08em; text-transform: uppercase; }
   nav.topnav { margin-left: auto; display: flex; gap: 8px; }
   nav.topnav a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;
     padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; transition: all .15s; }
   nav.topnav a:hover, nav.topnav a.active { color: var(--text); border-color: var(--border);
-    background: rgba(37,99,235,.1); }
+    background: rgba(94,126,166,.1); }
   .hero { padding: 48px 40px 32px; border-bottom: 1px solid var(--border); }
   .hero h1 { font-size: 28px; font-weight: 900; margin-bottom: 10px; }
   .hero p { color: var(--muted); font-size: 14px; max-width: 600px; }
@@ -33,20 +33,20 @@
     display: flex; align-items: center; gap: 14px; }
   .track-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center;
     justify-content: center; font-size: 20px; flex-shrink: 0; }
-  .track-icon.blue { background: rgba(37,99,235,.16); }
-  .track-icon.green { background: rgba(16,185,129,.14); }
-  .track-icon.purple { background: rgba(139,92,246,.14); }
+  .track-icon.blue { background: rgba(94,126,166,.16); }
+  .track-icon.green { background: rgba(107,169,143,.14); }
+  .track-icon.purple { background: rgba(155,143,191,.14); }
   .track h2 { font-size: 15px; font-weight: 800; }
   .track .tag { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase;
     letter-spacing: .06em; margin-top: 2px; }
   .lessons { padding: 8px 0; }
   .lesson { display: flex; align-items: center; gap: 12px; padding: 10px 22px;
-    border-bottom: 1px solid rgba(37,99,235,.1); text-decoration: none; color: var(--text);
+    border-bottom: 1px solid rgba(94,126,166,.1); text-decoration: none; color: var(--text);
     transition: background .12s; }
   .lesson:last-child { border-bottom: none; }
-  .lesson:hover { background: rgba(37,99,235,.07); }
-  .lesson .num { width: 22px; height: 22px; border-radius: 999px; background: rgba(37,99,235,.14);
-    color: #93c5fd; font-size: 10px; font-weight: 900; display: flex; align-items: center;
+  .lesson:hover { background: rgba(94,126,166,.07); }
+  .lesson .num { width: 22px; height: 22px; border-radius: 999px; background: rgba(94,126,166,.14);
+    color: #A8BFD4; font-size: 10px; font-weight: 900; display: flex; align-items: center;
     justify-content: center; flex-shrink: 0; }
   .lesson .lbl { font-size: 13px; font-weight: 600; flex: 1; }
   .lesson .dur { font-size: 11px; color: var(--muted); }
@@ -57,8 +57,8 @@
     padding: 16px 18px; }
   .concept h3 { font-size: 14px; font-weight: 800; margin-bottom: 6px; }
   .concept p { font-size: 12px; color: var(--muted); line-height: 1.55; }
-  .ai-section { background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(16,185,129,.08));
-    border: 1px solid rgba(37,99,235,.3); border-radius: 16px; padding: 32px; margin-bottom: 48px; }
+  .ai-section { background: linear-gradient(135deg, rgba(94,126,166,.12), rgba(107,169,143,.08));
+    border: 1px solid rgba(94,126,166,.3); border-radius: 16px; padding: 32px; margin-bottom: 48px; }
   .ai-section h2 { font-size: 20px; font-weight: 900; margin-bottom: 10px; }
   .ai-section p { color: var(--muted); font-size: 14px; margin-bottom: 20px; max-width: 560px; }
   .steps { display: flex; flex-direction: column; gap: 14px; }
@@ -71,7 +71,7 @@
   .btn { display: inline-flex; align-items: center; padding: 9px 20px; border-radius: 9px;
     font-size: 13px; font-weight: 700; text-decoration: none; transition: all .15s; }
   .btn-primary { background: var(--primary); color: #fff; margin-top: 20px; }
-  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:hover { background: #6E8CB2; }
   footer { border-top: 1px solid var(--border); padding: 20px 40px; color: var(--muted);
     font-size: 12px; text-align: center; }
 </style>

@@ -19,36 +19,39 @@
   var AI_ENGINE_URL = "/api/nofida/ai/settings/engine";
   var AI_TEST_PROVIDER_URL = "/api/nofida/ai/test-provider";
   var AI_TEST_MODEL_URL = "/api/nofida/ai/test-model";
+  var AI_THREADS_URL = "/api/nofida/ai/threads";
   var HOST_ID = "nofida-shell-root";
   var DASHBOARD_SELECTOR = ".main_ui_dashboard__dashboard-content";
   var GRID_SELECTOR = ".main_ui_dashboard_grid__dashboard-grid";
 
+  // Muted "matte glass" palette — deliberately desaturated from the earlier
+  // vivid blue/green/amber/red set. Same roles, softer values: less strain
+  // over long sessions, frosted-glass panels instead of flat saturated fills.
   var BRAND = {
-    bg: "#0b1020",
-    surface: "#131e35",
-    surfaceStrong: "#10192f",
-    surfaceSoft: "rgba(19,30,53,.82)",
-    border: "rgba(37, 99, 235, 0.24)",
-    borderAccent: "rgba(16, 185, 129, .32)",
-    borderDanger: "rgba(248, 113, 113, .34)",
-    primary: "#2563eb",
-    primaryHover: "#1d4ed8",
-    accent: "#10b981",
-    accentSoft: "rgba(16, 185, 129, .16)",
-    accentInk: "#ecfeff",
-    warn: "#f59e0b",
-    danger: "#ef4444",
-    text: "#f8fafc",
-    muted: "#94a3b8",
+    bg: "#0c1018",
+    surface: "#161c28",
+    surfaceStrong: "#12161f",
+    surfaceSoft: "rgba(22,28,40,.66)",
+    border: "rgba(94, 126, 166, 0.20)",
+    borderAccent: "rgba(107, 169, 143, .26)",
+    borderDanger: "rgba(201, 112, 112, .28)",
+    primary: "#5E7EA6",
+    primaryHover: "#6E8CB2",
+    accent: "#6BA98F",
+    accentSoft: "rgba(107, 169, 143, .14)",
+    accentInk: "#eef5f2",
+    warn: "#C9A468",
+    danger: "#C97070",
+    text: "#e9edf3",
+    muted: "#8a93a3",
+    glass: "blur(18px) saturate(120%)",
     font: 'Montserrat, Inter, "Segoe UI", system-ui, sans-serif'
   };
 
   var SETTINGS_TABS = [
     { id: "api", label: "API Configuration" },
     { id: "models", label: "Model Library" },
-    { id: "accounts", label: "External Accounts" },
-    { id: "engine", label: "Engine" },
-    { id: "prompts", label: "Prompts" }
+    { id: "engine", label: "Engine" }
   ];
 
   var ROLE_LABELS = {
@@ -64,6 +67,40 @@
     "premium": "Premium"
   };
 
+  var ROLE_ACCENTS = {
+    "default": { emoji: "🤖", color: "#7B9BC0" },
+    "file_summary": { emoji: "📄", color: "#94a3b8" },
+    "design_audit": { emoji: "🔍", color: "#9B8FBF" },
+    "library_recommendation": { emoji: "📚", color: "#6FA89C" },
+    "screen_planner": { emoji: "🗺️", color: "#C99368" },
+    "copywriter": { emoji: "✏️", color: "#C4AD6E" },
+    "reviewer": { emoji: "🧐", color: "#D68C8C" },
+    "vision": { emoji: "👁️", color: "#7BA8C4" },
+    "fast": { emoji: "⚡", color: "#6FAE8F" },
+    "premium": { emoji: "💎", color: "#BFA655" }
+  };
+
+  var PROVIDER_ACCENTS = {
+    "openrouter": "#9B8FBF",
+    "deepseek": "#D68C8C",
+    "openai": "#7B9BC0",
+    "openai_compatible": "#94a3b8",
+    "anthropic": "#C9A468",
+    "gemini": "#6FAE8F",
+    "groq": "#6FA89C",
+    "mistral": "#C99368",
+    "xiaomi": "#C4818A",
+    "qwen": "#7BA8C4",
+    "z_ai": "#BFA655",
+    "custom": "#9ca3af"
+  };
+
+  function hexToRgb(hex) {
+    var clean = String(hex || "").replace("#", "");
+    var num = parseInt(clean, 16);
+    return [(num >> 16) & 255, (num >> 8) & 255, num & 255].join(",");
+  }
+
   // Preset task buttons available in dashboard scope (no canvas required)
   var PRESET_TASKS_DASHBOARD = [
     { taskType: "library_recommendation", label: "Библиотеки для проекта", desc: "Подобрать из NOFIDA Hub" },
@@ -74,6 +111,7 @@
 
   // Additional presets available only in editor scope
   var PRESET_TASKS_EDITOR_EXTRA = [
+    { taskType: "build_screen", label: "Собрать экран", desc: "AI строит реальный экран на холсте" },
     { taskType: "screen_plan", label: "План экрана", desc: "Структура текущей страницы" },
     { taskType: "copy_review", label: "Копирайтинг", desc: "Улучшить тексты" },
     { taskType: "accessibility_review", label: "Доступность", desc: "Проверить a11y" },
@@ -89,6 +127,13 @@
     _fileContext: null,
     _aiLoading: false,
     _installedItems: [],
+    _screenSpecs: {},
+    _screenSpecSeq: 0,
+    _lastScreenSpec: null,
+    _pendingAttachments: [],
+    threads: [],
+    activeThreadId: null,
+    threadsLoaded: false,
     settings: null,
     settingsOpen: false,
     settingsLoading: false,
@@ -106,8 +151,9 @@
       activeTab: "api",
       flash: null,
       search: "",
-      providerFilter: "openrouter",
+      providerFilter: "all",
       sort: "name",
+      sortDir: "asc",
       focusRole: "default",
       capabilityFilters: {
         free: false,
@@ -122,6 +168,11 @@
       modelRoleDrafts: {},
       modelProviderDrafts: {},
       modelMessages: {},
+      expandedDesc: {},
+      modelAssignOpenId: null,
+      modelPing: {},
+      testAllRunning: false,
+      savedProviderId: null,
       engineDraft: null,
       fallbackDraft: {
         providerId: "openrouter",
@@ -299,10 +350,10 @@
     style.textContent = [
       "#nofida-ai-sidebar-item{cursor:pointer;user-select:none}",
       "#nofida-ai-sidebar-item .nofida-ai-sidebar-label{display:inline-flex;align-items:center;gap:10px}",
-      "#nofida-ai-sidebar-item .nofida-ai-sidebar-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:rgba(37,99,235,.16);color:#93c5fd;flex:0 0 18px}",
+      "#nofida-ai-sidebar-item .nofida-ai-sidebar-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:rgba(94,126,166,.16);color:#A8BFD4;flex:0 0 18px}",
       "#nofida-ai-sidebar-item.main_ui_settings_sidebar__current .nofida-ai-sidebar-icon{background:rgba(191,255,0,.18);color:#d9ff5b}",
       "#nofida-ai-sidebar-item .nofida-ai-sidebar-icon svg{width:12px;height:12px;display:block}",
-      "#nofida-ai-sidebar-item .nofida-ai-sidebar-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(16,185,129,.14);color:#8ef0cd;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-left:8px}"
+      "#nofida-ai-sidebar-item .nofida-ai-sidebar-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;background:rgba(107,169,143,.14);color:#8ef0cd;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-left:8px}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -494,7 +545,7 @@
     state.settingsError = "";
     renderSettings();
 
-    return apiJson(AI_SETTINGS_URL)
+    return apiJson(force ? (AI_SETTINGS_URL + "?refresh=1") : AI_SETTINGS_URL)
       .then(function (data) {
         state.settings = data.settings || null;
         syncUiStateFromSettings();
@@ -519,6 +570,7 @@
       updateCtxStrip(state._fileContext);  // render scope + presets immediately
       requestContext();
       state.els.input.focus();
+      if (!state.threadsLoaded) refreshThreadsList();
     }
   }
 
@@ -569,14 +621,6 @@
     return ms ? (ms + " ms") : "—";
   }
 
-  function formatModelMeta(model) {
-    var bits = [];
-    if (model.providerLabel) bits.push(model.providerLabel);
-    if (model.contextWindow) bits.push("ctx " + model.contextWindow.toLocaleString());
-    if (model.maxOutputTokens) bits.push("out " + model.maxOutputTokens.toLocaleString());
-    return bits.join(" · ");
-  }
-
   function getCompatibleProviders(model) {
     var providerIds = model.compatibleProviders || [];
     return providerIds.map(function (providerId) { return getProvider(providerId); }).filter(Boolean);
@@ -597,8 +641,19 @@
     return state.settingsUi.modelRoleDrafts[modelId] || state.settingsUi.focusRole || "default";
   }
 
-  function formatPrice(model) {
-    return model.price && model.price.label ? model.price.label : "Unknown";
+  // Mirrors AI Studio's fmtP(): 0 -> Free, null -> ?, <0.1 -> 4 decimals, else 2 decimals, per-1M-token.
+  function fmtPricePer1M(value) {
+    if (value === null || value === undefined) return "?";
+    if (value === 0) return "Free";
+    var per1M = value * 1000000;
+    return "$" + (per1M < 0.1 ? per1M.toFixed(4) : per1M.toFixed(2));
+  }
+
+  function getModelUsageRoles(modelId) {
+    var assignments = (state.settings && state.settings.modelAssignments) || {};
+    return Object.keys(assignments).filter(function (role) {
+      return assignments[role] && assignments[role].modelId === modelId;
+    });
   }
 
   function getFilteredModels() {
@@ -606,11 +661,12 @@
     if (!settings || !Array.isArray(settings.modelLibrary)) return [];
 
     var search = String(state.settingsUi.search || "").trim().toLowerCase();
-    var providerFilter = state.settingsUi.providerFilter || "openrouter";
+    var providerFilter = state.settingsUi.providerFilter || "all";
     var activeCaps = Object.keys(state.settingsUi.capabilityFilters).filter(function (cap) {
       return state.settingsUi.capabilityFilters[cap];
     });
     var sort = state.settingsUi.sort || "name";
+    var sortDir = state.settingsUi.sortDir === "desc" ? "desc" : "asc";
 
     var models = settings.modelLibrary.filter(function (model) {
       var haystack = (
@@ -629,13 +685,17 @@
     });
 
     models.sort(function (left, right) {
-      if (sort === "context") return (right.contextWindow || 0) - (left.contextWindow || 0);
-      if (sort === "price") {
+      var result;
+      if (sort === "context") {
+        result = (left.contextWindow || 0) - (right.contextWindow || 0);
+      } else if (sort === "price") {
         var lp = left.price && typeof left.price.prompt === "number" ? left.price.prompt : Number.POSITIVE_INFINITY;
         var rp = right.price && typeof right.price.prompt === "number" ? right.price.prompt : Number.POSITIVE_INFINITY;
-        if (lp !== rp) return lp - rp;
+        result = lp - rp;
+      } else {
+        result = String(left.displayName || "").localeCompare(String(right.displayName || ""));
       }
-      return String(left.displayName || "").localeCompare(String(right.displayName || ""));
+      return sortDir === "desc" ? -result : result;
     });
 
     return models;
@@ -660,12 +720,19 @@
       ? "Base URL"
       : "Base URL (optional override)";
     var inline = state.settingsUi.providerMessages[provider.providerId];
+    var accent = PROVIDER_ACCENTS[provider.providerId] || "#94a3b8";
+    var accentRgb = hexToRgb(accent);
+    var isSaved = state.settingsUi.savedProviderId === provider.providerId;
+    var cardStyle = "background:rgba(" + accentRgb + ",0.05);border-color:rgba(" + accentRgb + ",0.15)";
+    var saveStyle = isSaved
+      ? "background:#7CB79E;color:#000"
+      : "background:" + accent + ";color:#000";
 
     return [
-      '<article class="provider-card">',
+      '<article class="provider-card" style="' + escapeHtml(cardStyle) + '">',
       '  <div class="provider-top">',
       '    <div>',
-      '      <h3>' + escapeHtml(provider.label) + "</h3>",
+      '      <h3 style="color:' + escapeHtml(accent) + '">' + escapeHtml(provider.label) + "</h3>",
       '      <p>' + escapeHtml(provider.adapter) + '</p>',
       "    </div>",
       '    <span class="status-pill ' + providerStatusTone(provider.status) + '">' + escapeHtml(providerStatusLabel(provider.status)) + "</span>",
@@ -687,7 +754,7 @@
       "  </div>",
       inline ? ('  <div class="inline-message ' + messageToneClass(inline.tone) + '">' + escapeHtml(inline.text) + "</div>") : "",
       '  <div class="provider-actions">',
-      '    <button class="btn primary" type="button" data-action="save-provider" data-provider-id="' + escapeHtml(provider.providerId) + '">Save</button>',
+      '    <button class="btn provider-save-btn" style="' + escapeHtml(saveStyle) + '" type="button" data-action="save-provider" data-provider-id="' + escapeHtml(provider.providerId) + '">' + (isSaved ? "✓ Saved" : "Save") + "</button>",
       '    <button class="btn ghost" type="button" data-action="test-provider" data-provider-id="' + escapeHtml(provider.providerId) + '">Test</button>',
       '    <button class="btn danger" type="button" data-action="delete-provider" data-provider-id="' + escapeHtml(provider.providerId) + '">Delete key</button>',
       "  </div>",
@@ -716,7 +783,22 @@
 
   function renderCapabilityFilter(capability) {
     var checked = Boolean(state.settingsUi.capabilityFilters[capability]);
-    return '<label class="chip-filter"><input type="checkbox" data-capability="' + capability + '"' + (checked ? " checked" : "") + " /> " + capability.charAt(0).toUpperCase() + capability.slice(1) + "</label>";
+    var toneClass = capability === "free" ? " free" : capability === "vision" ? " vision" : "";
+    return '<label class="filter-toggle' + toneClass + (checked ? " active" : "") + '"><input type="checkbox" data-capability="' + capability + '"' + (checked ? " checked" : "") + " /> " + escapeHtml(capability === "free" ? "Free only" : capability.charAt(0).toUpperCase() + capability.slice(1)) + "</label>";
+  }
+
+  function renderSortButton(key, label) {
+    var active = state.settingsUi.sort === key;
+    var arrow = active ? (state.settingsUi.sortDir === "desc" ? " ↓" : " ↑") : "";
+    return '<button class="sort-btn' + (active ? " active" : "") + '" type="button" data-action="set-sort" data-sort-key="' + key + '">' + escapeHtml(label) + arrow + "</button>";
+  }
+
+  function renderPingBadge(modelId) {
+    var ping = state.settingsUi.modelPing[modelId] || { status: "idle" };
+    if (ping.status === "ok") return '<span class="ping-ok">✅ ' + escapeHtml(String(ping.ms || "")) + "ms</span>";
+    if (ping.status === "error") return '<span class="ping-error">❌ ' + escapeHtml(ping.code ? String(ping.code) : "Err") + "</span>";
+    if (ping.status === "loading") return '<span class="ping-spinner" aria-hidden="true"></span>';
+    return "";
   }
 
   function renderModelCard(model) {
@@ -733,28 +815,68 @@
     var inlineKey = model.id + "::" + providerId;
     var inline = state.settingsUi.modelMessages[inlineKey];
 
+    var capabilities = model.capabilities || [];
+    var isFree = capabilities.indexOf("free") >= 0;
+    var isVision = capabilities.indexOf("vision") >= 0;
+    var usedByRoles = getModelUsageRoles(model.id);
+    var ping = state.settingsUi.modelPing[model.id] || { status: "idle" };
+    var testDisabled = ping.status === "loading";
+
+    var contextK = Math.round((model.contextWindow || 0) / 1000);
+    var ctxStr = contextK >= 1000 ? (contextK / 1000).toFixed(0) + "M" : contextK + "k";
+    var inPrice = fmtPricePer1M(model.price ? model.price.prompt : null);
+    var outPrice = fmtPricePer1M(model.price ? model.price.completion : null);
+
+    var description = model.description || "";
+    var isExpanded = Boolean(state.settingsUi.expandedDesc[model.id]);
+    var isLong = description.length > 120;
+    var descText = isExpanded || !isLong ? description : description.slice(0, 120) + "…";
+
+    var showAssign = state.settingsUi.modelAssignOpenId === model.id;
+
     return [
       '<article class="model-card">',
-      '  <div class="model-head">',
-      '    <div class="model-copy">',
-      '      <h3>' + escapeHtml(model.displayName) + "</h3>",
-      '      <p>' + escapeHtml(formatModelMeta(model)) + "</p>",
+      '  <div class="model-card-head">',
+      '    <div class="model-card-main">',
+      '      <div class="model-card-title">',
+      '        <span class="model-card-name">' + escapeHtml(model.displayName) + "</span>",
+      '        <span class="model-card-provider">' + escapeHtml(model.providerLabel || "") + "</span>",
+      isFree ? '        <span class="badge badge-free">FREE</span>' : "",
+      isVision ? '        <span class="badge badge-vision">VISION</span>' : "",
+      usedByRoles.map(function (roleId) {
+        return '        <span class="badge badge-used">Used: ' + escapeHtml(ROLE_LABELS[roleId] || roleId) + "</span>";
+      }).join(""),
+      "      </div>",
+      '      <div class="model-card-stats">',
+      "        <span>" + escapeHtml(ctxStr) + " ctx</span>",
+      "        <span>In: " + escapeHtml(inPrice) + "</span>",
+      "        <span>Out: " + escapeHtml(outPrice) + "</span>",
+      model.maxOutputTokens ? ("        <span>Max: " + escapeHtml(model.maxOutputTokens.toLocaleString()) + "</span>") : "",
+      '        <span class="vision-note' + (isVision ? " yes" : " no") + '">' + (isVision ? "🖼 Изображения: да" : "🖼 Изображения: нет") + "</span>",
+      "      </div>",
       "    </div>",
-      '    <span class="price-pill">' + escapeHtml(formatPrice(model)) + "</span>",
+      '    <div class="model-card-actions">',
+      "      " + renderPingBadge(model.id),
+      '      <button class="btn ghost tiny" type="button" data-action="test-model" data-model-id="' + escapeHtml(model.id) + '"' + (testDisabled ? " disabled" : "") + ">Test</button>",
+      '      <button class="btn assign-toggle-btn' + (showAssign ? " active" : "") + '" type="button" data-action="toggle-assign-popup" data-model-id="' + escapeHtml(model.id) + '">Assign ▾</button>',
+      "    </div>",
       "  </div>",
-      '  <p class="model-desc">' + escapeHtml(model.description || "OpenRouter-sourced registry entry.") + "</p>",
-      '  <div class="tag-row">' + (model.capabilities || []).map(function (tag) {
-        return '<span class="tag">' + escapeHtml(tag) + "</span>";
-      }).join("") + "</div>",
-      '  <div class="field-row compact">',
-      '    <div class="field"><label>Provider</label><select class="select-input" data-model-provider="' + escapeHtml(model.id) + '">' + providerOptions + "</select></div>",
-      '    <div class="field"><label>Assign role</label><select class="select-input" data-model-role="' + escapeHtml(model.id) + '">' + roleOptions + "</select></div>",
-      "  </div>",
-      inline ? ('  <div class="inline-message ' + messageToneClass(inline.tone) + '">' + escapeHtml(inline.text) + "</div>") : "",
-      '  <div class="provider-actions">',
-      '    <button class="btn ghost" type="button" data-action="test-model" data-model-id="' + escapeHtml(model.id) + '">Test</button>',
-      '    <button class="btn primary" type="button" data-action="assign-model" data-model-id="' + escapeHtml(model.id) + '">Assign</button>',
-      "  </div>",
+      description ? [
+        '  <div class="model-desc-row">',
+        escapeHtml(descText),
+        isLong ? ('<button class="model-desc-toggle" type="button" data-action="toggle-model-desc" data-model-id="' + escapeHtml(model.id) + '">' + (isExpanded ? "less" : "more") + "</button>") : "",
+        "  </div>"
+      ].join("") : "",
+      showAssign ? [
+        '  <div class="assign-popover">',
+        '    <span class="assign-popover-label">Assign to role:</span>',
+        '    <select class="select-input small" data-model-role="' + escapeHtml(model.id) + '">' + roleOptions + "</select>",
+        '    <select class="select-input small" data-model-provider="' + escapeHtml(model.id) + '">' + providerOptions + "</select>",
+        '    <button class="btn ok-btn" type="button" data-action="assign-model" data-model-id="' + escapeHtml(model.id) + '">OK</button>',
+        '    <button class="btn cancel-btn" type="button" data-action="close-assign-popup" data-model-id="' + escapeHtml(model.id) + '">✕</button>',
+        inline ? ('    <div class="inline-message ' + messageToneClass(inline.tone) + '">' + escapeHtml(inline.text) + "</div>") : "",
+        "  </div>"
+      ].join("") : "",
       "</article>"
     ].join("");
   }
@@ -763,43 +885,59 @@
     var settings = state.settings;
     var providers = settings && Array.isArray(settings.providers) ? settings.providers : [];
     var models = getFilteredModels();
+    var totalModels = settings && settings.metadata ? Number(settings.metadata.totalModels || 0) : 0;
+    var syncedAt = settings && settings.metadata ? settings.metadata.registrySyncedAt : null;
     var providerOptions = ['<option value="all"' + (state.settingsUi.providerFilter === "all" ? " selected" : "") + '>All Providers</option>']
       .concat(providers.map(function (provider) {
         var selected = provider.providerId === state.settingsUi.providerFilter ? " selected" : "";
         return '<option value="' + escapeHtml(provider.providerId) + '"' + selected + ">" + escapeHtml(provider.label) + "</option>";
       }))
       .join("");
+    var testAllCount = Math.min(models.length, 20);
+    var testAllDisabled = state.settingsUi.testAllRunning || models.length === 0;
 
     return [
       renderFlash(),
       '<div class="settings-toolbar">',
       '  <div class="field grow"><label>Найти модель…</label><input id="settings-search" class="text-input" type="search" value="' + escapeHtml(state.settingsUi.search || "") + '" placeholder="Найти модель…" /></div>',
       '  <div class="field"><label>Provider</label><select id="settings-provider-filter" class="select-input">' + providerOptions + "</select></div>",
-      '  <div class="field"><label>Sort</label><select id="settings-sort" class="select-input">'
-        + '<option value="name"' + (state.settingsUi.sort === "name" ? " selected" : "") + '>Name</option>'
-        + '<option value="context"' + (state.settingsUi.sort === "context" ? " selected" : "") + '>Context</option>'
-        + '<option value="price"' + (state.settingsUi.sort === "price" ? " selected" : "") + '>Price</option>'
-        + "</select></div>",
+      "</div>",
+      '<div class="filter-sort-row">',
+      '  <label class="filter-toggle free' + (state.settingsUi.capabilityFilters.free ? " active" : "") + '"><input type="checkbox" data-capability="free"' + (state.settingsUi.capabilityFilters.free ? " checked" : "") + " /> Free only</label>",
+      '  <label class="filter-toggle vision' + (state.settingsUi.capabilityFilters.vision ? " active" : "") + '"><input type="checkbox" data-capability="vision"' + (state.settingsUi.capabilityFilters.vision ? " checked" : "") + " /> Vision</label>",
+      '  <div class="filter-sort-spacer"></div>',
+      '  <span class="sort-label">Sort:</span>',
+      renderSortButton("name", "Name"),
+      renderSortButton("price", "Price"),
+      renderSortButton("context", "Context"),
+      '  <button class="btn test-all-btn" type="button" data-action="test-all-models"' + (testAllDisabled ? " disabled" : "") + ">"
+        + (state.settingsUi.testAllRunning ? "Testing…" : "Test All (" + testAllCount + ")") + "</button>",
       "</div>",
       '<div class="chip-row">'
-        + ["free", "vision", "coding", "reasoning", "fast", "cheap"].map(renderCapabilityFilter).join("")
+        + ["coding", "reasoning", "fast", "cheap"].map(renderCapabilityFilter).join("")
         + "</div>",
-      '<div class="provider-note">Source: OpenRouter model registry. Prices are displayed from OpenRouter data and direct-provider compatibility may vary by account and endpoint.</div>',
+      '<div class="provider-note">' + escapeHtml(totalModels + " models loaded from OpenRouter"
+        + (syncedAt ? " · synced " + syncedAt : "") + " · showing " + models.length + ". Press \"Обновить\" to pull the latest catalog.") + "</div>",
       models.length
-        ? ('<div class="model-grid">' + models.map(renderModelCard).join("") + "</div>")
+        ? ('<div class="model-list">' + models.map(renderModelCard).join("") + "</div>")
         : '<div class="empty-state">No models matched the current search and filters.</div>'
     ].join("");
   }
 
   function renderAssignmentCard(roleId, assignment) {
     var title = ROLE_LABELS[roleId] || roleId;
+    var accent = (ROLE_ACCENTS[roleId] || { emoji: "🤖", color: "#94a3b8" });
+    var providers = (state.settings && state.settings.providers) || [];
+    var assignedProvider = assignment ? providers.find(function (p) { return p.providerId === assignment.providerId; }) : null;
+    var keyDotClass = assignedProvider && assignedProvider.hasKey ? "key-dot ok" : "key-dot";
+
     return [
-      '<article class="assignment-card">',
+      '<article class="assignment-card" style="border-left:3px solid ' + escapeHtml(accent.color) + '">',
       '  <div class="assignment-top">',
-      '    <h4>' + escapeHtml(title) + "</h4>",
+      '    <h4>' + escapeHtml(accent.emoji) + " " + escapeHtml(title) + "</h4>",
       '    <span class="status-pill ' + (assignment ? "info" : "muted") + '">' + escapeHtml(assignment ? "assigned" : "unassigned") + "</span>",
       "  </div>",
-      '  <p>' + escapeHtml(assignment ? (assignment.providerLabel + " · " + assignment.modelLabel) : "No model assigned yet.") + "</p>",
+      '  <p>' + (assignment ? ('<span class="' + keyDotClass + '"></span>' + escapeHtml(assignment.providerLabel + " · " + assignment.modelLabel)) : escapeHtml("No model assigned yet.")) + "</p>",
       '  <div class="provider-actions">',
       '    <button class="btn ghost" type="button" data-action="edit-role-assignment" data-role="' + escapeHtml(roleId) + '" data-provider-id="' + escapeHtml(assignment && assignment.providerId ? assignment.providerId : state.settingsUi.providerFilter) + '">Edit in Library</button>',
       '    <button class="btn danger" type="button" data-action="clear-role-assignment" data-role="' + escapeHtml(roleId) + '"' + (assignment ? "" : " disabled") + ">Clear</button>",
@@ -885,26 +1023,12 @@
     ].join("");
   }
 
-  function renderPlaceholderTab(title, body) {
-    return [
-      renderFlash(),
-      '<div class="placeholder-block">',
-      '  <h3>' + escapeHtml(title) + "</h3>",
-      '  <p>' + escapeHtml(body) + "</p>",
-      "</div>"
-    ].join("");
-  }
-
   function getSharedSettingsPanelHtml() {
     if (!state.settings) return '<div class="empty-state">Settings are not available yet.</div>';
 
     if (state.settingsUi.activeTab === "api") return renderApiConfigurationTab();
     if (state.settingsUi.activeTab === "models") return renderModelLibraryTab();
     if (state.settingsUi.activeTab === "engine") return renderEngineTab();
-    if (state.settingsUi.activeTab === "accounts")
-      return renderPlaceholderTab("External Accounts", "This tab is reserved for future external account linking. The provider key system in API Configuration is already functional in this patch.");
-    if (state.settingsUi.activeTab === "prompts")
-      return renderPlaceholderTab("Prompts", "Prompt management is intentionally left as a placeholder in this patch. Engine assignments and provider configuration are already live.");
 
     return renderApiConfigurationTab();
   }
@@ -940,9 +1064,9 @@
     return [
       '#nofida-ai-account-page-host{display:block;width:100%;margin:0}',
       '#nofida-ai-account-page-host *{box-sizing:border-box;font-family:' + BRAND.font + '}',
-      '#nofida-ai-account-page-host .account-shell{display:flex;flex-direction:column;gap:10px;border:1px solid ' + BRAND.border + ';border-radius:16px;background:linear-gradient(180deg,rgba(13,19,36,.98),rgba(8,12,24,.98));box-shadow:0 8px 32px rgba(2,6,23,.28);padding:14px 16px;color:' + BRAND.text + '}',
+      '#nofida-ai-account-page-host .account-shell{display:flex;flex-direction:column;gap:10px;border:1px solid ' + BRAND.border + ';border-radius:16px;background:linear-gradient(180deg,rgba(20,25,35,.76),rgba(12,16,23,.8));backdrop-filter:' + BRAND.glass + ';-webkit-backdrop-filter:' + BRAND.glass + ';box-shadow:0 8px 32px rgba(2,6,23,.22);padding:14px 16px;color:' + BRAND.text + '}',
       '#nofida-ai-account-page-host .account-shell.page{padding:14px 16px 16px;overflow-y:auto;max-height:calc(100vh - 90px);min-height:0}',
-      '#nofida-ai-account-page-host .account-shell.launcher{flex-direction:row;align-items:center;padding:8px 14px;border-radius:10px;gap:10px;flex-wrap:wrap;background:rgba(13,19,36,.96);box-shadow:none;border-color:rgba(37,99,235,.16)}',
+      '#nofida-ai-account-page-host .account-shell.launcher{flex-direction:row;align-items:center;padding:8px 14px;border-radius:10px;gap:10px;flex-wrap:wrap;background:rgba(13,19,36,.96);box-shadow:none;border-color:rgba(94,126,166,.16)}',
       '#nofida-ai-account-page-host .account-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}',
       '#nofida-ai-account-page-host .account-head h2{margin:2px 0 0;font-size:16px;line-height:1.2;font-weight:800}',
       '#nofida-ai-account-page-host .account-head p{margin:3px 0 0;color:' + BRAND.muted + ';font-size:12px;line-height:1.5;max-width:860px}',
@@ -976,7 +1100,7 @@
       '#nofida-ai-account-page-host .text-input,#nofida-ai-account-page-host .select-input{width:100%;border:1px solid ' + BRAND.border + ';border-radius:10px;background:rgba(7,12,24,.92);color:' + BRAND.text + ';padding:7px 10px;font-size:12px;outline:none}',
       '#nofida-ai-account-page-host .saved-key{padding:7px 10px;border-radius:10px;background:rgba(7,12,24,.92);border:1px solid ' + BRAND.border + ';color:' + BRAND.text + ';font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}',
       '#nofida-ai-account-page-host .provider-grid,#nofida-ai-account-page-host .model-grid,#nofida-ai-account-page-host .assignment-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}',
-      '#nofida-ai-account-page-host .provider-card,#nofida-ai-account-page-host .model-card,#nofida-ai-account-page-host .assignment-card,#nofida-ai-account-page-host .placeholder-block{border:1px solid ' + BRAND.border + ';border-radius:12px;background:' + BRAND.surfaceSoft + ';padding:10px 12px;display:flex;flex-direction:column;gap:8px}',
+      '#nofida-ai-account-page-host .provider-card,#nofida-ai-account-page-host .model-card,#nofida-ai-account-page-host .assignment-card,#nofida-ai-account-page-host .placeholder-block{border:1px solid ' + BRAND.border + ';border-radius:12px;background:' + BRAND.surfaceSoft + ';backdrop-filter:' + BRAND.glass + ';-webkit-backdrop-filter:' + BRAND.glass + ';padding:10px 12px;display:flex;flex-direction:column;gap:8px}',
       '#nofida-ai-account-page-host .provider-top,#nofida-ai-account-page-host .model-head,#nofida-ai-account-page-host .assignment-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}',
       '#nofida-ai-account-page-host .provider-top h3,#nofida-ai-account-page-host .model-copy h3,#nofida-ai-account-page-host .assignment-top h4,#nofida-ai-account-page-host .placeholder-block h3{margin:0;font-size:13px}',
       '#nofida-ai-account-page-host .provider-top p,#nofida-ai-account-page-host .model-copy p,#nofida-ai-account-page-host .assignment-card p,#nofida-ai-account-page-host .placeholder-block p,#nofida-ai-account-page-host .model-desc,#nofida-ai-account-page-host .provider-note,#nofida-ai-account-page-host .provider-meta{margin:0;color:' + BRAND.muted + ';font-size:11px;line-height:1.4}',
@@ -985,15 +1109,15 @@
       '#nofida-ai-account-page-host .inline-controls{display:flex;align-items:center;gap:12px}',
       '#nofida-ai-account-page-host .toggle{font-size:12px;color:' + BRAND.muted + '}',
       '#nofida-ai-account-page-host .status-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border:1px solid transparent}',
-      '#nofida-ai-account-page-host .status-pill.success{background:rgba(16,185,129,.15);color:#a7f3d0;border-color:rgba(16,185,129,.32)}',
-      '#nofida-ai-account-page-host .status-pill.error{background:rgba(239,68,68,.14);color:#fecaca;border-color:rgba(239,68,68,.32)}',
-      '#nofida-ai-account-page-host .status-pill.info{background:rgba(37,99,235,.18);color:#bfdbfe;border-color:rgba(37,99,235,.32)}',
+      '#nofida-ai-account-page-host .status-pill.success{background:rgba(107,169,143,.15);color:#a7f3d0;border-color:rgba(107,169,143,.32)}',
+      '#nofida-ai-account-page-host .status-pill.error{background:rgba(201,112,112,.14);color:#fecaca;border-color:rgba(201,112,112,.32)}',
+      '#nofida-ai-account-page-host .status-pill.info{background:rgba(94,126,166,.18);color:#C7D6E5;border-color:rgba(94,126,166,.32)}',
       '#nofida-ai-account-page-host .status-pill.muted{background:rgba(148,163,184,.12);color:' + BRAND.muted + ';border-color:rgba(148,163,184,.18)}',
       '#nofida-ai-account-page-host .flash,#nofida-ai-account-page-host .inline-message{border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;border:1px solid transparent}',
-      '#nofida-ai-account-page-host .flash.ok,#nofida-ai-account-page-host .inline-message.ok{background:rgba(16,185,129,.12);color:#d1fae5;border-color:rgba(16,185,129,.28)}',
-      '#nofida-ai-account-page-host .flash.err,#nofida-ai-account-page-host .inline-message.err{background:rgba(127,29,29,.28);color:#fecaca;border-color:rgba(239,68,68,.28)}',
-      '#nofida-ai-account-page-host .flash.warn,#nofida-ai-account-page-host .inline-message.warn{background:rgba(120,53,15,.28);color:#fde68a;border-color:rgba(245,158,11,.28)}',
-      '#nofida-ai-account-page-host .flash.info,#nofida-ai-account-page-host .inline-message.info{background:rgba(37,99,235,.14);color:#dbeafe;border-color:rgba(37,99,235,.3)}',
+      '#nofida-ai-account-page-host .flash.ok,#nofida-ai-account-page-host .inline-message.ok{background:rgba(107,169,143,.12);color:#d1fae5;border-color:rgba(107,169,143,.28)}',
+      '#nofida-ai-account-page-host .flash.err,#nofida-ai-account-page-host .inline-message.err{background:rgba(127,29,29,.28);color:#fecaca;border-color:rgba(201,112,112,.28)}',
+      '#nofida-ai-account-page-host .flash.warn,#nofida-ai-account-page-host .inline-message.warn{background:rgba(120,53,15,.28);color:#fde68a;border-color:rgba(201,164,104,.28)}',
+      '#nofida-ai-account-page-host .flash.info,#nofida-ai-account-page-host .inline-message.info{background:rgba(94,126,166,.14);color:#dbeafe;border-color:rgba(94,126,166,.3)}',
       '#nofida-ai-account-page-host .tag-row,#nofida-ai-account-page-host .chip-row{display:flex;gap:8px;flex-wrap:wrap}',
       '#nofida-ai-account-page-host .tag,#nofida-ai-account-page-host .chip-filter{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(15,23,42,.82);border:1px solid ' + BRAND.border + ';font-size:11px;color:' + BRAND.text + '}',
       '#nofida-ai-account-page-host .chip-filter input{margin:0}',
@@ -1010,7 +1134,48 @@
       '#nofida-ai-account-page-host .error-text{color:#fecaca}',
       '#nofida-ai-account-page-host .launcher-label{font-size:12px;color:' + BRAND.muted + ';flex:1}',
       '@media (max-width:1180px){#nofida-ai-account-page-host .settings-toolbar,#nofida-ai-account-page-host .field-row{grid-template-columns:repeat(2,minmax(0,1fr))}}',
-      '@media (max-width:820px){#nofida-ai-account-page-host .account-head h2{font-size:14px}#nofida-ai-account-page-host .settings-toolbar,#nofida-ai-account-page-host .field-row,#nofida-ai-account-page-host .field-row.compact{grid-template-columns:1fr}}'
+      '@media (max-width:820px){#nofida-ai-account-page-host .account-head h2{font-size:14px}#nofida-ai-account-page-host .settings-toolbar,#nofida-ai-account-page-host .field-row,#nofida-ai-account-page-host .field-row.compact{grid-template-columns:1fr}}',
+      '#nofida-ai-account-page-host .model-list{display:flex;flex-direction:column;gap:8px}',
+      '#nofida-ai-account-page-host .model-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}',
+      '#nofida-ai-account-page-host .model-card-main{flex:1;min-width:0}',
+      '#nofida-ai-account-page-host .model-card-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px}',
+      '#nofida-ai-account-page-host .model-card-name{font-weight:700;color:#fff;font-size:14px}',
+      '#nofida-ai-account-page-host .model-card-provider{font-size:10px;color:#8b93a6}',
+      '#nofida-ai-account-page-host .model-card-stats{display:flex;gap:12px;font-size:11px;color:#8b93a6;flex-wrap:wrap}',
+      '#nofida-ai-account-page-host .vision-note.yes{color:#9B8FBF}',
+      '#nofida-ai-account-page-host .vision-note.no{color:#5f6673}',
+      '#nofida-ai-account-page-host .model-card-actions{display:flex;gap:6px;flex-shrink:0;align-items:center}',
+      '#nofida-ai-account-page-host .badge{font-size:9px;padding:2px 6px;border-radius:5px;font-weight:800;text-transform:uppercase}',
+      '#nofida-ai-account-page-host .badge-free{background:rgba(196,173,110,.14);color:#C4AD6E}',
+      '#nofida-ai-account-page-host .badge-vision{background:rgba(155,143,191,.14);color:#9B8FBF}',
+      '#nofida-ai-account-page-host .badge-used{background:rgba(111,174,143,.12);color:#6FAE8F;text-transform:none;font-weight:700}',
+      '#nofida-ai-account-page-host .model-desc-row{margin-top:6px;font-size:11px;color:#8b93a6;line-height:1.5}',
+      '#nofida-ai-account-page-host .model-desc-toggle{margin-left:6px;background:none;border:none;color:#7B9BC0;font-size:11px;cursor:pointer;padding:0}',
+      '#nofida-ai-account-page-host .assign-popover{margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(111,174,143,.05);border:1px solid rgba(111,174,143,.2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      '#nofida-ai-account-page-host .assign-popover-label{font-size:11px;color:#6FAE8F;font-weight:600}',
+      '#nofida-ai-account-page-host .select-input.small{padding:5px 8px;font-size:11px;width:auto}',
+      '#nofida-ai-account-page-host .ok-btn{padding:5px 14px;border-radius:8px;border:none;background:#6FAE8F;color:#000;font-size:11px;font-weight:700;cursor:pointer}',
+      '#nofida-ai-account-page-host .cancel-btn{padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:transparent;color:#555;font-size:11px;cursor:pointer}',
+      '#nofida-ai-account-page-host .filter-sort-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}',
+      '#nofida-ai-account-page-host .filter-sort-spacer{flex:1}',
+      '#nofida-ai-account-page-host .filter-toggle{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#555;user-select:none}',
+      '#nofida-ai-account-page-host .filter-toggle input{margin:0}',
+      '#nofida-ai-account-page-host .filter-toggle.free.active{color:#C4AD6E}',
+      '#nofida-ai-account-page-host .filter-toggle.vision.active{color:#9B8FBF}',
+      '#nofida-ai-account-page-host .sort-label{font-size:11px;color:#444}',
+      '#nofida-ai-account-page-host .sort-btn{padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:transparent;color:#555;font-size:11px;font-weight:600;cursor:pointer}',
+      '#nofida-ai-account-page-host .sort-btn.active{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff}',
+      '#nofida-ai-account-page-host .test-all-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:9px;border:1px solid rgba(123,155,192,.3);background:rgba(123,155,192,.08);color:#7B9BC0;font-size:11px;font-weight:600;cursor:pointer}',
+      '#nofida-ai-account-page-host .test-all-btn:disabled{opacity:.6;cursor:not-allowed}',
+      '#nofida-ai-account-page-host .assign-toggle-btn{padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#777;font-size:11px;font-weight:600;cursor:pointer}',
+      '#nofida-ai-account-page-host .assign-toggle-btn.active{border-color:rgba(111,174,143,.4);background:rgba(111,174,143,.1);color:#6FAE8F}',
+      '#nofida-ai-account-page-host .ping-ok{font-size:11px;color:#7CB79E;font-weight:600;white-space:nowrap}',
+      '#nofida-ai-account-page-host .ping-error{font-size:11px;color:#D68C8C;font-weight:600;white-space:nowrap}',
+      '#nofida-ai-account-page-host .ping-spinner{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid rgba(123,155,192,.25);border-top-color:#7B9BC0;animation:nfspin 1s linear infinite;flex-shrink:0}',
+      '@keyframes nfspin{to{transform:rotate(360deg)}}',
+      '#nofida-ai-account-page-host .provider-save-btn{min-width:60px;transition:background .2s}',
+      '#nofida-ai-account-page-host .key-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(148,163,184,.4);margin-right:6px}',
+      '#nofida-ai-account-page-host .key-dot.ok{background:#7CB79E}'
     ].join("");
   }
 
@@ -1291,25 +1456,29 @@
 .dashboard-shell{position:absolute;left:var(--cards-left,320px);top:var(--cards-top,160px);width:min(var(--cards-width,calc(100vw - 352px)),1120px);pointer-events:auto}\
 .dashboard-shell[hidden]{display:none}\
 .action-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}\
-.action-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;border:1px solid ' + BRAND.border + ';border-radius:18px;padding:18px 20px;text-align:left;background:linear-gradient(180deg,rgba(19,30,53,.98),rgba(11,16,32,.98));color:' + BRAND.text + ';box-shadow:0 18px 48px rgba(2,6,23,.34);cursor:pointer;transition:transform .18s ease,border-color .18s ease}\
-.action-card:hover{transform:translateY(-2px);border-color:rgba(16,185,129,.45)}\
+.action-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;border:1px solid ' + BRAND.border + ';border-radius:18px;padding:18px 20px;text-align:left;background:linear-gradient(180deg,rgba(22,28,40,.7),rgba(14,18,26,.7));backdrop-filter:' + BRAND.glass + ';-webkit-backdrop-filter:' + BRAND.glass + ';color:' + BRAND.text + ';box-shadow:0 18px 48px rgba(2,6,23,.28);cursor:pointer;transition:transform .18s ease,border-color .18s ease}\
+.action-card:hover{transform:translateY(-2px);border-color:rgba(107,169,143,.45)}\
 .action-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:' + BRAND.accent + ';font-weight:700}\
 .action-title{font-size:18px;font-weight:800;line-height:1.15;margin:0}\
 .action-copy{font-size:13px;line-height:1.45;color:' + BRAND.muted + ';margin:0}\
 .action-foot{font-size:12px;color:' + BRAND.text + ';opacity:.88}\
-.fab{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border:0;border-radius:18px;cursor:pointer;display:grid;place-items:center;background:' + BRAND.accent + ';color:' + BRAND.bg + ';box-shadow:0 16px 44px rgba(16,185,129,.28);pointer-events:auto;transition:transform .15s ease}\
+.fab{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border:0;border-radius:18px;cursor:pointer;display:grid;place-items:center;background:' + BRAND.accent + ';color:' + BRAND.bg + ';box-shadow:0 16px 44px rgba(107,169,143,.28);pointer-events:auto;transition:transform .15s ease}\
 .fab:hover{transform:translateY(-2px)}\
 .fab[hidden]{display:none}\
 .fab svg{width:24px;height:24px}\
-.panel,.library-drawer{position:fixed;right:0;top:0;height:100vh;width:408px;max-width:94vw;transform:translateX(105%);transition:transform .22s cubic-bezier(.16,1,.3,1);background:' + BRAND.surfaceStrong + ';color:' + BRAND.text + ';border-left:1px solid ' + BRAND.border + ';box-shadow:-18px 0 60px rgba(0,0,0,.45);display:flex;flex-direction:column;pointer-events:auto}\
+.panel,.library-drawer{position:fixed;right:0;top:0;height:100vh;width:408px;max-width:94vw;transform:translateX(105%);transition:transform .22s cubic-bezier(.16,1,.3,1);background:rgba(18,22,31,.72);backdrop-filter:' + BRAND.glass + ';-webkit-backdrop-filter:' + BRAND.glass + ';color:' + BRAND.text + ';border-left:1px solid ' + BRAND.border + ';box-shadow:-18px 0 60px rgba(0,0,0,.35);display:flex;flex-direction:column;pointer-events:auto}\
 .panel.open,.library-drawer.open{transform:translateX(0)}\
 .panel-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid ' + BRAND.border + ';flex-shrink:0}\
 .panel-head h2{margin:0;font-size:14px;font-weight:800;letter-spacing:.03em}\
 .panel-head small{margin-left:auto;color:' + BRAND.muted + ';font-size:11px}\
+.thread-bar{display:flex;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid ' + BRAND.border + ';flex-shrink:0}\
+.thread-select{flex:1;min-width:0;background:' + BRAND.surfaceStrong + ';color:' + BRAND.text + ';border:1px solid ' + BRAND.border + ';border-radius:8px;padding:6px 8px;font-size:12px;font-family:inherit}\
+.thread-icon-btn{border:1px solid ' + BRAND.border + ';background:0;color:' + BRAND.muted + ';border-radius:8px;width:26px;height:26px;flex-shrink:0;cursor:pointer;font-size:12px;line-height:1;display:grid;place-items:center}\
+.thread-icon-btn:hover{color:' + BRAND.text + ';border-color:' + BRAND.primary + '}\
 .dot{width:8px;height:8px;border-radius:999px;background:' + BRAND.accent + ';flex-shrink:0}\
 .close{margin-left:6px;background:transparent;border:0;color:' + BRAND.muted + ';cursor:pointer;font-size:20px;line-height:1;padding:2px 4px}\
 .ghost-btn{border:1px solid ' + BRAND.border + ';background:rgba(15,23,42,.7);color:' + BRAND.text + ';border-radius:10px;padding:8px 10px;font-size:11px;font-weight:700;cursor:pointer}\
-.ghost-btn:hover{border-color:rgba(37,99,235,.5)}\
+.ghost-btn:hover{border-color:rgba(94,126,166,.5)}\
 .ctx-strip{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid ' + BRAND.border + ';background:' + BRAND.bg + ';font-size:11px;color:' + BRAND.muted + ';flex-shrink:0}\
 .ctx-dot{opacity:.35}\
 .log{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px}\
@@ -1324,7 +1493,7 @@
 .loading span:nth-child(2){animation-delay:.2s}.loading span:nth-child(3){animation-delay:.4s}\
 @keyframes ndot{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}\
 .plan{margin-top:8px;border:1px solid ' + BRAND.borderAccent + ';border-radius:10px;overflow:hidden}\
-.plan-head{display:flex;align-items:center;gap:6px;padding:8px 10px;background:rgba(16,185,129,.08);font-size:11px;font-weight:800;cursor:pointer;user-select:none;color:' + BRAND.accent + ';letter-spacing:.04em}\
+.plan-head{display:flex;align-items:center;gap:6px;padding:8px 10px;background:rgba(107,169,143,.08);font-size:11px;font-weight:800;cursor:pointer;user-select:none;color:' + BRAND.accent + ';letter-spacing:.04em}\
 .plan-head .ph-arrow{margin-left:auto;transition:transform .18s ease}\
 .plan-head.open .ph-arrow{transform:rotate(180deg)}\
 .plan-body{padding:10px;font-size:12px;color:' + BRAND.muted + ';max-height:180px;overflow-y:auto;display:none}\
@@ -1332,21 +1501,41 @@
 .plan-item{padding:6px 8px;border-radius:6px;background:' + BRAND.bg + ';margin-bottom:6px;line-height:1.4}\
 .plan-item:last-child{margin-bottom:0}\
 .plan-item b{display:block;margin-bottom:2px;color:' + BRAND.text + '}\
-.scope-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;background:rgba(37,99,235,.14);color:#93c5fd;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}\
+.screen-spec-card{margin-top:8px;border:1px solid rgba(111,174,143,.28);border-radius:10px;background:rgba(107,169,143,.06);padding:10px 12px;display:flex;flex-direction:column;gap:8px}\
+.screen-spec-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}\
+.screen-spec-name{font-size:12px;font-weight:800;color:' + BRAND.text + '}\
+.screen-spec-meta{font-size:11px;color:' + BRAND.muted + '}\
+.screen-spec-actions{display:flex}\
+.screen-spec-status{font-size:11px;min-height:14px}\
+.screen-spec-status.info{color:' + BRAND.muted + '}\
+.screen-spec-status.ok{color:#7CB79E}\
+.screen-spec-status.err{color:#D68C8C}\
+.screen-spec-hint{font-size:10px;color:' + BRAND.muted + ';line-height:1.4;opacity:.8}\
+.scope-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;background:rgba(94,126,166,.14);color:#A8BFD4;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}\
 .preset-row{display:flex;flex-direction:column;gap:0;border-bottom:1px solid ' + BRAND.border + ';flex-shrink:0}\
 .preset-section{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 6px}\
 .preset-label{padding:4px 10px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:' + BRAND.muted + ';background:rgba(11,16,32,.8)}\
 .preset-btn{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;border:1px solid ' + BRAND.border + ';border-radius:10px;background:rgba(15,23,42,.82);color:' + BRAND.text + ';padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;line-height:1.2;transition:border-color .15s,background .15s}\
-.preset-btn:hover{border-color:rgba(37,99,235,.5);background:rgba(37,99,235,.1)}\
+.preset-btn:hover{border-color:rgba(94,126,166,.5);background:rgba(94,126,166,.1)}\
 .preset-btn small{font-size:10px;font-weight:400;color:' + BRAND.muted + ';display:block}\
-.ai-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(37,99,235,.14)}\
-.ai-meta-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em;background:rgba(15,23,42,.9);border:1px solid rgba(37,99,235,.18);color:' + BRAND.muted + '}\
+.ai-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(94,126,166,.14)}\
+.ai-meta-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em;background:rgba(15,23,42,.9);border:1px solid rgba(94,126,166,.18);color:' + BRAND.muted + '}\
+.reference-note{margin-top:6px;font-size:11px;color:' + BRAND.muted + ';line-height:1.5}\
 .compose{display:flex;gap:8px;padding:12px;border-top:1px solid ' + BRAND.border + ';flex-shrink:0}\
 .compose input{flex:1;min-width:0;background:' + BRAND.bg + ';color:' + BRAND.text + ';border:1px solid ' + BRAND.border + ';border-radius:12px;padding:10px 12px;font-size:13px;outline:none}\
 .compose input:focus{border-color:' + BRAND.primary + '}\
 .compose button{border:0;border-radius:12px;padding:0 16px;min-height:40px;font-weight:800;font-size:15px;cursor:pointer;background:' + BRAND.primary + ';color:#fff;transition:background .15s}\
 .compose button:hover{background:' + BRAND.primaryHover + '}\
 .compose button:disabled{opacity:.45;cursor:default}\
+.attach-btn{border:1px solid ' + BRAND.border + ';background:rgba(15,23,42,.7);color:' + BRAND.text + ';border-radius:12px;width:40px;min-height:40px;font-size:16px;cursor:pointer;flex-shrink:0}\
+.attach-btn:hover{border-color:rgba(94,126,166,.5)}\
+.attach-row{display:flex;gap:8px;flex-wrap:wrap;padding:0 12px;flex-shrink:0}\
+.attach-row[hidden]{display:none}\
+.attach-chip{position:relative;display:inline-flex;width:44px;height:44px;border-radius:10px;overflow:visible;border:1px solid ' + BRAND.border + '}\
+.attach-chip-thumb{width:44px;height:44px;object-fit:cover;border-radius:9px}\
+.attach-chip-remove{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:' + BRAND.danger + ';color:#fff;border:2px solid ' + BRAND.bg + ';font-size:11px;line-height:1;cursor:pointer;padding:0}\
+.attach-thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;justify-content:flex-end}\
+.attach-thumb{width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,.12)}\
 .library-drawer{padding-bottom:12px}\
 .library-body{padding:14px 16px 18px;overflow:auto;flex:1}\
 .library-note{margin:0 0 14px;color:' + BRAND.muted + ';font-size:13px;line-height:1.45}\
@@ -1354,7 +1543,7 @@
 .library-item{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;padding:14px;border:1px solid ' + BRAND.border + ';border-radius:16px;background:rgba(11,16,32,.92)}\
 .library-item h3{margin:0 0 6px;font-size:15px;line-height:1.25}\
 .library-item p{margin:0;color:' + BRAND.muted + ';font-size:12px;line-height:1.4}\
-.library-status{display:inline-flex;align-items:center;padding:5px 8px;margin-bottom:8px;border-radius:999px;background:rgba(37,99,235,.18);color:#bfdbfe;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}\
+.library-status{display:inline-flex;align-items:center;padding:5px 8px;margin-bottom:8px;border-radius:999px;background:rgba(94,126,166,.18);color:#C7D6E5;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}\
 .library-link,.library-copy{align-self:center}\
 .library-link{border:0;border-radius:12px;padding:0 14px;min-height:38px;font-weight:800;cursor:pointer;background:' + BRAND.primary + ';color:#fff}\
 .library-link:hover{background:' + BRAND.primaryHover + '}\
@@ -1364,11 +1553,11 @@
 .settings-shell[hidden]{display:none}\
 .settings-shell.open{pointer-events:auto;opacity:1}\
 .settings-backdrop{position:absolute;inset:0;background:rgba(2,6,23,.72);backdrop-filter:blur(8px)}\
-.settings-modal{position:relative;width:min(1320px,calc(100vw - 40px));max-height:calc(100vh - 40px);display:flex;flex-direction:column;border:1px solid ' + BRAND.border + ';border-radius:26px;background:linear-gradient(180deg,rgba(13,19,36,.98),rgba(8,12,24,.98));box-shadow:0 40px 120px rgba(2,6,23,.55);overflow:hidden}\
-.settings-head{display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid ' + BRAND.border + ';background:linear-gradient(180deg,rgba(19,30,53,.98),rgba(12,17,30,.92))}\
+.settings-modal{position:relative;width:min(1320px,calc(100vw - 40px));max-height:calc(100vh - 40px);display:flex;flex-direction:column;border:1px solid ' + BRAND.border + ';border-radius:26px;background:linear-gradient(180deg,rgba(20,25,35,.78),rgba(12,16,23,.82));backdrop-filter:' + BRAND.glass + ';-webkit-backdrop-filter:' + BRAND.glass + ';box-shadow:0 40px 120px rgba(2,6,23,.45);overflow:hidden}\
+.settings-head{display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid ' + BRAND.border + ';background:linear-gradient(180deg,rgba(19,30,53,.98),rgba(12,17,30,.92));flex-shrink:0}\
 .settings-head h2{margin:0;font-size:20px;line-height:1.1;font-weight:900}\
 .settings-head p{margin:4px 0 0;color:' + BRAND.muted + ';font-size:12px}\
-.settings-tabs{display:flex;gap:8px;padding:14px 18px;border-bottom:1px solid ' + BRAND.border + ';overflow:auto;background:rgba(9,14,27,.85)}\
+.settings-tabs{display:flex;gap:8px;padding:14px 18px;border-bottom:1px solid ' + BRAND.border + ';overflow:auto;background:rgba(9,14,27,.85);flex-shrink:0}\
 .settings-tab{border:1px solid ' + BRAND.border + ';border-radius:999px;background:rgba(15,23,42,.72);color:' + BRAND.muted + ';padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap}\
 .settings-tab.active{background:' + BRAND.primary + ';border-color:' + BRAND.primary + ';color:#fff}\
 .settings-body{padding:18px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:18px}\
@@ -1386,7 +1575,7 @@
 .text-input:focus,.select-input:focus{border-color:' + BRAND.primary + '}\
 .saved-key{padding:11px 12px;border-radius:14px;background:rgba(7,12,24,.92);border:1px solid ' + BRAND.border + ';color:' + BRAND.text + ';font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}\
 .provider-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}\
-.provider-card,.model-card,.assignment-card,.placeholder-block{border:1px solid ' + BRAND.border + ';border-radius:20px;background:' + BRAND.surfaceSoft + ';padding:16px;display:flex;flex-direction:column;gap:12px}\
+.provider-card,.model-card,.assignment-card,.placeholder-block{border:1px solid ' + BRAND.border + ';border-radius:20px;background:' + BRAND.surfaceSoft + ';backdrop-filter:' + BRAND.glass + ';-webkit-backdrop-filter:' + BRAND.glass + ';padding:16px;display:flex;flex-direction:column;gap:12px}\
 .provider-top,.model-head,.assignment-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}\
 .provider-top h3,.model-copy h3,.assignment-top h4,.placeholder-block h3{margin:0;font-size:17px}\
 .provider-top p,.model-copy p,.assignment-card p,.placeholder-block p,.model-desc,.provider-note,.provider-meta{margin:0;color:' + BRAND.muted + ';font-size:12px;line-height:1.5}\
@@ -1402,15 +1591,15 @@
 .inline-controls{display:flex;align-items:center;justify-content:flex-start;gap:12px}\
 .toggle{font-size:12px;color:' + BRAND.muted + '}\
 .status-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border:1px solid transparent}\
-.status-pill.success{background:rgba(16,185,129,.15);color:#a7f3d0;border-color:rgba(16,185,129,.32)}\
-.status-pill.error{background:rgba(239,68,68,.14);color:#fecaca;border-color:rgba(239,68,68,.32)}\
-.status-pill.info{background:rgba(37,99,235,.18);color:#bfdbfe;border-color:rgba(37,99,235,.32)}\
+.status-pill.success{background:rgba(107,169,143,.15);color:#a7f3d0;border-color:rgba(107,169,143,.32)}\
+.status-pill.error{background:rgba(201,112,112,.14);color:#fecaca;border-color:rgba(201,112,112,.32)}\
+.status-pill.info{background:rgba(94,126,166,.18);color:#C7D6E5;border-color:rgba(94,126,166,.32)}\
 .status-pill.muted{background:rgba(148,163,184,.12);color:' + BRAND.muted + ';border-color:rgba(148,163,184,.18)}\
 .flash,.inline-message{border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.5;border:1px solid transparent}\
-.flash.ok,.inline-message.ok{background:rgba(16,185,129,.12);color:#d1fae5;border-color:rgba(16,185,129,.28)}\
-.flash.err,.inline-message.err{background:rgba(127,29,29,.28);color:#fecaca;border-color:rgba(239,68,68,.28)}\
-.flash.warn,.inline-message.warn{background:rgba(120,53,15,.28);color:#fde68a;border-color:rgba(245,158,11,.28)}\
-.flash.info,.inline-message.info{background:rgba(37,99,235,.14);color:#dbeafe;border-color:rgba(37,99,235,.3)}\
+.flash.ok,.inline-message.ok{background:rgba(107,169,143,.12);color:#d1fae5;border-color:rgba(107,169,143,.28)}\
+.flash.err,.inline-message.err{background:rgba(127,29,29,.28);color:#fecaca;border-color:rgba(201,112,112,.28)}\
+.flash.warn,.inline-message.warn{background:rgba(120,53,15,.28);color:#fde68a;border-color:rgba(201,164,104,.28)}\
+.flash.info,.inline-message.info{background:rgba(94,126,166,.14);color:#dbeafe;border-color:rgba(94,126,166,.3)}\
 .tag-row,.chip-row{display:flex;gap:8px;flex-wrap:wrap}\
 .tag,.chip-filter{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(15,23,42,.82);border:1px solid ' + BRAND.border + ';font-size:11px;color:' + BRAND.text + '}\
 .chip-filter input{margin:0}\
@@ -1425,6 +1614,47 @@
 .fallback-item span{font-size:12px;color:' + BRAND.muted + ';margin-top:4px}\
 .action-field{justify-content:flex-end}\
 .error-text{color:#fecaca}\
+.model-list{display:flex;flex-direction:column;gap:8px}\
+.model-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}\
+.model-card-main{flex:1;min-width:0}\
+.model-card-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px}\
+.model-card-name{font-weight:700;color:#fff;font-size:14px}\
+.model-card-provider{font-size:10px;color:#8b93a6}\
+.model-card-stats{display:flex;gap:12px;font-size:11px;color:#8b93a6;flex-wrap:wrap}\
+.vision-note.yes{color:#9B8FBF}\
+.vision-note.no{color:#5f6673}\
+.model-card-actions{display:flex;gap:6px;flex-shrink:0;align-items:center}\
+.badge{font-size:9px;padding:2px 6px;border-radius:5px;font-weight:800;text-transform:uppercase}\
+.badge-free{background:rgba(196,173,110,.14);color:#C4AD6E}\
+.badge-vision{background:rgba(155,143,191,.14);color:#9B8FBF}\
+.badge-used{background:rgba(111,174,143,.12);color:#6FAE8F;text-transform:none;font-weight:700}\
+.model-desc-row{margin-top:6px;font-size:11px;color:#8b93a6;line-height:1.5}\
+.model-desc-toggle{margin-left:6px;background:none;border:none;color:#7B9BC0;font-size:11px;cursor:pointer;padding:0}\
+.assign-popover{margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(111,174,143,.05);border:1px solid rgba(111,174,143,.2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}\
+.assign-popover-label{font-size:11px;color:#6FAE8F;font-weight:600}\
+.select-input.small{padding:5px 8px;font-size:11px;width:auto}\
+.ok-btn{padding:5px 14px;border-radius:8px;border:none;background:#6FAE8F;color:#000;font-size:11px;font-weight:700;cursor:pointer}\
+.cancel-btn{padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:transparent;color:#555;font-size:11px;cursor:pointer}\
+.filter-sort-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}\
+.filter-sort-spacer{flex:1}\
+.filter-toggle{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#555;user-select:none}\
+.filter-toggle input{margin:0}\
+.filter-toggle.free.active{color:#C4AD6E}\
+.filter-toggle.vision.active{color:#9B8FBF}\
+.sort-label{font-size:11px;color:#444}\
+.sort-btn{padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:transparent;color:#555;font-size:11px;font-weight:600;cursor:pointer}\
+.sort-btn.active{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff}\
+.test-all-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:9px;border:1px solid rgba(123,155,192,.3);background:rgba(123,155,192,.08);color:#7B9BC0;font-size:11px;font-weight:600;cursor:pointer}\
+.test-all-btn:disabled{opacity:.6;cursor:not-allowed}\
+.assign-toggle-btn{padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#777;font-size:11px;font-weight:600;cursor:pointer}\
+.assign-toggle-btn.active{border-color:rgba(111,174,143,.4);background:rgba(111,174,143,.1);color:#6FAE8F}\
+.ping-ok{font-size:11px;color:#7CB79E;font-weight:600;white-space:nowrap}\
+.ping-error{font-size:11px;color:#D68C8C;font-weight:600;white-space:nowrap}\
+.ping-spinner{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid rgba(123,155,192,.25);border-top-color:#7B9BC0;animation:nfspin 1s linear infinite;flex-shrink:0}\
+@keyframes nfspin{to{transform:rotate(360deg)}}\
+.provider-save-btn{min-width:60px;transition:background .2s}\
+.key-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(148,163,184,.4);margin-right:6px}\
+.key-dot.ok{background:#7CB79E}\
 @media (max-width:1180px){.settings-toolbar,.field-row{grid-template-columns:repeat(2,minmax(0,1fr))}}\
 @media (max-width:980px){.dashboard-shell{left:16px!important;width:min(calc(100vw - 32px),1120px)}.action-row{grid-template-columns:1fr}.settings-modal{width:calc(100vw - 24px);max-height:calc(100vh - 24px)}.settings-toolbar,.field-row,.field-row.compact{grid-template-columns:1fr}.panel,.library-drawer{width:100%;max-width:100vw}}\
 </style>\
@@ -1465,6 +1695,12 @@
       <button class="ghost-btn" type="button" data-action="open-settings">Settings</button>\
       <button class="close" type="button" data-close="assistant" aria-label="Закрыть">×</button>\
     </div>\
+    <div class="thread-bar" id="thread-bar">\
+      <select class="thread-select" id="thread-select" aria-label="Задача/чат"><option value="">Новый чат</option></select>\
+      <button class="thread-icon-btn" type="button" data-action="new-thread" title="Новый чат">+</button>\
+      <button class="thread-icon-btn" type="button" data-action="rename-thread" title="Переименовать чат">✎</button>\
+      <button class="thread-icon-btn" type="button" data-action="delete-thread" title="Удалить чат">🗑</button>\
+    </div>\
     <div class="ctx-strip" id="ctx-strip">\
       <span class="scope-badge" id="ctx-scope">Dashboard</span>\
       <span id="ctx-file">—</span>\
@@ -1482,10 +1718,13 @@
         </div>\
       </div>\
     </div>\
+    <div class="attach-row" id="attach-row" hidden></div>\
     <form class="compose" id="compose">\
+      <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить референс (изображение)">📎</button>\
       <input id="prompt" placeholder="Спросите NOFIDA AI…" autocomplete="off" />\
       <button type="submit" id="send-btn">→</button>\
     </form>\
+    <input type="file" id="attach-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden />\
   </aside>\
   <aside class="library-drawer" id="library-drawer" role="dialog" aria-label="NOFIDA Libraries">\
     <div class="panel-head">\
@@ -1535,6 +1774,10 @@
     state.els.form = state.root.getElementById("compose");
     state.els.input = state.root.getElementById("prompt");
     state.els.sendBtn = state.root.getElementById("send-btn");
+    state.els.attachRow = state.root.getElementById("attach-row");
+    state.els.attachBtn = state.root.getElementById("attach-btn");
+    state.els.attachFile = state.root.getElementById("attach-file");
+    state.els.threadSelect = state.root.getElementById("thread-select");
     state.els.drawer = state.root.getElementById("library-drawer");
     state.els.libraryList = state.root.getElementById("library-list");
     state.els.importFile = state.root.getElementById("import-file");
@@ -1542,15 +1785,78 @@
     state.els.settingsBody = state.root.getElementById("settings-body");
   }
 
-  function appendUserMsg(text) {
+  function appendUserMsg(text, attachments) {
     var div = document.createElement("div");
     div.className = "user-msg";
     var bubble = document.createElement("div");
     bubble.className = "user-bubble";
     bubble.textContent = text;
     div.appendChild(bubble);
+    if (attachments && attachments.length) {
+      var thumbs = document.createElement("div");
+      thumbs.className = "attach-thumbs";
+      attachments.forEach(function (att) {
+        var img = document.createElement("img");
+        img.className = "attach-thumb";
+        img.src = att.previewUrl;
+        img.alt = att.name || "reference";
+        thumbs.appendChild(img);
+      });
+      div.appendChild(thumbs);
+    }
     state.els.log.appendChild(div);
     state.els.log.scrollTop = state.els.log.scrollHeight;
+  }
+
+  function renderAttachRow() {
+    if (!state.els.attachRow) return;
+    var items = state._pendingAttachments;
+    if (!items.length) {
+      state.els.attachRow.hidden = true;
+      state.els.attachRow.innerHTML = "";
+      return;
+    }
+    state.els.attachRow.hidden = false;
+    state.els.attachRow.innerHTML = items.map(function (att, index) {
+      return [
+        '<span class="attach-chip">',
+        '  <img class="attach-chip-thumb" src="' + escapeHtml(att.previewUrl) + '" alt="" />',
+        '  <button type="button" class="attach-chip-remove" data-action="remove-attachment" data-attach-index="' + index + '" title="Убрать">×</button>',
+        "</span>"
+      ].join("");
+    }).join("");
+  }
+
+  function handleAttachFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    var room = 4 - state._pendingAttachments.length;
+    files = files.slice(0, Math.max(0, room));
+    files.forEach(function (file) {
+      if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return;
+      if (file.size > 6 * 1024 * 1024) {
+        appendAiMsg("⚠ Файл " + file.name + " слишком большой (макс. 6 МБ).", null);
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var dataUrl = String(reader.result || "");
+        var match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+        if (!match) return;
+        state._pendingAttachments.push({
+          mimeType: match[1],
+          dataBase64: match[2],
+          previewUrl: dataUrl,
+          name: file.name
+        });
+        renderAttachRow();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function removeAttachment(index) {
+    state._pendingAttachments.splice(index, 1);
+    renderAttachRow();
   }
 
   function renderPlan(plan) {
@@ -1617,6 +1923,59 @@
     wrap.appendChild(head);
     wrap.appendChild(body);
     return wrap;
+  }
+
+  function countScreenSpecNodes(node) {
+    var n = 1;
+    var children = (node && node.children) || [];
+    for (var i = 0; i < children.length; i++) n += countScreenSpecNodes(children[i]);
+    return n;
+  }
+
+  function renderScreenSpecCard(spec, specId) {
+    var wrap = document.createElement("div");
+    wrap.className = "screen-spec-card";
+    var name = (spec && spec.name) || "Screen";
+    var dims = spec ? (spec.width + "×" + spec.height) : "";
+    var nodeCount = countScreenSpecNodes(spec);
+    wrap.innerHTML = [
+      '<div class="screen-spec-head">',
+      '  <span class="screen-spec-name">' + escapeHtml(name) + "</span>",
+      '  <span class="screen-spec-meta">' + escapeHtml(dims) + " · " + nodeCount + " объект(ов)</span>",
+      "</div>",
+      '<div class="screen-spec-actions">',
+      '  <button class="btn primary" type="button" data-action="apply-screen-spec" data-screen-spec-id="' + escapeHtml(specId) + '">Применить на холст</button>',
+      "</div>",
+      '<div class="screen-spec-status" data-screen-spec-status="' + escapeHtml(specId) + '"></div>',
+      '<div class="screen-spec-hint">Не то? Опишите, что изменить, в чате — я пересоберу с учётом правок, не трогая уже применённые варианты.</div>'
+    ].join("");
+    return wrap;
+  }
+
+  function applyScreenSpecToCanvas(specId, spec, buttonEl) {
+    if (!spec) return;
+    var statusEl = state.els.log ? state.els.log.querySelector('[data-screen-spec-status="' + specId + '"]') : null;
+    if (buttonEl) buttonEl.disabled = true;
+    if (statusEl) { statusEl.textContent = "Применяю…"; statusEl.className = "screen-spec-status info"; }
+
+    if (!state.bridge || typeof state.bridge.applyScreenSpec !== "function") {
+      if (statusEl) { statusEl.textContent = "⚠ Мост с плагином не подключён."; statusEl.className = "screen-spec-status err"; }
+      if (buttonEl) buttonEl.disabled = false;
+      return;
+    }
+
+    state.bridge.applyScreenSpec(spec).then(function (result) {
+      if (buttonEl) buttonEl.disabled = false;
+      if (result && result.ok) {
+        if (statusEl) { statusEl.textContent = "✓ " + (result.message || "Готово"); statusEl.className = "screen-spec-status ok"; }
+        if (buttonEl) buttonEl.textContent = "Применить ещё раз";
+      } else {
+        if (statusEl) { statusEl.textContent = "⚠ " + ((result && result.message) || "Не удалось применить."); statusEl.className = "screen-spec-status err"; }
+      }
+    }).catch(function (err) {
+      if (buttonEl) buttonEl.disabled = false;
+      if (statusEl) { statusEl.textContent = "⚠ " + (err && err.message || "Ошибка применения."); statusEl.className = "screen-spec-status err"; }
+    });
   }
 
   function appendAiMsg(text, plan) {
@@ -1757,6 +2116,30 @@
       return;
     }
 
+    if (data.status === "screen_spec_ready" && data.screenSpec) {
+      var specId = "spec-" + (++state._screenSpecSeq);
+      state._screenSpecs[specId] = data.screenSpec;
+      state._lastScreenSpec = data.screenSpec;
+      var specRow = appendAiMsg(data.message || "Экран готов.", null);
+      if (specRow) {
+        var specContent = specRow.querySelector(".ai-content");
+        var cardEl = renderScreenSpecCard(data.screenSpec, specId);
+        if (specContent) specContent.appendChild(cardEl);
+        appendReferenceNote(specRow, data.referenceResults);
+        // Autonomous execution: apply to the canvas immediately, no manual
+        // confirm step. The button stays visible to re-apply after further
+        // chat-driven edits; Ctrl+Z covers "undo this" the same way it does
+        // for any other canvas change.
+        var applyBtn = cardEl.querySelector('[data-action="apply-screen-spec"]');
+        applyScreenSpecToCanvas(specId, data.screenSpec, applyBtn);
+      }
+      return;
+    }
+    if (data.status === "invalid_screen_spec") {
+      appendAiMsg("⚠ " + (data.message || "AI вернул некорректную структуру экрана. Попробуйте переформулировать запрос."), null);
+      return;
+    }
+
     var text = data.resultText || data.answer || "NOFIDA AI returned an empty response.";
     var plan = data.operationPlan || data.operation_plan || null;
 
@@ -1784,6 +2167,129 @@
         content.appendChild(meta);
       }
     }
+    appendReferenceNote(row, data.referenceResults);
+  }
+
+  // ============================================================
+  // CHAT THREADS — one thread per task, each with its own persisted
+  // history (see services/nofida-hub-adapter/ai/thread-store.mjs).
+  // ============================================================
+  function makeClientId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  function renderThreadSelectOptions() {
+    if (!state.els.threadSelect) return;
+    var options = ['<option value="">Новый чат</option>'].concat(
+      state.threads.map(function (t) {
+        var selected = t.id === state.activeThreadId ? " selected" : "";
+        return '<option value="' + escapeHtml(t.id) + '"' + selected + ">" + escapeHtml(t.title) + "</option>";
+      })
+    );
+    state.els.threadSelect.innerHTML = options.join("");
+    if (!state.activeThreadId) state.els.threadSelect.value = "";
+  }
+
+  function refreshThreadsList() {
+    return fetch(AI_THREADS_URL, { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        state.threadsLoaded = true;
+        if (data && Array.isArray(data.threads)) state.threads = data.threads;
+        renderThreadSelectOptions();
+      })
+      .catch(function () { state.threadsLoaded = true; });
+  }
+
+  function clearLog() {
+    state.els.log.innerHTML = "";
+  }
+
+  function startNewThread() {
+    state.activeThreadId = null;
+    state._lastScreenSpec = null;
+    clearLog();
+    appendAiMsg("Новый чат. Опишите задачу, и я буду держать в памяти весь этот разговор.", null);
+    renderThreadSelectOptions();
+  }
+
+  function switchThread(threadId) {
+    if (!threadId) { startNewThread(); return; }
+    if (threadId === state.activeThreadId) return;
+    fetch(AI_THREADS_URL + "/" + encodeURIComponent(threadId), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.thread) {
+          appendAiMsg("⚠ Не удалось загрузить этот чат.", null);
+          return;
+        }
+        state.activeThreadId = threadId;
+        clearLog();
+        var lastSpec = null;
+        (data.thread.messages || []).forEach(function (m) {
+          if (m.role === "user") appendUserMsg(m.text, null);
+          else {
+            appendAiMsg(m.text, null);
+            if (m.screenSpec) lastSpec = m.screenSpec;
+          }
+        });
+        state._lastScreenSpec = lastSpec;
+        renderThreadSelectOptions();
+      })
+      .catch(function () {
+        appendAiMsg("⚠ Не удалось загрузить этот чат.", null);
+      });
+  }
+
+  function renameActiveThread() {
+    if (!state.activeThreadId) {
+      appendAiMsg("⚠ Сначала отправьте хотя бы одно сообщение, чтобы создать чат.", null);
+      return;
+    }
+    var current = state.threads.filter(function (t) { return t.id === state.activeThreadId; })[0];
+    var title = window.prompt("Название чата:", current ? current.title : "");
+    if (title === null) return;
+    fetch(AI_THREADS_URL + "/" + encodeURIComponent(state.activeThreadId), {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: title })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function () { refreshThreadsList(); });
+  }
+
+  function deleteActiveThread() {
+    if (!state.activeThreadId) return;
+    if (!window.confirm("Удалить этот чат вместе с историей?")) return;
+    var idToDelete = state.activeThreadId;
+    fetch(AI_THREADS_URL + "/" + encodeURIComponent(idToDelete), {
+      method: "DELETE",
+      credentials: "same-origin"
+    })
+      .then(function () {
+        startNewThread();
+        refreshThreadsList();
+      });
+  }
+
+  function appendReferenceNote(row, referenceResults) {
+    if (!row || !Array.isArray(referenceResults) || referenceResults.length === 0) return;
+    var content = row.querySelector(".ai-content");
+    if (!content) return;
+    var note = document.createElement("div");
+    note.className = "reference-note";
+    note.innerHTML = referenceResults.map(function (r) {
+      return r.ok
+        ? "✓ референс по ссылке добавлен" + (r.title ? ": " + escapeHtml(r.title) : "")
+        : "⚠ не удалось загрузить превью по ссылке (" + escapeHtml(r.reason || "ошибка") + ")";
+    }).join("<br>");
+    content.appendChild(note);
   }
 
   // Core AI task sender. All AI actions route through here.
@@ -1792,26 +2298,38 @@
   function sendAiTask(taskType, userPrompt) {
     if (state._aiLoading) return;
 
+    var pendingAttachments = state._pendingAttachments.slice();
     var displayLabel = userPrompt || (taskType ? taskType.replace(/_/g, " ") : "");
-    if (displayLabel) appendUserMsg(displayLabel);
+    if (displayLabel || pendingAttachments.length) appendUserMsg(displayLabel, pendingAttachments);
     state.els.input.value = "";
     state.els.sendBtn.disabled = true;
     state._aiLoading = true;
+    state._pendingAttachments = [];
+    renderAttachRow();
 
     var loadingEl = appendLoading();
     var scope = getAIScope();
-    var context = state._fileContext || null;
+    var context = state._fileContext ? Object.assign({}, state._fileContext) : {};
+    if (state._lastScreenSpec) context.previousScreenSpec = state._lastScreenSpec;
+    var referenceUrls = (String(userPrompt || "").match(/https?:\/\/[^\s]+/g) || []).slice(0, 2);
 
-    fetch(AI_ASK_URL, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskType: taskType || null,
-        scope: scope,
-        context: context,
-        userPrompt: userPrompt || ""
-      })
+    ensureLibrariesConnected(context).then(function (resolvedContext) {
+      return fetch(AI_ASK_URL, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskType: taskType || null,
+          scope: scope,
+          context: resolvedContext,
+          userPrompt: userPrompt || "",
+          attachments: pendingAttachments.map(function (a) {
+            return { mimeType: a.mimeType, dataBase64: a.dataBase64 };
+          }),
+          referenceUrls: referenceUrls,
+          threadId: state.activeThreadId || (state.activeThreadId = makeClientId())
+        })
+      });
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -1819,6 +2337,7 @@
         state._aiLoading = false;
         state.els.sendBtn.disabled = false;
         handleTaskResult(data);
+        refreshThreadsList();
       })
       .catch(function (err) {
         loadingEl.remove();
@@ -1827,6 +2346,30 @@
         var msg = (err && err.message) ? err.message : "Ошибка связи с NOFIDA AI. Проверьте сервер.";
         appendAiMsg("⚠ " + msg, null);
       });
+  }
+
+  // Auto-connects NOFIDA Hub libraries the team already has into the working
+  // file before the model runs, so it can reference real components — no
+  // user confirmation, see plugin/code.js connectLibraries() for why that's
+  // the right default for first-party Hub content. Best-effort: any failure
+  // here just falls through with the original context, never blocks sending.
+  function ensureLibrariesConnected(context) {
+    var available = context && context.libraries && Array.isArray(context.libraries.available)
+      ? context.libraries.available
+      : [];
+    if (!available.length || !state.bridge || typeof state.bridge.connectLibraries !== "function") {
+      return Promise.resolve(context);
+    }
+    var ids = available.slice(0, 8).map(function (lib) { return lib.id; });
+    return state.bridge.connectLibraries(ids).then(function (result) {
+      if (result && Array.isArray(result.libraries) && result.libraries.length) {
+        context.libraries = context.libraries || {};
+        context.libraries.connected = result.libraries;
+      }
+      return context;
+    }).catch(function () {
+      return context;
+    });
   }
 
   // Free-text chat entry point (submit button / Enter key)
@@ -1935,15 +2478,15 @@
     style.id = "nofida-ai-dash-style";
     style.textContent = [
       "#nofida-ai-dash-entry{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 6px;",
-      "border-radius:10px;font-size:13px;font-weight:700;color:#93c5fd;",
+      "border-radius:10px;font-size:13px;font-weight:700;color:#A8BFD4;",
       "text-decoration:none;cursor:pointer;",
-      "background:rgba(37,99,235,.07);border:1px solid rgba(37,99,235,.2);",
+      "background:rgba(94,126,166,.07);border:1px solid rgba(94,126,166,.2);",
       "transition:background .15s,border-color .15s;",
       "font-family:" + BRAND.font + ";box-sizing:border-box}",
-      "#nofida-ai-dash-entry:hover{background:rgba(37,99,235,.14);border-color:rgba(37,99,235,.38)}",
+      "#nofida-ai-dash-entry:hover{background:rgba(94,126,166,.14);border-color:rgba(94,126,166,.38)}",
       "#nofida-ai-dash-entry .nai-icon{display:flex;align-items:center;flex-shrink:0}",
       "#nofida-ai-dash-entry .nai-badge{font-size:9px;font-weight:900;padding:1px 5px;",
-      "border-radius:999px;background:rgba(16,185,129,.18);color:#6ee7b7;",
+      "border-radius:999px;background:rgba(107,169,143,.18);color:#6ee7b7;",
       "letter-spacing:.06em;text-transform:uppercase;margin-left:auto}"
     ].join("");
     document.head.appendChild(style);
@@ -2284,6 +2827,12 @@
       return ensureSettingsLoaded(true);
     }).then(function () {
       setFlash("Provider configuration saved.", "success");
+      state.settingsUi.savedProviderId = providerId;
+      renderSettings();
+      setTimeout(function () {
+        state.settingsUi.savedProviderId = null;
+        renderSettings();
+      }, 1500);
     }).catch(function (error) {
       setProviderMessage(providerId, error.message || "Failed to save provider settings.", "error");
     });
@@ -2341,6 +2890,7 @@
     }).then(function () {
       setModelMessage(messageKey, "Assignment saved.", "success");
       state.settingsUi.focusRole = role;
+      state.settingsUi.modelAssignOpenId = null;
       return ensureSettingsLoaded(true);
     }).then(function () {
       setFlash("Role assignment updated for " + (ROLE_LABELS[role] || role) + ".", "success");
@@ -2351,8 +2901,8 @@
 
   function testModel(modelId) {
     var providerId = state.settingsUi.modelProviderDrafts[modelId] || "openrouter";
-    var messageKey = modelId + "::" + providerId;
-    setModelMessage(messageKey, "Testing model…", "info");
+    state.settingsUi.modelPing[modelId] = { status: "loading" };
+    renderSettings();
     return apiJson(AI_TEST_MODEL_URL, {
       method: "POST",
       body: JSON.stringify({
@@ -2361,11 +2911,38 @@
       })
     }).then(function (data) {
       var result = data.result || {};
-      var tone = result.status === "test_passed" ? "success" : "error";
-      setModelMessage(messageKey, (result.message || "Test finished.") + " · " + formatLatency(result.latencyMs), tone);
+      if (result.status === "test_passed") {
+        state.settingsUi.modelPing[modelId] = { status: "ok", ms: result.latencyMs || 0 };
+      } else {
+        state.settingsUi.modelPing[modelId] = { status: "error" };
+      }
+      renderSettings();
     }).catch(function (error) {
-      setModelMessage(messageKey, error.message || "Model test failed.", "error");
+      state.settingsUi.modelPing[modelId] = { status: "error", code: error.status };
+      renderSettings();
     });
+  }
+
+  function testAllModels() {
+    if (state.settingsUi.testAllRunning) return;
+    var models = getFilteredModels().slice(0, 20);
+    if (!models.length) return;
+    state.settingsUi.testAllRunning = true;
+    renderSettings();
+
+    var index = 0;
+    function next() {
+      if (index >= models.length) {
+        state.settingsUi.testAllRunning = false;
+        renderSettings();
+        return;
+      }
+      var model = models[index++];
+      testModel(model.id).then(function () {
+        setTimeout(next, 400);
+      });
+    }
+    next();
   }
 
   function clearRoleAssignment(roleId) {
@@ -2462,6 +3039,31 @@
     if (action === "test-provider") testProvider(actionTarget.getAttribute("data-provider-id"));
     if (action === "assign-model") assignModel(actionTarget.getAttribute("data-model-id"));
     if (action === "test-model") testModel(actionTarget.getAttribute("data-model-id"));
+    if (action === "test-all-models") testAllModels();
+    if (action === "set-sort") {
+      var sortKey = actionTarget.getAttribute("data-sort-key");
+      if (state.settingsUi.sort === sortKey) {
+        state.settingsUi.sortDir = state.settingsUi.sortDir === "desc" ? "asc" : "desc";
+      } else {
+        state.settingsUi.sort = sortKey;
+        state.settingsUi.sortDir = "asc";
+      }
+      renderSettings();
+    }
+    if (action === "toggle-model-desc") {
+      var descId = actionTarget.getAttribute("data-model-id");
+      state.settingsUi.expandedDesc[descId] = !state.settingsUi.expandedDesc[descId];
+      renderSettings();
+    }
+    if (action === "toggle-assign-popup") {
+      var popupId = actionTarget.getAttribute("data-model-id");
+      state.settingsUi.modelAssignOpenId = state.settingsUi.modelAssignOpenId === popupId ? null : popupId;
+      renderSettings();
+    }
+    if (action === "close-assign-popup") {
+      state.settingsUi.modelAssignOpenId = null;
+      renderSettings();
+    }
     if (action === "edit-role-assignment") {
       state.settingsUi.focusRole = actionTarget.getAttribute("data-role") || "default";
       state.settingsUi.providerFilter = actionTarget.getAttribute("data-provider-id") || state.settingsUi.providerFilter;
@@ -2474,9 +3076,19 @@
     if (action === "remove-fallback") removeFallback(Number(actionTarget.getAttribute("data-fallback-index")));
     if (action === "open-account-ai-settings") openAccountSettingsPage(actionTarget.getAttribute("data-settings-tab") || "api");
     if (action === "close-account-ai-settings") closeAccountSettingsPage();
+    if (action === "new-thread") startNewThread();
+    if (action === "rename-thread") renameActiveThread();
+    if (action === "delete-thread") deleteActiveThread();
     if (action === "preset-task") {
       var taskType = actionTarget.getAttribute("data-task-type");
       if (taskType) sendAiTask(taskType, "");
+    }
+    if (action === "apply-screen-spec") {
+      var specId = actionTarget.getAttribute("data-screen-spec-id");
+      applyScreenSpecToCanvas(specId, state._screenSpecs[specId], actionTarget);
+    }
+    if (action === "remove-attachment") {
+      removeAttachment(Number(actionTarget.getAttribute("data-attach-index")));
     }
   }
 
@@ -2509,6 +3121,9 @@
   }
 
   function handleSharedChange(target) {
+    if (target.id === "thread-select") {
+      switchThread(target.value);
+    }
     if (target.id === "settings-provider-filter") {
       state.settingsUi.providerFilter = target.value;
       renderSettings();
@@ -2565,8 +3180,17 @@
     state.els.form.addEventListener("submit", function (event) {
       event.preventDefault();
       var prompt = state.els.input.value.trim();
-      if (!prompt) return;
+      if (!prompt && state._pendingAttachments.length === 0) return;
       sendAiMessage(prompt);
+    });
+
+    state.els.attachBtn.addEventListener("click", function () {
+      state.els.attachFile.click();
+    });
+
+    state.els.attachFile.addEventListener("change", function () {
+      handleAttachFiles(state.els.attachFile.files);
+      state.els.attachFile.value = "";
     });
 
     state.root.addEventListener("click", function (event) {
@@ -2642,6 +3266,26 @@
       state.els.transport.textContent = bridge && bridge.transport
         ? "bridge: " + bridge.transport
         : "bridge: offline";
+    });
+
+    // The bridge can connect to the companion plugin well after this panel's
+    // first render (user installs/opens the plugin later in the session) —
+    // keep the status label live instead of freezing it at startup value.
+    window.addEventListener("nofida-ai:transport-changed", function (ev) {
+      if (state.els.transport) {
+        var name = ev && ev.detail && ev.detail.transport;
+        state.els.transport.textContent = name ? "bridge: " + name : "bridge: offline";
+      }
+      // requestContext() at panel-open time silently returns nothing when
+      // the plugin hasn't connected yet (extractContext() short-circuits on
+      // a missing pluginWindow) and was never retried — leaving
+      // state._fileContext empty even though a file really is open. That
+      // empty context makes the intent router treat every message as
+      // "no file", which pushes ordinary build requests into free_chat
+      // instead of build_screen. Re-request now that a real transport exists.
+      if (ev && ev.detail && ev.detail.transport === "plugin") {
+        requestContext();
+      }
     });
 
     window.NofidaAICore = {
