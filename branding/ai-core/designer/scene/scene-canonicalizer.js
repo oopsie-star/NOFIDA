@@ -15,9 +15,16 @@
 //      reuse ITS nid — this is what makes update-mode diffing in
 //      scene-compiler.mjs meaningful across independent AI turns, not just
 //      within one compile call.
-//   2. Else if the node carries a `presetId` (the model/caller echoed one
+//   2. Else if the node carries a `semanticId` (PATCH 026A.0 — a designer-
+//      assigned stable identity like "home-day/prediction-card/title"),
+//      derive the nid from IT rather than from tree path — semanticId is
+//      meant to survive a full re-plan where the node's position in the tree
+//      may shift, so retries and light/dark pairing (026A.5) can rely on the
+//      same semanticId always resolving to the same nid even with no
+//      previousScene path match at all.
+//   3. Else if the node carries a `presetId` (the model/caller echoed one
 //      back explicitly), use it.
-//   3. Else derive one deterministically from the node's tree path + type,
+//   4. Else derive one deterministically from the node's tree path + type,
 //      so canonicalizing the SAME input tree twice always produces the SAME
 //      ids (required for the normalizer's idempotent-second-pass guarantee
 //      and for stable diffing).
@@ -51,6 +58,8 @@ function canonicalizeNode(node, path, previousByPath, usedIds) {
   const prev = previousByPath.get(path);
   if (prev && prev.type === node.type) {
     nid = prev.nid;
+  } else if (node.semanticId) {
+    nid = `n_${djb2(`semantic:${node.semanticId}`)}`;
   } else if (node.presetId) {
     nid = node.presetId;
   } else {

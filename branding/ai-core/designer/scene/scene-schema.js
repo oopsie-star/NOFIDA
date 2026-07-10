@@ -77,6 +77,18 @@ export const MAX_GROUP_DEPTH = 4;
 export const ROOT_FRAME_ID = "00000000-0000-0000-0000-000000000000";
 export const DEFAULT_FONT = "sourcesanspro";
 
+// PATCH 026A.0 — designer token-binding metadata. Every node may carry a
+// `tokens` object referencing design-system tokens by name (resolved to
+// actual values upstream, in the design-system-generator stage — 026A.4 —
+// not here); the validator only type-checks category names and string
+// values, it never resolves or looks up a token. See scene-validator.mjs's
+// validateTokens() and penpot-shape-adapter.mjs's buildFields() for the two
+// places this schema addition is actually consumed.
+export const TOKEN_CATEGORIES = new Set([
+  "fillToken", "textStyleToken", "radiusToken", "gapToken", "strokeToken", "shadowToken",
+]);
+export const THEME_VARIANTS = new Set(["light", "dark"]);
+
 export function resolveType(rawType, isRoot) {
   if (isRoot) return "frame";
   const t = typeof rawType === "string" ? rawType : "";

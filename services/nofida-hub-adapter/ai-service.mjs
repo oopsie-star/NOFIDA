@@ -1,5 +1,6 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { getDesignerFeatureFlags } from "./ai/designer/feature-flags.mjs";
 
 const SETTINGS_SCHEMA_VERSION = 1;
 const SETTINGS_PATH = path.resolve(
@@ -983,6 +984,11 @@ export function createAISettingsService(log = () => {}) {
         modelRoles: MODEL_ROLES,
         modelCapabilities: MODEL_CAPABILITIES,
       },
+      // PATCH 026A.0 — Autonomous Designer feature flags, default off (see
+      // ai/designer/feature-flags.mjs). Informative for the frontend only —
+      // the frontend keeps its own hard gate constant and must AND the two
+      // together, mirroring the ALLOW_BULK_UPDATE convention.
+      flags: getDesignerFeatureFlags(),
     };
   }
 

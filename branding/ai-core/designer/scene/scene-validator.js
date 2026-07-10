@@ -19,7 +19,7 @@
 import {
   NODE_TYPES, UNCOMPILED_TYPES, ALIGN_VALUES, SHADOW_STYLES, GRADIENT_TYPES,
   GRADIENT_ANGLES, LAYOUT_TYPES, BLEND_MODES, MAX_NODES, MAX_DEPTH, MIN_DIM, MAX_DIM,
-  MAX_SHADOW_BLUR, MAX_STROKE_WIDTH, MAX_LAYER_BLUR, resolveType,
+  MAX_SHADOW_BLUR, MAX_STROKE_WIDTH, MAX_LAYER_BLUR, TOKEN_CATEGORIES, THEME_VARIANTS, resolveType,
 } from "./scene-schema.js";
 
 function isFiniteNumber(value) {
@@ -84,6 +84,35 @@ function validateLayout(layout, path, errors) {
     columnGap: isFiniteNumber(layout.columnGap) ? layout.columnGap : undefined,
     padding: isFiniteNumber(layout.padding) ? layout.padding : undefined,
   };
+}
+
+// PATCH 026A.0 — designer token-binding metadata (see scene-schema.mjs).
+// Unlike validateMetadata() below (which silently drops anything it doesn't
+// recognize), an unrecognized token category is a real error: a typo'd
+// category name would otherwise silently fail to bind and nobody would know
+// why the token didn't resolve downstream.
+function validateTokens(tokens, path, errors) {
+  if (tokens === undefined || tokens === null) return undefined;
+  if (typeof tokens !== "object" || Array.isArray(tokens)) {
+    errors.push(`${path}.tokens must be an object`);
+    return undefined;
+  }
+  const out = {};
+  for (const key of Object.keys(tokens)) {
+    if (!TOKEN_CATEGORIES.has(key)) {
+      errors.push(`${path}.tokens.${key} is not a recognized token category (expected one of ${[...TOKEN_CATEGORIES].join("|")})`);
+      continue;
+    }
+    const value = tokens[key];
+    if (value === null) {
+      out[key] = null;
+    } else if (typeof value === "string" && value.trim()) {
+      out[key] = value.trim().slice(0, 120);
+    } else {
+      errors.push(`${path}.tokens.${key} must be a string or null`);
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function validateMetadata(metadata) {
@@ -168,6 +197,24 @@ function validateNode(raw, path, depth, ctx, isRoot) {
   if (typeof raw.semanticRole === "string" && raw.semanticRole.trim()) {
     node.semanticRole = raw.semanticRole.trim().slice(0, 40);
   }
+
+  // PATCH 026A.0 — pass-through designer metadata (see scene-schema.mjs).
+  // Validated here (applies to every node type, before any early return
+  // below) so it survives into the canonical/normalized/compiled tree
+  // untouched; nothing in this module resolves a token to an actual value.
+  const tokens = validateTokens(raw.tokens, path, errors);
+  if (tokens) node.tokens = tokens;
+  if (typeof raw.semanticId === "string" && raw.semanticId.trim()) {
+    node.semanticId = raw.semanticId.trim().slice(0, 160);
+  }
+  if (typeof raw.componentRole === "string" && raw.componentRole.trim()) {
+    node.componentRole = raw.componentRole.trim().slice(0, 80);
+  }
+  if (typeof raw.themeVariant === "string" && THEME_VARIANTS.has(raw.themeVariant)) {
+    node.themeVariant = raw.themeVariant;
+  }
+  const devMeta = validateMetadata(raw.devMeta);
+  if (devMeta) node.devMeta = devMeta;
 
   if (type !== "text" && type !== "component-instance") {
     if (isFiniteNumber(raw.borderRadius)) node.borderRadius = Math.min(999, Math.max(0, raw.borderRadius));

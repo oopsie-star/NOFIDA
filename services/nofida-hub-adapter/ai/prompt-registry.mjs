@@ -17,6 +17,36 @@ export const TASK_TYPES = new Set([
   "accessibility_review",
   "organize_layers",
   "rename_layers",
+  "designer_brief_interpreter",
+  "designer_product_architect",
+  "designer_art_director",
+  "designer_system_generator",
+  "designer_component_architect",
+  "designer_asset_resolver",
+  "designer_layout_planner",
+  "designer_scene_builder",
+  "designer_visual_critic",
+  "designer_repair_planner",
+  "designer_handoff_generator",
+]);
+
+// PATCH 026A.0 — Autonomous Designer pipeline task types. Reachable only
+// when the "nofida_ai_autonomous_designer_v1" feature flag is on (see
+// intent-router.mjs's routeTask() and ai/designer/feature-flags.mjs) — never
+// through the free-text classifier (classifyFreeText() never returns one of
+// these), only via explicit taskType from the designer pipeline (026A.4).
+export const DESIGNER_TASK_TYPES = new Set([
+  "designer_brief_interpreter",
+  "designer_product_architect",
+  "designer_art_director",
+  "designer_system_generator",
+  "designer_component_architect",
+  "designer_asset_resolver",
+  "designer_layout_planner",
+  "designer_scene_builder",
+  "designer_visual_critic",
+  "designer_repair_planner",
+  "designer_handoff_generator",
 ]);
 
 export const CONTEXT_SCOPES = new Set([
@@ -39,6 +69,20 @@ export const TASK_ROLE_MAP = {
   accessibility_review: "design_audit",
   organize_layers: "design_audit",
   rename_layers: "design_audit",
+  // PATCH 026A.0 — all designer_* tasks use the currently active connected
+  // LLM (the "default" role's resolution chain in ai-service.mjs) rather
+  // than requiring a dedicated per-task model assignment.
+  designer_brief_interpreter: "default",
+  designer_product_architect: "default",
+  designer_art_director: "default",
+  designer_system_generator: "default",
+  designer_component_architect: "default",
+  designer_asset_resolver: "default",
+  designer_layout_planner: "default",
+  designer_scene_builder: "default",
+  designer_visual_critic: "default",
+  designer_repair_planner: "default",
+  designer_handoff_generator: "default",
 };
 
 // Tasks allowed in dashboard scope (no canvas context required)
@@ -501,6 +545,140 @@ define({
     appendHubContext(lines, hubCtx);
     return lines.join("\n");
   },
+});
+
+// ── PATCH 026A.0 — Autonomous Designer pipeline tasks ─────────────────────────
+// Registry entries only — buildSystemPrompt() is a clearly-marked placeholder
+// for every one of these; real prompt content is written in later 026A
+// sub-patches (026A.1 through 026A.8). safety.previewOnly stays true and
+// allowCanvasMutation stays false for ALL of them, including
+// designer_scene_builder — canvas mutation continues to flow only through
+// the existing build_screen apply path (see persistence-adapter.js), never
+// directly from a designer pipeline stage.
+
+function stubDesignerPrompt(taskType, version) {
+  return `[STUB — ${taskType} v${version}] System prompt not yet implemented (PATCH 026A). This placeholder must never be sent to a live model while nofida_ai_autonomous_designer_v1 is disabled.`;
+}
+
+define({
+  id: "designer_brief_interpreter",
+  version: "026a.0",
+  taskType: "designer_brief_interpreter",
+  role: "default",
+  contextRequirements: ["userPrompt"],
+  outputSchema: "ProductBrief",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_brief_interpreter", "026a.0"),
+});
+
+define({
+  id: "designer_product_architect",
+  version: "026a.0",
+  taskType: "designer_product_architect",
+  role: "default",
+  contextRequirements: ["ProductBrief"],
+  outputSchema: "ProductArchitecture",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_product_architect", "026a.0"),
+});
+
+define({
+  id: "designer_art_director",
+  version: "026a.0",
+  taskType: "designer_art_director",
+  role: "default",
+  contextRequirements: ["ProductBrief", "ProductArchitecture"],
+  outputSchema: "ArtDirection",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_art_director", "026a.0"),
+});
+
+define({
+  id: "designer_system_generator",
+  version: "026a.0",
+  taskType: "designer_system_generator",
+  role: "default",
+  contextRequirements: ["ProductBrief", "ArtDirection"],
+  outputSchema: "DesignSystemManifest",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_system_generator", "026a.0"),
+});
+
+define({
+  id: "designer_component_architect",
+  version: "026a.0",
+  taskType: "designer_component_architect",
+  role: "default",
+  contextRequirements: ["ProductArchitecture", "DesignSystemManifest"],
+  outputSchema: "ComponentDefinition[]",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_component_architect", "026a.0"),
+});
+
+define({
+  id: "designer_asset_resolver",
+  version: "026a.0",
+  taskType: "designer_asset_resolver",
+  role: "default",
+  contextRequirements: ["ArtDirection", "ComponentDefinition[]"],
+  outputSchema: "AssetResolution",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_asset_resolver", "026a.0"),
+});
+
+define({
+  id: "designer_layout_planner",
+  version: "026a.0",
+  taskType: "designer_layout_planner",
+  role: "default",
+  contextRequirements: ["ProductArchitecture", "DesignSystemManifest", "ComponentDefinition[]"],
+  outputSchema: "SemanticLayout",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_layout_planner", "026a.0"),
+});
+
+define({
+  id: "designer_scene_builder",
+  version: "026a.0",
+  taskType: "designer_scene_builder",
+  role: "default",
+  contextRequirements: ["SemanticLayout", "DesignSystemManifest", "AssetResolution"],
+  outputSchema: "screen_spec",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_scene_builder", "026a.0"),
+});
+
+define({
+  id: "designer_visual_critic",
+  version: "026a.0",
+  taskType: "designer_visual_critic",
+  role: "default",
+  contextRequirements: ["screen_spec", "ArtDirection"],
+  outputSchema: "CritiqueReport",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_visual_critic", "026a.0"),
+});
+
+define({
+  id: "designer_repair_planner",
+  version: "026a.0",
+  taskType: "designer_repair_planner",
+  role: "default",
+  contextRequirements: ["screen_spec", "CritiqueReport"],
+  outputSchema: "operation_plan",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_repair_planner", "026a.0"),
+});
+
+define({
+  id: "designer_handoff_generator",
+  version: "026a.0",
+  taskType: "designer_handoff_generator",
+  role: "default",
+  contextRequirements: ["screen_spec", "DesignSystemManifest"],
+  outputSchema: "handoff_package",
+  safety: { previewOnly: true, allowCanvasMutation: false },
+  buildSystemPrompt: () => stubDesignerPrompt("designer_handoff_generator", "026a.0"),
 });
 
 // ── Public API ────────────────────────────────────────────────────────────────

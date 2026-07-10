@@ -9,6 +9,7 @@ import {
   EDITOR_REQUIRED_TASKS,
   TASK_ROLE_MAP,
   TASK_OPERATION_TYPE,
+  DESIGNER_TASK_TYPES,
   normalizeTaskType,
   normalizeScope,
 } from "./prompt-registry.mjs";
@@ -69,15 +70,28 @@ function isEditorScope(scope) {
  *   userPrompt - raw text from the user (required when taskType is null)
  *   scope      - explicit surface scope from the frontend (optional; inferred if omitted)
  *   context    - file/page/selection/objects/colors/texts from the plugin (optional)
+ *   flags      - designer feature flags from ai/designer/feature-flags.mjs (optional; PATCH 026A.0)
  *
  * Returns:
  *   { taskType, scope, role, userPrompt, context, isClassified, primaryOperationType }
  *
- * Throws a config error if the task × scope combination is invalid.
+ * Throws a config error if the task × scope combination is invalid, or if a
+ * designer_* task is requested while nofida_ai_autonomous_designer_v1 is off.
  */
-export function routeTask({ taskType: rawTaskType, userPrompt, scope: rawScope, context }) {
+export function routeTask({ taskType: rawTaskType, userPrompt, scope: rawScope, context, flags }) {
   const isPresetTask = Boolean(normalizeTaskType(rawTaskType));
   let taskType = normalizeTaskType(rawTaskType);
+
+  // PATCH 026A.0 — designer_* tasks are never reached via free-text
+  // classification (classifyFreeText() doesn't know about them), only via an
+  // explicit taskType — so this is the single gate for all of them.
+  if (taskType && DESIGNER_TASK_TYPES.has(taskType) && !flags?.autonomousDesignerV1) {
+    throw makeConfigError(
+      "designer_disabled",
+      "The Autonomous Designer is not enabled (nofida_ai_autonomous_designer_v1 is off).",
+      403,
+    );
+  }
 
   if (!taskType) {
     // Free-text path: try a specific classification first (audit, library,

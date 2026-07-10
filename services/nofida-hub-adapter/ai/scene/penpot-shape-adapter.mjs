@@ -170,6 +170,21 @@ export function buildFields(node, kind) {
   if (node.visible === false) fields.hidden = true;
   if (node.blendMode && node.blendMode !== "normal") fields["blend-mode"] = node.blendMode;
 
+  // PATCH 026A.0 — designer pass-through metadata (see scene-schema.mjs).
+  // This module resolves NOTHING here — token values are resolved upstream
+  // (the design-system-generator stage, 026A.4); this just copies whatever
+  // the Scene Model node carried so it survives into Penpot persistence and
+  // can be read back by later designer stages (visual critic, handoff).
+  if (node.tokens || node.semanticId || node.componentRole || node.themeVariant || node.devMeta) {
+    const nofidaMeta = {};
+    if (node.tokens) nofidaMeta.tokens = node.tokens;
+    if (node.semanticId) nofidaMeta["semantic-id"] = node.semanticId;
+    if (node.componentRole) nofidaMeta["component-role"] = node.componentRole;
+    if (node.themeVariant) nofidaMeta["theme-variant"] = node.themeVariant;
+    if (node.devMeta) nofidaMeta["dev-meta"] = node.devMeta;
+    fields["nofida-meta"] = nofidaMeta;
+  }
+
   return fields;
 }
 
