@@ -53,6 +53,18 @@
 
   var DESIGNER_BASE = "/nofida/ai-core/designer/";
   var scenePipelinePromise = null;
+  // Cache-busting query param for the designer/ scripts below — none of them
+  // go through patch-frontend.sh's ?v=${ASSET_TAG} rewrite (that only
+  // touches the fixed list of scripts injected into index.html at build
+  // time; these are loaded dynamically at runtime instead). Without this,
+  // a redeploy can leave a browser tab running stale cached JS indefinitely
+  // (confirmed live: a bugfix redeployed to the server was invisible to an
+  // already-open tab even after a full page reload, since the classic
+  // <script src> and dynamic import() below are ordinary cacheable
+  // sub-resource requests, not the top-level navigation). Tied to
+  // penpotVersionTag so it changes exactly when patch-frontend.sh's own
+  // ASSET_TAG does.
+  var CACHE_BUST = "?v=" + (window.penpotVersionTag || "dev");
 
   function newId() {
     return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (
@@ -82,8 +94,8 @@
     if (scenePipelinePromise) return scenePipelinePromise;
     var needAdapters = !(window.NofidaDesigner && window.NofidaDesigner.Persistence);
     var adapters = needAdapters
-      ? loadScript(DESIGNER_BASE + "transit-adapter.js").then(function () {
-          return loadScript(DESIGNER_BASE + "persistence-adapter.js");
+      ? loadScript(DESIGNER_BASE + "transit-adapter.js" + CACHE_BUST).then(function () {
+          return loadScript(DESIGNER_BASE + "persistence-adapter.js" + CACHE_BUST);
         })
       : Promise.resolve();
 
@@ -93,10 +105,10 @@
       // scripts/sync-shared-scene.sh for exactly this reason. Extension
       // doesn't affect ESM semantics in the browser, only Node's resolver.
       return Promise.all([
-        import(DESIGNER_BASE + "scene/scene-validator.js"),
-        import(DESIGNER_BASE + "scene/scene-canonicalizer.js"),
-        import(DESIGNER_BASE + "scene/scene-normalizer.js"),
-        import(DESIGNER_BASE + "scene/scene-compiler.js"),
+        import(DESIGNER_BASE + "scene/scene-validator.js" + CACHE_BUST),
+        import(DESIGNER_BASE + "scene/scene-canonicalizer.js" + CACHE_BUST),
+        import(DESIGNER_BASE + "scene/scene-normalizer.js" + CACHE_BUST),
+        import(DESIGNER_BASE + "scene/scene-compiler.js" + CACHE_BUST),
       ]);
     }).then(function (mods) {
       return { validator: mods[0], canonicalizer: mods[1], normalizer: mods[2], compiler: mods[3] };
