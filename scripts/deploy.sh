@@ -19,6 +19,16 @@ COMPOSE_PROJECT="nofida-core"
 PUBLIC_URI="https://engine.sys.bachopus.com"
 LIBRARY_STORE_ROOT="/opt/nofida-core/library-store"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "▶  Checking Scene Model frontend mirror is in sync …"
+if ! sh "${SCRIPT_DIR}/check-shared-scene-sync.sh"; then
+  echo "✗  Aborting deploy: branding/ai-core/designer/scene/ has drifted from" >&2
+  echo "   services/nofida-hub-adapter/ai/scene/ — run scripts/sync-shared-scene.sh," >&2
+  echo "   commit the result, and re-run deploy." >&2
+  exit 1
+fi
+
 echo "▶  Connecting to $HOST …"
 
 ssh \

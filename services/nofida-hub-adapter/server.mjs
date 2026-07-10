@@ -9,6 +9,11 @@ import { loadFontCatalog } from "./ai/font-context-packer.mjs";
 import { loadMediaCatalog } from "./ai/media-context-packer.mjs";
 import { packResourceContext } from "./ai/resource-context-packer.mjs";
 import { routeTask } from "./ai/intent-router.mjs";
+import { parseScene } from "./ai/scene/scene-validator.mjs";
+import { canonicalizeScene } from "./ai/scene/scene-canonicalizer.mjs";
+import { normalizeScene } from "./ai/scene/scene-normalizer.mjs";
+import { fetchUrlReference } from "./ai/url-reference-fetcher.mjs";
+import * as threadStore from "./ai/thread-store.mjs";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3101);
@@ -30,6 +35,13 @@ const CHUNK_SIZE = Number(process.env.NOFIDA_HUB_IMPORT_CHUNK_SIZE || 25 * 1024 
 const MAX_IMPORT_BYTES = Number(process.env.NOFIDA_HUB_MAX_IMPORT_BYTES || 367001600);
 const REQUEST_TIMEOUT_MS = Number(process.env.NOFIDA_HUB_REQUEST_TIMEOUT_MS || 10 * 60 * 1000);
 const JSON_LIMIT_BYTES = 1024 * 1024;
+// /ai/ask needs a larger cap than the default JSON limit — chat attachments
+// (reference screenshots) are embedded as base64 directly in the request body.
+const AI_ASK_LIMIT_BYTES = 8 * 1024 * 1024;
+const MAX_ATTACHMENTS = 4;
+const MAX_ATTACHMENT_BASE64_CHARS = 6 * 1024 * 1024; // ~4.5MB decoded per image
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const MAX_REFERENCE_URLS = 2;
 
 // Operation Plan Schema — valid operation types for PATCH 016A (preview-only).
 // A plan is returned alongside AI answers so the frontend can render a preview.
@@ -443,6 +455,27 @@ async function getProjects(cookieHeader, teamId) {
   return Array.isArray(decoded) ? decoded : [];
 }
 
+// Resolves the calling user's stable profile id from their session cookie —
+// used to scope AI chat threads per-user (threads are never shared between
+// accounts, and must survive across files/teams for the same person).
+async function getProfile(cookieHeader) {
+  const response = await fetchPenpot(
+    "/api/rpc/command/get-profile",
+    { method: "GET", headers: { Accept: "application/transit+json" } },
+    cookieHeader,
+  );
+
+  if (!response.ok) {
+    const message = await readErrorResponse(response);
+    throw Object.assign(new Error(`get-profile failed: ${message}`), {
+      status: response.status,
+      code: "get_profile_failed",
+    });
+  }
+
+  return readTransitResponse(response);
+}
+
 async function getProjectFiles(cookieHeader, projectId) {
   const response = await fetchPenpot(
     `/api/rpc/command/get-project-files?project-id=${encodeURIComponent(projectId)}`,
@@ -735,6 +768,35 @@ async function renameFile(cookieHeader, fileId, newName) {
   return readTransitResponse(response);
 }
 
+// Marks a file as a shared library so it becomes reachable via Penpot's own
+// Plugin API (penpot.library.availableLibraries()/connectLibrary()) from any
+// other file. Without this, an imported Hub library is just an ordinary file
+// — Penpot never surfaces its components to a plugin running elsewhere.
+async function setFileShared(cookieHeader, fileId, isShared) {
+  const response = await fetchPenpot(
+    "/api/rpc/command/set-file-shared",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/transit+json",
+        "Content-Type": "application/transit+json",
+      },
+      body: JSON.stringify(encodeTransit({ id: fileId, "is-shared": isShared })),
+    },
+    cookieHeader,
+  );
+
+  if (!response.ok) {
+    const message = await readErrorResponse(response);
+    throw Object.assign(new Error(`set-file-shared failed: ${message}`), {
+      status: response.status,
+      code: "set_file_shared_failed",
+    });
+  }
+
+  return readTransitResponse(response);
+}
+
 // Check if an imported file has real visual content.
 // Returns { healthy, pages, totalObjects, reason }.
 // Fails open: if the check itself errors, we assume healthy to avoid false positives.
@@ -872,6 +934,20 @@ async function handleImport(req, res) {
       const qualityStatus = health.healthy ? "healthy" : "bad_import";
       const thumb = await resolveThumbnailStatus(cookieHeader, existing);
 
+      // Retroactively fix libraries imported before shared-flagging existed —
+      // best-effort, never blocks the response.
+      let sharedStatus = existing["is-shared"] ? "enabled" : "disabled";
+      if (!existing["is-shared"]) {
+        try {
+          await setFileShared(cookieHeader, existing.id, true);
+          sharedStatus = "enabled";
+        } catch (sharedErr) {
+          log("WARN", "set-file-shared failed for already-installed library", {
+            fileId: existing.id, error: sharedErr.message,
+          });
+        }
+      }
+
       json(res, 200, {
         ok: true,
         status: "already_installed",
@@ -882,7 +958,7 @@ async function handleImport(req, res) {
         file_name: existing.name,
         project_id: project.id,
         project_name: project.name,
-        shared_library_status: existing["is-shared"] ? "enabled" : "disabled",
+        shared_library_status: sharedStatus,
         open_url: buildOpenUrl(teamId, existing.id, record),
         thumbnail_status: thumb.thumbnailStatus,
         thumbnail_id: thumb.thumbnailId,
@@ -956,6 +1032,16 @@ async function handleImport(req, res) {
 
     const thumb = await resolveThumbnailStatus(cookieHeader, imported);
 
+    let sharedStatus = imported["is-shared"] ? "enabled" : "disabled";
+    try {
+      await setFileShared(cookieHeader, imported.id, true);
+      sharedStatus = "enabled";
+    } catch (sharedErr) {
+      log("WARN", "set-file-shared failed for freshly imported library", {
+        fileId: imported.id, error: sharedErr.message,
+      });
+    }
+
     json(res, 200, {
       ok: true,
       status: forceReimport ? "reimported" : "imported",
@@ -966,7 +1052,7 @@ async function handleImport(req, res) {
       file_name: imported.name,
       project_id: project.id,
       project_name: project.name,
-      shared_library_status: imported["is-shared"] ? "enabled" : "disabled",
+      shared_library_status: sharedStatus,
       open_url: buildOpenUrl(teamId, imported.id, record),
       thumbnail_status: thumb.thumbnailStatus,
       thumbnail_id: thumb.thumbnailId,
@@ -1212,10 +1298,11 @@ function buildTypedOperationPlan(taskType, context, hubCtx) {
   };
 }
 
-async function handleAiSettingsGet(req, res) {
+async function handleAiSettingsGet(req, res, url) {
   if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
   try {
-    const settings = await aiSettingsService.getSettingsView();
+    const force = url.searchParams.get("refresh") === "1" || url.searchParams.get("force") === "1";
+    const settings = await aiSettingsService.getSettingsView({ force });
     json(res, 200, { ok: true, settings });
   } catch (error) {
     fail(res, error.status || 500, error.code || "ai_settings_error", aiSettingsService.sanitizeText(error.message));
@@ -1311,15 +1398,184 @@ async function handleAiTestModel(req, res) {
 // Always returns NofidaAITaskResult:
 //   { ok, taskType, scope, status, message, resultText?,
 //     operationPlan?, usedContext?, model?, prompt? }
-async function handleAiAsk(req, res) {
-  if (!requireSession(req, res, "Authenticated session required for AI endpoint.")) return;
+// ── AI chat threads ─────────────────────────────────────────────────────────
+// Threads give the AI panel real per-task conversation memory (see PATCH
+// 016H). Every handler here resolves the calling profile from the session
+// cookie first, so threads are always scoped to the logged-in user and never
+// leak across accounts.
+
+// Resolves the profile id or returns null — never throws. Used where a
+// missing profile should degrade to stateless behaviour instead of failing
+// the whole request (e.g. thread memory is a nice-to-have inside /ai/ask).
+async function resolveProfileIdSilent(cookieHeader) {
+  try {
+    const profile = await getProfile(cookieHeader);
+    return profile?.id || null;
+  } catch (error) {
+    log("WARN", "profile lookup failed", { message: error.message });
+    return null;
+  }
+}
+
+async function resolveProfileIdOrFail(cookieHeader, res) {
+  try {
+    const profile = await getProfile(cookieHeader);
+    if (!profile?.id) {
+      fail(res, 401, "profile_not_found", "Could not resolve the current user's profile.");
+      return null;
+    }
+    return profile.id;
+  } catch (error) {
+    fail(res, error.status || 502, error.code || "profile_lookup_failed", error.message);
+    return null;
+  }
+}
+
+async function handleAiThreadsList(req, res) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for AI threads.");
+  if (!cookieHeader) return;
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const threads = await threadStore.listThreads(profileId);
+  json(res, 200, { ok: true, threads });
+}
+
+async function handleAiThreadGet(req, res, threadId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for AI threads.");
+  if (!cookieHeader) return;
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const thread = await threadStore.getThread(profileId, threadId);
+  if (!thread) {
+    fail(res, 404, "thread_not_found", "Thread not found.");
+    return;
+  }
+  json(res, 200, { ok: true, thread });
+}
+
+async function handleAiThreadCreate(req, res) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for AI threads.");
+  if (!cookieHeader) return;
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
 
   let body;
   try {
-    body = await parseBody(req);
+    body = await parseBody(req, JSON_LIMIT_BYTES);
   } catch (error) {
     fail(res, error.status || 400, error.code || "bad_request", error.message);
     return;
+  }
+
+  const thread = await threadStore.createThread(profileId, { title: body.title });
+  json(res, 200, { ok: true, thread });
+}
+
+async function handleAiThreadRename(req, res, threadId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for AI threads.");
+  if (!cookieHeader) return;
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  let body;
+  try {
+    body = await parseBody(req, JSON_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "bad_request", error.message);
+    return;
+  }
+
+  try {
+    const thread = await threadStore.renameThread(profileId, threadId, body.title);
+    json(res, 200, { ok: true, thread });
+  } catch (error) {
+    fail(res, error.status || 500, error.code || "rename_failed", error.message);
+  }
+}
+
+async function handleAiThreadDelete(req, res, threadId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for AI threads.");
+  if (!cookieHeader) return;
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const removed = await threadStore.deleteThread(profileId, threadId);
+  if (!removed) {
+    fail(res, 404, "thread_not_found", "Thread not found.");
+    return;
+  }
+  json(res, 200, { ok: true });
+}
+
+async function handleAiAsk(req, res) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for AI endpoint.");
+  if (!cookieHeader) return;
+
+  let body;
+  try {
+    body = await parseBody(req, AI_ASK_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "bad_request", error.message);
+    return;
+  }
+
+  // ── Thread memory (optional) ───────────────────────────────────────────────
+  // A threadId ties this message to a stored conversation (PATCH 016H). If the
+  // caller doesn't send one, the request behaves exactly as before — one-shot,
+  // no history. Profile lookup failures degrade to stateless behaviour rather
+  // than blocking the chat.
+  const threadId = typeof body.threadId === "string" && body.threadId.trim() ? body.threadId.trim() : null;
+  let threadProfileId = null;
+  let thread = null;
+  if (threadId) {
+    threadProfileId = await resolveProfileIdSilent(cookieHeader);
+    if (threadProfileId) {
+      try {
+        thread = await threadStore.getThread(threadProfileId, threadId);
+      } catch (error) {
+        log("WARN", "thread load failed", { threadId, message: error.message });
+        thread = null;
+      }
+    }
+  }
+
+  // ── Reference-image attachments (optional) ─────────────────────────────────
+  // Each item: { mimeType, dataBase64, name? }. Invalid/oversized/unsupported
+  // entries are silently dropped rather than failing the whole request — an
+  // attachment is a nice-to-have, not something worth blocking chat on.
+  const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+  const attachments = rawAttachments
+    .filter((a) => a && typeof a.mimeType === "string" && ALLOWED_ATTACHMENT_MIME_TYPES.has(a.mimeType)
+      && typeof a.dataBase64 === "string" && a.dataBase64.length > 0 && a.dataBase64.length <= MAX_ATTACHMENT_BASE64_CHARS)
+    .slice(0, MAX_ATTACHMENTS)
+    .map((a) => ({ mimeType: a.mimeType, dataBase64: a.dataBase64 }));
+
+  // ── Reference URLs (Figma/App Store/live-app links etc.) ───────────────────
+  // Scraped server-side into an og:image preview and folded into the same
+  // attachments array the model sees — a failed/empty scrape is silently
+  // skipped, never blocks the chat request.
+  const rawReferenceUrls = Array.isArray(body.referenceUrls) ? body.referenceUrls : [];
+  const referenceUrlsToFetch = rawReferenceUrls
+    .filter((u) => typeof u === "string" && u.trim())
+    .slice(0, MAX_REFERENCE_URLS);
+
+  const referenceResults = [];
+  for (const url of referenceUrlsToFetch) {
+    if (attachments.length >= MAX_ATTACHMENTS) break;
+    try {
+      const ref = await fetchUrlReference(url.trim());
+      if (ref.ok) {
+        attachments.push({ mimeType: ref.mimeType, dataBase64: ref.dataBase64 });
+        referenceResults.push({ url, ok: true, title: ref.title });
+      } else {
+        referenceResults.push({ url, ok: false, reason: ref.reason });
+      }
+    } catch (error) {
+      log("WARN", "reference URL fetch failed", { url, code: error.code, message: error.message });
+      referenceResults.push({ url, ok: false, reason: error.code || "fetch_failed" });
+    }
   }
 
   // ── Detect and normalise request format ────────────────────────────────────
@@ -1331,9 +1587,17 @@ async function handleAiAsk(req, res) {
   const rawTaskType = isLegacy ? null : (body.taskType || null);
   const rawUserPrompt = isLegacy ? legacyMessage : (typeof body.userPrompt === "string" ? body.userPrompt.trim() : "");
   const rawScope = isLegacy ? null : (body.scope || null);
-  const rawContext = isLegacy
+  let rawContext = isLegacy
     ? (body.file_context && typeof body.file_context === "object" ? body.file_context : null)
     : (body.context && typeof body.context === "object" ? body.context : null);
+
+  // A thread remembers the last Screen Spec it produced — fall back to that
+  // when the frontend didn't resend one itself, so "implement it" style
+  // follow-ups can resolve to build_screen (see intent-router.mjs).
+  if (thread && !rawContext?.previousScreenSpec) {
+    const lastSpec = threadStore.lastScreenSpecInThread(thread);
+    if (lastSpec) rawContext = Object.assign({}, rawContext || {}, { previousScreenSpec: lastSpec });
+  }
 
   if (!rawTaskType && !rawUserPrompt) {
     fail(res, 400, "missing_input", "Provide either 'taskType' or 'userPrompt' (or legacy 'message').");
@@ -1362,7 +1626,11 @@ async function handleAiAsk(req, res) {
     return;
   }
 
-  const { taskType, scope, role, userPrompt, context } = routed;
+  const { taskType, scope, role: routedRole, userPrompt, context } = routed;
+  // Attachments need a vision-capable model regardless of which role the task
+  // type would normally route to — otherwise providers like OpenRouter reject
+  // the request with "No endpoints found that support image input".
+  const role = attachments.length > 0 ? "vision" : routedRole;
 
   // ── Look up prompt definition ──────────────────────────────────────────────
 
@@ -1400,8 +1668,10 @@ async function handleAiAsk(req, res) {
 
   // ── Build system prompt from registry ─────────────────────────────────────
 
-  const systemPrompt = promptDef.buildSystemPrompt(context, packedHub || { resources: packedResources });
-
+  let systemPrompt = promptDef.buildSystemPrompt(context, packedHub || { resources: packedResources });
+  if (attachments.length > 0) {
+    systemPrompt += `\n\nThe user attached ${attachments.length} reference image(s) to this message. Look at them and use them as visual/stylistic reference for your response — e.g. "build something like this" or "match this style".`;
+  }
   // ── Resolve model and call provider ───────────────────────────────────────
 
   let resolved;
@@ -1423,12 +1693,32 @@ async function handleAiAsk(req, res) {
     return;
   }
 
+  const promptText = userPrompt || `Run task: ${taskType}`;
+  const history = thread ? threadStore.historyForPrompt(thread) : [];
+
+  // DIAGNOSTIC (temporary): two different models both hung for the full
+  // timeout on build_screen while a bare test-model call to the same
+  // provider/model returned in ~5s — pointing at the request payload itself
+  // (prompt size, or something in connected-library context) rather than
+  // model/provider reliability. Measuring before ruling anything else out.
+  log("INFO", "ai/ask prompt-size", {
+    taskType,
+    systemPromptLen: systemPrompt.length,
+    userPromptLen: userPrompt.length,
+    historyTurns: history.length,
+    connectedLibs: Array.isArray(context?.libraries?.connected) ? context.libraries.connected.length : 0,
+    connectedLibComponents: Array.isArray(context?.libraries?.connected)
+      ? context.libraries.connected.reduce((sum, l) => sum + (Array.isArray(l.components) ? l.components.length : 0), 0)
+      : 0,
+  });
+
   let callResult;
   try {
     callResult = await aiSettingsService.callWithResolvedModel({
       resolved,
-      message: userPrompt || `Run task: ${taskType}`,
+      message: attachments.length > 0 ? { text: promptText, images: attachments } : promptText,
       systemPrompt,
+      history,
     });
   } catch (callErr) {
     const safeMsg = aiSettingsService.sanitizeText(callErr.message);
@@ -1454,6 +1744,32 @@ async function handleAiAsk(req, res) {
 
   const operationPlan = buildTypedOperationPlan(taskType, context, packedHub);
 
+  // ── Screen Spec tasks: parse + validate the model's structured output ─────
+  // This is the one path where "ok" output is meant to be applied to the
+  // canvas — by the plugin executor, never by this server directly.
+
+  const isScreenSpecTask = promptDef.outputSchema === "screen_spec";
+  let screenSpec = null;
+  let screenSpecError = null;
+  if (isScreenSpecTask) {
+    const parsed = parseScene(callResult.answer);
+    if (parsed.ok) {
+      // Canonicalize against the previous turn's scene (if any) so nodes the
+      // model re-emits unchanged on a follow-up "edit that" turn keep their
+      // stable id — best-effort: if the new turn's structure doesn't line up
+      // path-for-path with the previous one (e.g. the model restructured
+      // things), canonicalizeScene degrades gracefully to fresh deterministic
+      // ids for the parts that don't match, it never fails or duplicates.
+      const previousScene = thread ? threadStore.lastScreenSpecInThread(thread) : null;
+      const canonical = canonicalizeScene(parsed.scene, { previousScene });
+      const normalized = normalizeScene(canonical);
+      screenSpec = normalized.scene;
+      log("INFO", "ai/ask scene normalized", { threadId, ...normalized.report });
+    } else {
+      screenSpecError = parsed.error;
+    }
+  }
+
   // ── Build used-context flags ───────────────────────────────────────────────
 
   const usedContext = {
@@ -1463,6 +1779,7 @@ async function handleAiAsk(req, res) {
     hubCatalog: Boolean(packedHub && packedHub.matchedLibraries.length > 0),
     resources: Boolean(packedResources && ((packedResources.fonts?.matchedFonts?.length || 0) > 0 || (packedResources.media?.matchedMedia?.length || 0) > 0 || (packedResources.media?.matchedPatterns?.length || 0) > 0)),
     dashboard: scope === "dashboard",
+    attachments: attachments.length > 0,
   };
 
   log("INFO", "ai/ask", {
@@ -1477,17 +1794,45 @@ async function handleAiAsk(req, res) {
     userPromptLen: userPrompt.length,
   });
 
+  // ── Persist this turn to the thread, if one was given ──────────────────────
+  // Best-effort: a storage hiccup here must never fail a response the user
+  // already got a real answer for.
+  if (threadId && threadProfileId) {
+    try {
+      await threadStore.appendTurn(threadProfileId, threadId, {
+        userMessage: { text: userPrompt, hasAttachments: attachments.length > 0 || undefined },
+        assistantMessage: { text: callResult.answer, screenSpec: screenSpec || undefined },
+        taskType,
+        autoTitle: userPrompt,
+      });
+    } catch (error) {
+      log("WARN", "thread append failed", { threadId, message: error.message });
+    }
+  }
+
   // ── Return NofidaAITaskResult ──────────────────────────────────────────────
+
+  const status = isScreenSpecTask
+    ? (screenSpec ? "screen_spec_ready" : "invalid_screen_spec")
+    : "preview_only";
+  const message = isScreenSpecTask
+    ? (screenSpec
+      ? "Screen spec ready — press Apply to create it on the canvas."
+      : `Model did not return a valid screen spec: ${screenSpecError}`)
+    : "Result is preview-only. Apply is disabled until PATCH 016E.";
 
   json(res, 200, {
     ok: true,
     taskType,
     scope,
-    status: "preview_only",
-    message: "Result is preview-only. Apply is disabled until PATCH 016E.",
+    status,
+    message,
     resultText: callResult.answer,
+    threadId: threadId || undefined,
+    screenSpec,
     operationPlan,
     usedContext,
+    referenceResults: referenceResults.length > 0 ? referenceResults : undefined,
     resourceContext: packedResources,
     model: {
       providerId: callResult.providerId,
@@ -1544,8 +1889,36 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/ai/threads") {
+    await handleAiThreadsList(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ai/threads") {
+    await handleAiThreadCreate(req, res);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/ai/threads/")) {
+    const threadId = decodeURIComponent(url.pathname.slice("/ai/threads/".length));
+    await handleAiThreadGet(req, res, threadId);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname.startsWith("/ai/threads/")) {
+    const threadId = decodeURIComponent(url.pathname.slice("/ai/threads/".length));
+    await handleAiThreadRename(req, res, threadId);
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname.startsWith("/ai/threads/")) {
+    const threadId = decodeURIComponent(url.pathname.slice("/ai/threads/".length));
+    await handleAiThreadDelete(req, res, threadId);
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/ai/settings") {
-    await handleAiSettingsGet(req, res);
+    await handleAiSettingsGet(req, res, url);
     return;
   }
 

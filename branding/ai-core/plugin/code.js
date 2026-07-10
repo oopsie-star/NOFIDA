@@ -1,15 +1,29 @@
 /* ==========================================================================
- * Nofida AI — companion Penpot plugin (sandboxed code file) — PATCH 016A
+ * Nofida AI — companion Penpot plugin (sandboxed code file) — PATCH 016G
  * --------------------------------------------------------------------------
  * This is the ONLY place the `penpot` API exists. It opens the plugin UI
- * iframe (ui.html) and handles two request types relayed from the overlay:
+ * iframe (ui.html) and handles requests relayed from the overlay:
  *
- *   nofida-plugin:generate        — create canvas layers (v1 scaffold)
- *   nofida-plugin:extract-context — return a summarised file/page snapshot
- *                                   (new in 016A, read-only, non-destructive)
+ *   nofida-plugin:generate           — create canvas layers (v1 scaffold)
+ *   nofida-plugin:extract-context    — return a summarised file/page snapshot
+ *                                       (read-only, non-destructive; async —
+ *                                       also lists connectable libraries)
+ *   nofida-plugin:connect-libraries  — link NOFIDA Hub libraries into this
+ *                                       file so their components become real,
+ *                                       instantiable Screen Spec targets
+ *                                       (016G — see note below)
  *
- * ⚠️  Verify API signatures against penpotapp/frontend:2.16.0 — method names
- * may shift between releases. All reads are wrapped in try/catch.
+ * Why connect-libraries needs no user confirmation: every library it can see
+ * is a NOFIDA Hub library the team already deliberately imported for reuse
+ * (server-marks them is-shared on import — see server.mjs setFileShared) —
+ * this is first-party curated content, not an arbitrary third party library,
+ * so linking it into the working file is exactly what Hub libraries are for.
+ * The connection is the same operation Penpot's own Assets panel exposes as
+ * "connect library" — reversible any time from that same panel.
+ *
+ * Signatures below are verified against the real plugin-types (
+ * plugins/libs/plugin-types/index.d.ts) and the official create-palette-plugin
+ * example in penpotapp 2.16.0 — see nofida-design-agent-spec notes.
  * ========================================================================== */
 
 penpot.ui.open("Nofida AI", "ui.html", { width: 320, height: 420 });
@@ -29,13 +43,24 @@ penpot.ui.onMessage(function (msg) {
   }
 
   if (msg.type === "nofida-plugin:extract-context") {
-    var ctx;
-    try {
-      ctx = extractContext();
-    } catch (err) {
-      ctx = { error: String(err && err.message || err) };
-    }
-    penpot.ui.sendMessage({ type: "nofida-plugin:context", id: msg.id, context: ctx });
+    extractContext()
+      .then(function (ctx) {
+        penpot.ui.sendMessage({ type: "nofida-plugin:context", id: msg.id, context: ctx });
+      })
+      .catch(function (err) {
+        penpot.ui.sendMessage({ type: "nofida-plugin:context", id: msg.id, context: { error: String(err && err.message || err) } });
+      });
+    return;
+  }
+
+  if (msg.type === "nofida-plugin:connect-libraries") {
+    connectLibraries((msg.libraryIds || []))
+      .then(function (result) {
+        penpot.ui.sendMessage({ type: "nofida-plugin:connect-libraries-result", id: msg.id, result: result });
+      })
+      .catch(function (err) {
+        penpot.ui.sendMessage({ type: "nofida-plugin:connect-libraries-result", id: msg.id, result: { ok: false, message: String(err && err.message || err) } });
+      });
     return;
   }
 });
@@ -71,7 +96,7 @@ function generateLayers(spec) {
 // All penpot API calls are individually wrapped in try/catch so a missing or
 // changed method never crashes the extraction.
 
-function extractContext() {
+async function extractContext() {
   var ctx = {
     file:      null,
     page:      null,
@@ -79,7 +104,46 @@ function extractContext() {
     selection: [],
     colors:    [],
     texts:     [],
+    libraries: { connected: [], available: [] },
   };
+
+  // Connected libraries + their real components (names/ids only become
+  // visible to the plugin API once a library is connected — see
+  // connectLibraries() below for how NOFIDA Hub libraries get linked in).
+  try {
+    var connectedLibs = (penpot.library && penpot.library.connected) || [];
+    for (var li = 0; li < connectedLibs.length; li++) {
+      try {
+        var lib = connectedLibs[li];
+        var comps = [];
+        var libComps = lib.components || [];
+        var compLimit = Math.min(libComps.length, 60);
+        for (var ci = 0; ci < compLimit; ci++) {
+          try { comps.push({ id: String(libComps[ci].id), name: String(libComps[ci].name || "Unnamed") }); } catch (_) {}
+        }
+        ctx.libraries.connected.push({ id: String(lib.id), name: String(lib.name || "Library"), components: comps });
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // Libraries this team has (NOFIDA Hub imports are marked shared on import)
+  // that aren't linked into THIS file yet — reported so the overlay can
+  // auto-connect the relevant ones via connectLibraries() before generating.
+  try {
+    if (penpot.library && typeof penpot.library.availableLibraries === "function") {
+      var available = await penpot.library.availableLibraries();
+      for (var ai = 0; ai < available.length; ai++) {
+        try {
+          var summary = available[ai];
+          ctx.libraries.available.push({
+            id: String(summary.id),
+            name: String(summary.name || "Library"),
+            numComponents: Number(summary.numComponents || 0),
+          });
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
 
   // File info
   try {
@@ -100,7 +164,7 @@ function extractContext() {
       };
 
       var objects = [];
-      try { objects = penpot.currentPage.getObjects() || []; } catch (_) {}
+      try { objects = penpot.currentPage.findShapes() || []; } catch (_) {}
 
       ctx.objects.total = objects.length;
       var colorsSeen = [];
@@ -156,3 +220,50 @@ function extractContext() {
 
   return ctx;
 }
+
+// ── Library auto-connect (016G) ─────────────────────────────────────────────
+//
+// Links the given NOFIDA Hub library file-ids into the current file so their
+// components become real, instantiable Screen Spec targets. No confirmation
+// step — see the file-header note for why that's the right default here.
+// Each library is attempted independently; one failure (already connected,
+// permissions, a stale id) never blocks the others.
+
+async function connectLibraries(libraryIds) {
+  var connected = [];
+  var failed = [];
+
+  for (var i = 0; i < libraryIds.length; i++) {
+    var id = String(libraryIds[i] || "");
+    if (!id) continue;
+    try {
+      var already = (penpot.library.connected || []).some(function (lib) { return String(lib.id) === id; });
+      if (!already) await penpot.library.connectLibrary(id);
+      connected.push(id);
+    } catch (err) {
+      failed.push({ id: id, message: String(err && err.message || err) });
+    }
+  }
+
+  // Re-read the now-updated connected set so the overlay gets real component
+  // ids/names in one round trip instead of asking for context a second time.
+  var libraries = [];
+  try {
+    var connectedLibs = penpot.library.connected || [];
+    for (var li = 0; li < connectedLibs.length; li++) {
+      try {
+        var lib = connectedLibs[li];
+        var comps = [];
+        var libComps = lib.components || [];
+        var compLimit = Math.min(libComps.length, 60);
+        for (var ci = 0; ci < compLimit; ci++) {
+          try { comps.push({ id: String(libComps[ci].id), name: String(libComps[ci].name || "Unnamed") }); } catch (_) {}
+        }
+        libraries.push({ id: String(lib.id), name: String(lib.name || "Library"), components: comps });
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  return { ok: failed.length < libraryIds.length, connected: connected, failed: failed, libraries: libraries };
+}
+

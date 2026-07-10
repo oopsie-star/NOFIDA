@@ -2,6 +2,9 @@
 // All system prompts are server-side only. UI must never store system prompts.
 // Prompt versions are returned in task result metadata for auditability.
 
+import { SCENE_SPEC_PROMPT_BLOCK as SCREEN_SPEC_PROMPT_BLOCK } from "./scene/scene-schema.mjs";
+import { buildBrandKitBlock } from "./brand-kit-packer.mjs";
+
 export const TASK_TYPES = new Set([
   "free_chat",
   "library_recommendation",
@@ -9,6 +12,7 @@ export const TASK_TYPES = new Set([
   "design_audit",
   "file_summary",
   "screen_plan",
+  "build_screen",
   "copy_review",
   "accessibility_review",
   "organize_layers",
@@ -30,6 +34,7 @@ export const TASK_ROLE_MAP = {
   design_audit: "design_audit",
   file_summary: "file_summary",
   screen_plan: "screen_planner",
+  build_screen: "screen_planner",
   copy_review: "copywriter",
   accessibility_review: "design_audit",
   organize_layers: "design_audit",
@@ -48,6 +53,7 @@ export const DASHBOARD_ALLOWED_TASKS = new Set([
 // Tasks that require at least editor_file scope
 export const EDITOR_REQUIRED_TASKS = new Set([
   "screen_plan",
+  "build_screen",
   "copy_review",
   "accessibility_review",
   "organize_layers",
@@ -77,6 +83,7 @@ export const TASK_OPERATION_TYPE = {
   design_audit: "document_design_decision",
   file_summary: "document_design_decision",
   screen_plan: "create_screen_plan",
+  build_screen: null, // its real output is the screen spec itself, not a textual plan
   copy_review: "improve_copy_plan",
   accessibility_review: "accessibility_fix_plan",
   organize_layers: "organize_layers",
@@ -110,8 +117,14 @@ function appendFileContext(lines, ctx) {
 }
 
 function appendHubContext(lines, hub) {
-  if (!hub || !Array.isArray(hub.matchedLibraries) || hub.matchedLibraries.length === 0) {
-    if (hub) lines.push("No relevant NOFIDA Hub libraries were found for this task. Describe what kind of library is needed.");
+  const hubWasSearched = hub && Array.isArray(hub.matchedLibraries);
+  if (!hubWasSearched || hub.matchedLibraries.length === 0) {
+    // hubWasSearched but empty means the catalog itself has nothing at all
+    // (an actual gap worth naming). When hub library search wasn't run for
+    // this task type in the first place, stay silent about it — saying
+    // "no relevant libraries" here reads as a refusal even though the model
+    // was never asked to look for one.
+    if (hubWasSearched) lines.push("The NOFIDA Hub library catalog is empty — nothing to recommend from it.");
     appendResourceContext(lines, hub?.resources);
     return;
   }
@@ -135,7 +148,8 @@ function appendResourceContext(lines, resources) {
   const media = Array.isArray(resources.media?.matchedMedia) ? resources.media.matchedMedia : [];
   const patterns = Array.isArray(resources.media?.matchedPatterns) ? resources.media.matchedPatterns : [];
 
-  lines.push("NOFIDA resource context:");
+  lines.push("NOFIDA resource context (ranked by relevance, not exact-match filtered):");
+  lines.push("  If nothing below is a strong fit, still name the closest available font/media/pattern as a starting point and say honestly how it falls short — never simply conclude nothing suitable exists and stop.");
   lines.push(`  Fonts available: ${resources.totals?.fonts || 0} total, ${resources.totals?.approvedFonts || 0} approved`);
   fonts.slice(0, 4).forEach((font) => {
     const cat = font.category ? ` (${font.category})` : "";
@@ -168,7 +182,9 @@ function coreRules() {
     "- NEVER suggest external tools, competitor libraries, or libraries not in the catalog.",
     "- NEVER apply changes directly — describe plans only, previews only, no mutations.",
     "- Prefer NOFIDA internal libraries over external alternatives.",
-    "- If no relevant library exists, say so honestly and describe what kind is needed.",
+    "- The catalog list below is already ranked by relevance — it can include imperfect matches.",
+    "- ALWAYS present the closest available catalog entries as options, even when none are a strong match — name them, explain honestly how well (or poorly) each fits, and let the user decide.",
+    "- Only say no options exist at all if the catalog list below is completely empty — never refuse to suggest anything when entries were supplied.",
     "- Be concise, specific, and reply in the same language as the user's message.",
     "",
   ];
@@ -298,6 +314,57 @@ define({
       "- Reply in the same language as the user's message.",
       "",
     ];
+    appendFileContext(lines, fileCtx);
+    appendHubContext(lines, hubCtx);
+    return lines.join("\n");
+  },
+});
+
+define({
+  id: "build_screen",
+  version: "016f.1",
+  taskType: "build_screen",
+  role: "screen_planner",
+  contextRequirements: ["file", "page"],
+  outputSchema: "screen_spec",
+  // The one task allowed to reach the canvas — not by the model or this
+  // server touching Penpot directly, but by emitting a validated Screen Spec
+  // that a separate executor (the companion plugin) applies deterministically.
+  safety: { previewOnly: false, allowCanvasMutation: true },
+  buildSystemPrompt(fileCtx, hubCtx) {
+    const lines = [
+      "You are NOFIDA AI, a senior mobile product designer embedded in the NOFIDA platform.",
+      "Your task: design a real, ready-to-build mobile app screen for the user's request, as a Screen Spec.",
+      "",
+      "Design rules:",
+      "- Design like a senior designer: clear visual hierarchy, real depth (shadows), deliberate restraint — not a wireframe placeholder.",
+      "- Use the fonts, media, and NOFIDA Hub context below as inspiration for tone and content — you are not limited to library names, invent concrete copy and layout yourself.",
+      "- Reply — and write every piece of on-screen copy — in the same language as the user's message.",
+      "",
+      buildBrandKitBlock(fileCtx),
+      SCREEN_SPEC_PROMPT_BLOCK,
+      "",
+    ];
+    if (fileCtx?.previousScreenSpec) {
+      lines.push(
+        "Previous screen you built earlier in this conversation (JSON):",
+        JSON.stringify(fileCtx.previousScreenSpec).slice(0, 6000),
+        "",
+        "If the user's message reads as feedback or a refinement request on that previous screen, MODIFY it to address the feedback and keep everything else consistent with it. If the user is clearly asking for something new and unrelated, design fresh and disregard the previous screen.",
+        "",
+      );
+    }
+    const connectedLibraries = Array.isArray(fileCtx?.libraries?.connected) ? fileCtx.libraries.connected : [];
+    if (connectedLibraries.length > 0) {
+      lines.push("Connected component libraries you can instance from (use \"component\" nodes for these):");
+      for (const lib of connectedLibraries) {
+        const comps = Array.isArray(lib.components) ? lib.components : [];
+        if (comps.length === 0) continue;
+        lines.push(`  Library "${lib.name}" (libraryId: ${lib.id}):`);
+        for (const c of comps.slice(0, 40)) lines.push(`    componentId ${c.id}: ${c.name}`);
+      }
+      lines.push("");
+    }
     appendFileContext(lines, fileCtx);
     appendHubContext(lines, hubCtx);
     return lines.join("\n");
