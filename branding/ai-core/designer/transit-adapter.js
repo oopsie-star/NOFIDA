@@ -131,7 +131,12 @@
       return { type: kw("mod-obj"), id: uuid(change.id), operations: operations };
     }
     if (change.op === "del-obj") {
-      return { type: kw("del-obj"), id: uuid(change.id) };
+      // Penpot's process-change :del-obj is a silent no-op without page-id
+      // (confirmed against Penpot's own common/src/app/common/files/
+      // changes.cljc: it looks up [:pages-index page-id] and does nothing
+      // if page-id is absent, even though the update-file RPC still
+      // returns 200) — never omit this.
+      return { type: kw("del-obj"), id: uuid(change.id), "page-id": uuid(change.pageId) };
     }
     throw new Error("unknown change op: " + change.op);
   }

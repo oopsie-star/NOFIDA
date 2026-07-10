@@ -335,7 +335,7 @@ section("E/F. Persistence adapter: bulk-update gate + pre-UUID idempotency + rol
   ok(Persistence.getIdempotentEntry(idemKey) === undefined, "no idempotent entry exists yet for a fresh key");
 
   updateFileResponses = [{ ok: true }];
-  const r1 = await Persistence.applyChanges(changes, { fileId: "file-1", mode: "create" });
+  const r1 = await Persistence.applyChanges(changes, { fileId: "file-1", pageId: "page-1", mode: "create" });
   ok(r1.ok === true, "first apply succeeds", JSON.stringify(r1));
   Persistence.storeIdempotentEntry(idemKey, { mapping: { n1: "shape-1" }, snapshot: {}, result: r1 });
 
@@ -350,6 +350,13 @@ section("E/F. Persistence adapter: bulk-update gate + pre-UUID idempotency + rol
   ok(rb.ok === true, "rollback succeeds", JSON.stringify(rb));
   const lastCall = calls[calls.length - 1];
   ok(lastCall.kind === "update-file", "rollback issued an update-file call");
+  // Regression guard: Penpot's process-change :del-obj is a confirmed
+  // silent no-op without page-id (verified live — a "successful" 200
+  // rollback left objects in place because this field was missing). Decode
+  // is safe here only because this stub payload is tiny/uncached.
+  const decodedRollbackBody = sandbox.window.NofidaDesigner.Transit.decode(lastCall.body);
+  const delEntry = (decodedRollbackBody.changes || []).find((c) => c.type === "del-obj");
+  ok(!!(delEntry && delEntry["page-id"]), "del-obj wire entry carries page-id (required by Penpot, silently ignored otherwise)", JSON.stringify(delEntry));
 
   // Revision conflict — first update-file 409s, retry succeeds.
   const changes2 = changes.map((c) => ({ ...c, id: "shape-2" }));

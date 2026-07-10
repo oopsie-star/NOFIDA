@@ -134,7 +134,7 @@
     return postChanges(fileId, changes, 1).then(function (result) {
       if (result.ok) {
         var addedIds = changes.filter(function (c) { return c.op === "add-obj"; }).map(function (c) { return c.id; });
-        if (addedIds.length) lastApplied = { fileId: fileId, ids: addedIds };
+        if (addedIds.length) lastApplied = { fileId: fileId, pageId: opts.pageId, ids: addedIds };
         return { ok: true, message: "applied " + changes.length + " change(s)", changeCount: changes.length };
       }
       return result;
@@ -148,7 +148,9 @@
     }
     var target = lastApplied;
     lastApplied = null;
-    var delChanges = target.ids.map(function (id) { return { op: "del-obj", id: id }; });
+    // pageId is required — Penpot's process-change :del-obj silently no-ops
+    // without it (see transit-adapter.js's changeToWireEntry comment).
+    var delChanges = target.ids.map(function (id) { return { op: "del-obj", id: id, pageId: target.pageId }; });
     return postChanges(target.fileId, delChanges, 1);
   }
 

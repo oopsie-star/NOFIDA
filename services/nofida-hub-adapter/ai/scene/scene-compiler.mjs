@@ -184,8 +184,10 @@ function compileUpdate(scene, opts) {
       if (reparented) {
         // Penpot's mod-obj attr-set protocol isn't a verified way to
         // reparent a shape in this codebase — delete + recreate instead of
-        // fabricating an unverified "move" change type.
-        changes.push({ op: "del-obj", id: existingId });
+        // fabricating an unverified "move" change type. del-obj requires
+        // pageId — Penpot's process-change :del-obj no-ops silently without
+        // it (confirmed against common/src/app/common/files/changes.cljc).
+        changes.push({ op: "del-obj", id: existingId, pageId });
         const id = newId();
         mapping[entry.nid] = id;
         changes.push({
@@ -214,7 +216,7 @@ function compileUpdate(scene, opts) {
   }
 
   for (const [nid, id] of Object.entries(previousMapping)) {
-    if (!newByNid.has(nid)) changes.push({ op: "del-obj", id });
+    if (!newByNid.has(nid)) changes.push({ op: "del-obj", id, pageId });
   }
 
   return { ok: true, changes, mapping, snapshot, diagnostics: { skipped: allowPartial ? unresolved : [], warnings: [] } };
