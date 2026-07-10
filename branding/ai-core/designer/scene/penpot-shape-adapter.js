@@ -13,7 +13,7 @@
 // direct update-file writes — this is a straight extraction, not a redesign
 // of the wire schema itself.
 
-import { DEFAULT_FONT } from "./scene-schema.mjs";
+import { DEFAULT_FONT } from "./scene-schema.js";
 
 function point(x, y) {
   return { __tag: "point", x, y };

@@ -20,7 +20,7 @@ import {
   NODE_TYPES, UNCOMPILED_TYPES, ALIGN_VALUES, SHADOW_STYLES, GRADIENT_TYPES,
   GRADIENT_ANGLES, LAYOUT_TYPES, BLEND_MODES, MAX_NODES, MAX_DEPTH, MIN_DIM, MAX_DIM,
   MAX_SHADOW_BLUR, MAX_STROKE_WIDTH, MAX_LAYER_BLUR, resolveType,
-} from "./scene-schema.mjs";
+} from "./scene-schema.js";
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);

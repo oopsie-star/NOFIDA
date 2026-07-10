@@ -31,8 +31,8 @@
 // transit-adapter.js (browser-only) turns this Change IR into the actual
 // wire payload for Penpot's update-file RPC.
 
-import { ROOT_FRAME_ID, NON_FRAME_GROUPING_TYPES } from "./scene-schema.mjs";
-import { buildFields, lowerNode } from "./penpot-shape-adapter.mjs";
+import { ROOT_FRAME_ID, NON_FRAME_GROUPING_TYPES } from "./scene-schema.js";
+import { buildFields, lowerNode } from "./penpot-shape-adapter.js";
 
 function defaultNewId() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {

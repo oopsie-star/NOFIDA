@@ -88,11 +88,15 @@
       : Promise.resolve();
 
     scenePipelinePromise = adapters.then(function () {
+      // .js, not .mjs — Penpot's base nginx config 301s unrecognized
+      // extensions to /404; the frontend mirror is written as .js by
+      // scripts/sync-shared-scene.sh for exactly this reason. Extension
+      // doesn't affect ESM semantics in the browser, only Node's resolver.
       return Promise.all([
-        import(DESIGNER_BASE + "scene/scene-validator.mjs"),
-        import(DESIGNER_BASE + "scene/scene-canonicalizer.mjs"),
-        import(DESIGNER_BASE + "scene/scene-normalizer.mjs"),
-        import(DESIGNER_BASE + "scene/scene-compiler.mjs"),
+        import(DESIGNER_BASE + "scene/scene-validator.js"),
+        import(DESIGNER_BASE + "scene/scene-canonicalizer.js"),
+        import(DESIGNER_BASE + "scene/scene-normalizer.js"),
+        import(DESIGNER_BASE + "scene/scene-compiler.js"),
       ]);
     }).then(function (mods) {
       return { validator: mods[0], canonicalizer: mods[1], normalizer: mods[2], compiler: mods[3] };

@@ -29,8 +29,8 @@
 // are already absolute page coordinates (see scene-schema.mjs's prompt
 // block), so flattening is pure tree surgery — no coordinate math needed.
 
-import { GROUPING_TYPES, MAX_FRAME_DEPTH, MAX_GROUP_DEPTH } from "./scene-schema.mjs";
-import { hasOwnPaint, syntheticBackgroundRectFor } from "./penpot-shape-adapter.mjs";
+import { GROUPING_TYPES, MAX_FRAME_DEPTH, MAX_GROUP_DEPTH } from "./scene-schema.js";
+import { hasOwnPaint, syntheticBackgroundRectFor } from "./penpot-shape-adapter.js";
 
 function maxFrameDepth(node, depth) {
   if (!node) return depth;
