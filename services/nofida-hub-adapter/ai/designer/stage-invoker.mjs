@@ -1,15 +1,15 @@
-// PATCH 026A.1/026A.2/026A.3 — Wires real stage implementations into
+// PATCH 026A.1/026A.2/026A.3/026A.4 — Wires real stage implementations into
 // pipeline.mjs's injectable `invokeStage` signature.
 //
 // pipeline.mjs stays a pure, network-agnostic orchestrator (see its header)
 // — it never imports a concrete stage implementation itself. This module is
 // the adapter that plugs the real brief-interpreter/product-architect/
-// art-director/design-system-generator/component-architect/asset-resolver
-// modules into that injection point. Stages without a real implementation
-// yet (layout, scene, critique, repair) deliberately have NO fallback here
-// — a caller trying to run one gets a loud, structured "stage_not_wired"
-// error instead of a silent no-op, so it's obvious which 026A sub-patch
-// still needs to land.
+// art-director/design-system-generator/component-architect/asset-resolver/
+// layout-planner/designer-scene-builder modules into that injection point.
+// Stages without a real implementation yet (critique, repair) deliberately
+// have NO fallback here — a caller trying to run one gets a loud,
+// structured "stage_not_wired" error instead of a silent no-op, so it's
+// obvious which 026A sub-patch still needs to land.
 
 import { interpretBrief } from "./brief-interpreter.mjs";
 import { planArchitecture } from "./product-architect.mjs";
@@ -17,6 +17,10 @@ import { directArt } from "./art-director.mjs";
 import { generateDesignSystem } from "./design-system-generator.mjs";
 import { architectComponents } from "./component-architect.mjs";
 import { resolveAssets } from "./asset-resolver.mjs";
+import { planLayout } from "./layout-planner.mjs";
+import { buildScreenSpec } from "./designer-scene-builder.mjs";
+import { computeTokenCoverage } from "./token-coverage.mjs";
+import { parseScene } from "../scene/scene-validator.mjs";
 
 function stageError(stage, code, message, recoverable) {
   return Object.assign(new Error(message), { stage, code, message, recoverable: !!recoverable });
@@ -122,6 +126,91 @@ const STAGE_IMPLEMENTATIONS = {
     }
     const resolution = resolveAssets({ productArchitecture: architecture, artDirection, components });
     return JSON.stringify(resolution);
+  },
+
+  // PATCH 026A.4 scope: the pipeline plans/builds ONE screen — the first
+  // entry in ProductArchitecture.screens — not a fan-out over every
+  // screen/theme pairing (that is future work, e.g. the light/dark pairing
+  // 026A.5 anticipates). Both stages below operate on that single screen.
+  async layout(stageDef, session, { aiSettingsService, role }) {
+    const architecture = session?.stageArtifacts?.product_architecture?.output;
+    const artDirection = session?.stageArtifacts?.art_direction?.output;
+    const components = session?.stageArtifacts?.components?.output;
+    if (!architecture || !artDirection || !components) {
+      throw stageError(
+        "layout",
+        "missing_input",
+        "layout stage requires completed 'product_architecture', 'art_direction', and 'components' stage artifacts in the session",
+        false,
+      );
+    }
+    const screen = (architecture.screens || [])[0];
+    if (!screen) {
+      throw stageError("layout", "missing_input", "product_architecture has no screens to plan a layout for", false);
+    }
+    const result = await planLayout({ screen, components, density: artDirection.density }, { aiSettingsService, role });
+    if (result.ok) return JSON.stringify(result.layout);
+    throw stageError("layout", result.error.code, result.error.message, false);
+  },
+
+  // Deterministic — see designer-scene-builder.mjs's header. Also runs
+  // token-coverage.mjs's gate (026A.4 Task 4) before accepting the stage's
+  // output: below-threshold coverage is a recoverable, structured abort,
+  // not a silently-shipped screen.
+  async scene(stageDef, session) {
+    const brief = session?.stageArtifacts?.brief?.output;
+    const architecture = session?.stageArtifacts?.product_architecture?.output;
+    const manifest = session?.stageArtifacts?.design_system?.output;
+    const components = session?.stageArtifacts?.components?.output;
+    const assets = session?.stageArtifacts?.assets?.output;
+    const layout = session?.stageArtifacts?.layout?.output;
+    if (!architecture || !manifest || !components || !assets || !layout) {
+      throw stageError(
+        "scene",
+        "missing_input",
+        "scene stage requires completed 'product_architecture', 'design_system', 'components', 'assets', and 'layout' stage artifacts in the session",
+        false,
+      );
+    }
+    const screen = (architecture.screens || [])[0];
+    if (!screen) {
+      throw stageError("scene", "missing_input", "product_architecture has no screens to build a scene for", false);
+    }
+
+    const platform = brief?.platform || { width: 393, height: 852 };
+    const frame = {
+      width: platform.width, height: platform.height,
+      safeAreaTop: platform.safeArea?.top || 0, safeAreaBottom: platform.safeArea?.bottom || 0,
+      safeAreaLeft: platform.safeArea?.left || 0, safeAreaRight: platform.safeArea?.right || 0,
+    };
+
+    const { screenSpec, report } = buildScreenSpec({ screen, layout, manifest, components, assets, themeVariant: "light", frame });
+
+    if (report.overBudget) {
+      throw stageError(
+        "scene",
+        "node_budget_exceeded",
+        `scene stage produced ${report.totalNodeCount} nodes, over the node budget even after layout-engine's degradation pass`,
+        false,
+      );
+    }
+
+    const coverage = computeTokenCoverage(screenSpec);
+    if (!coverage.ok) {
+      throw stageError(
+        "scene",
+        "token_coverage_below_threshold",
+        `scene stage token coverage below threshold — color ${(coverage.colorCoverage * 100).toFixed(1)}%, text ${(coverage.textCoverage * 100).toFixed(1)}%, spacing/radius ${(coverage.spacingRadiusCoverage * 100).toFixed(1)}%, overall ${(coverage.overallCoverage * 100).toFixed(1)}%: ${coverage.violations.slice(0, 5).map((v) => `${v.path} (${v.kind})`).join("; ")}`,
+        true,
+      );
+    }
+
+    const parsed = parseScene(JSON.stringify(screenSpec));
+    if (!parsed.ok) {
+      throw stageError("scene", "invalid_scene_spec", `scene stage output failed parseScene(): ${parsed.error}`, false);
+    }
+
+    return JSON.stringify(screenSpec);
   },
 };
 

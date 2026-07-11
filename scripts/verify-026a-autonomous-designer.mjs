@@ -210,12 +210,14 @@ section("0.3 Prompt registry (11 designer tasks) + intent-router flag gate");
   const { getPromptDefinition, DESIGNER_TASK_TYPES, TASK_TYPES } = await importFrom("services/nofida-hub-adapter/ai/prompt-registry.mjs");
   const { routeTask } = await importFrom("services/nofida-hub-adapter/ai/intent-router.mjs");
 
-  // PATCH 026A.1/026A.2/026A.3 implement six of the eleven prompts for
-  // real; the rest stay 026A.0 stubs until their own sub-patch lands.
+  // PATCH 026A.1/026A.2/026A.3/026A.4 implement eight of the eleven
+  // prompts for real; the rest stay 026A.0 stubs until their own sub-patch
+  // lands.
   const IMPLEMENTED_TASK_TYPES = new Set([
     "designer_brief_interpreter", "designer_product_architect",
     "designer_art_director", "designer_system_generator",
     "designer_component_architect", "designer_asset_resolver",
+    "designer_layout_planner", "designer_scene_builder",
   ]);
 
   ok(DESIGNER_TASK_TYPES.size === 11, "DESIGNER_TASK_TYPES has exactly 11 entries", DESIGNER_TASK_TYPES.size);
@@ -1268,6 +1270,269 @@ section("3.8 Pipeline runs components + assets with the real modules and caches 
   ok(cachedComponents.status === "cached", "components stage reports 'cached' on rerun");
   const cachedAssets = await runPipelineStage(assetsStageDef, { session, invokeStage });
   ok(cachedAssets.status === "cached", "assets stage reports 'cached' on rerun");
+  ok(providerFake.callCount() === 1, "rerunning both cached stages makes no new provider call", providerFake.callCount());
+}
+
+// =============================================================================
+// SECTION 026A.4 — Layout Engine + Scene Builder + Token Coverage
+// =============================================================================
+console.log("\nPATCH 026A.4 — Layout Engine + Scene Builder + Token Coverage");
+
+// Leaf placeholders still need a valid "type" — SemanticLayout's contract
+// requires it on EVERY node (there is no separate "leaf" node kind in the
+// contract itself; "leaf" is purely layout-engine.mjs's own interpretation
+// of "no children key present"). An empty `{}` would fail
+// validateLayoutPlannerOutput()'s shallow contract check with "type is
+// required", even though layout-engine.mjs's resolveLayout() itself
+// tolerates it fine — the two have different validation rules on purpose
+// (see layout-planner.mjs's header).
+const FIXTURE_SCREEN_LAYOUT = {
+  type: "stack", direction: "vertical", gapToken: "spacing.24",
+  padding: { left: "spacing.20", right: "spacing.20", top: "spacing.20", bottom: "spacing.32" },
+  width: "fill",
+  safeArea: true,
+  children: [{ type: "stack" }, { type: "stack" }, { type: "stack" }, { type: "stack" }, { type: "stack" }, { type: "stack" }, { type: "stack" }, { type: "stack" }],
+};
+
+function countLayoutNodes(node) {
+  let n = 1;
+  for (const child of node.children || []) n += countLayoutNodes(child);
+  return n;
+}
+
+// ── 4.1 Layout engine golden tests (exact expected coordinates) ────────────
+section("4.1 Layout engine: vertical stack, horizontal stack + alignment, grid, safe-area, min/max — golden values");
+{
+  const { resolveLayout } = await importFrom("services/nofida-hub-adapter/ai/designer/layout-engine.mjs");
+  const manifest = { tokens: { spacing: { scale: [2, 4, 8, 12, 16, 20, 24, 32, 40, 48] } } };
+
+  // Vertical stack: width "fill", padding all sides, gap between 2 leaves.
+  const layout1 = {
+    type: "stack", direction: "vertical", gapToken: "spacing.16",
+    padding: { left: "spacing.20", right: "spacing.20", top: "spacing.16", bottom: "spacing.24" },
+    width: "fill", children: [{}, {}],
+  };
+  const measurer1 = ({ path }) => (path.endsWith("[0]") ? { width: 100, height: 30 } : { width: 150, height: 50 });
+  const r1 = resolveLayout(layout1, { manifest, frame: { width: 393, height: 852 }, leafMeasurer: measurer1 });
+  ok(r1.node.x === 0 && r1.node.y === 0 && r1.node.width === 393 && r1.node.height === 136, "vertical stack: root geometry matches golden values (fill width=393, hug height=136)", JSON.stringify(r1.node));
+  ok(r1.node.children[0].x === 20 && r1.node.children[0].y === 16 && r1.node.children[0].width === 100 && r1.node.children[0].height === 30, "vertical stack: child 0 positioned after left/top padding", JSON.stringify(r1.node.children[0]));
+  ok(r1.node.children[1].x === 20 && r1.node.children[1].y === 62 && r1.node.children[1].width === 150 && r1.node.children[1].height === 50, "vertical stack: child 1 positioned after child 0's height + gap", JSON.stringify(r1.node.children[1]));
+
+  // Horizontal stack: width "hug", alignment "center", 3 leaves of different heights.
+  const layout2 = { type: "stack", direction: "horizontal", gapToken: "spacing.8", width: "hug", alignment: "center", children: [{}, {}, {}] };
+  const heights2 = [40, 20, 30];
+  const measurer2 = ({ path }) => ({ width: 60, height: heights2[Number(/\[(\d+)\]$/.exec(path)[1])] });
+  const r2 = resolveLayout(layout2, { manifest, frame: { width: 400, height: 200, safeAreaLeft: 10, safeAreaTop: 5 }, leafMeasurer: measurer2 });
+  ok(r2.node.x === 10 && r2.node.y === 5 && r2.node.width === 196 && r2.node.height === 40, "horizontal stack: root hugs content width (196) and tallest child (40)", JSON.stringify(r2.node));
+  ok(r2.node.children[0].x === 10 && r2.node.children[0].y === 5, "horizontal stack: tallest child (40) needs no center offset");
+  ok(r2.node.children[1].x === 78 && r2.node.children[1].y === 15, "horizontal stack: shortest child (20) is centered within the 40px cross-span (+10 offset)");
+  ok(r2.node.children[2].x === 146 && r2.node.children[2].y === 10, "horizontal stack: middle child (30) centered with a +5 offset");
+
+  // Grid: 9 cells, 7 columns, uniform cell size (this also exercises the
+  // grid-uniformity fix — cells must NOT keep their own "hug" measurement).
+  const layout3 = { type: "grid", gapToken: "spacing.4", children: Array(9).fill({}) };
+  const measurer3 = () => ({ width: 999, height: 32 }); // deliberately oversized — must be ignored/overridden
+  const r3 = resolveLayout(layout3, { manifest, frame: { width: 350, height: 500 }, leafMeasurer: measurer3, gridColumnsResolver: () => 7 });
+  ok(r3.node.width === 350 && r3.node.height === 68, "grid: root spans full available width, height = 2 rows of 32px + 1 gap", JSON.stringify(r3.node));
+  ok(r3.node.children.every((c) => c.width === 46 && c.height === 32), "grid: every cell is forced to the UNIFORM computed cell size, not its own leaf measurement", JSON.stringify(r3.node.children.map((c) => [c.width, c.height])));
+  ok(r3.node.children[6].x === 300 && r3.node.children[6].y === 0, "grid: 7th cell (index 6) ends the first row");
+  ok(r3.node.children[7].x === 0 && r3.node.children[7].y === 36, "grid: 8th cell (index 7) wraps to row 2, col 0");
+
+  // Safe area: root respects frame safeAreaTop; a node with safeArea:true
+  // additionally reserves frame.safeAreaBottom in its own bottom padding.
+  const layout4 = { type: "stack", direction: "vertical", children: [
+    { type: "stack", direction: "vertical", safeArea: true, padding: { bottom: "spacing.8" }, children: [{}] },
+  ] };
+  const measurer4 = () => ({ width: 100, height: 20 });
+  const r4 = resolveLayout(layout4, { manifest, frame: { width: 393, height: 852, safeAreaTop: 47, safeAreaBottom: 34 }, leafMeasurer: measurer4 });
+  ok(r4.node.y === 47, "safe-area: root content starts after frame.safeAreaTop (47)", r4.node.y);
+  ok(r4.node.children[0].height === 62, "safe-area: a safeArea:true node's own bottom padding (8) plus frame.safeAreaBottom (34) plus its 20px leaf = 62", r4.node.children[0].height);
+
+  // Min/max clamping.
+  const layout5 = { minWidth: undefined, maxWidth: 100, minHeight: 44 };
+  const measurer5 = () => ({ width: 200, height: 10 });
+  const r5 = resolveLayout(layout5, { manifest, frame: { width: 400, height: 400 }, leafMeasurer: measurer5 });
+  ok(r5.node.width === 100, "min/max: maxWidth clamps a 200px measured leaf down to 100", r5.node.width);
+  ok(r5.node.height === 44, "min/max: minHeight clamps a 10px measured leaf up to 44", r5.node.height);
+}
+
+// ── 4.2 Node budgeting: degradation never silently drops content ───────────
+section("4.2 Node budgeting: oversized grid is degraded, never silently dropped");
+{
+  const { resolveLayout, enforceNodeBudget } = await importFrom("services/nofida-hub-adapter/ai/designer/layout-engine.mjs");
+  const { MAX_NODES } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-schema.mjs");
+
+  const bigGrid = { type: "grid", gapToken: "spacing.2", children: Array.from({ length: 200 }, () => ({})) };
+  const manifest = { tokens: { spacing: { scale: [2, 4, 8] } } };
+  const { node } = resolveLayout(bigGrid, { manifest, frame: { width: 393, height: 6000 }, leafMeasurer: () => ({ width: 20, height: 20 }), gridColumnsResolver: () => 10 });
+
+  const totalBefore = countLayoutNodes(node);
+  ok(totalBefore > MAX_NODES, `synthetic fixture (${totalBefore} nodes) exceeds MAX_NODES(${MAX_NODES}) before degradation`, totalBefore);
+
+  const report = enforceNodeBudget(node, MAX_NODES, {});
+  ok(report.totalNodeCount <= MAX_NODES, `after degradation, node count (${report.totalNodeCount}) is within the ${MAX_NODES} budget`, report.totalNodeCount);
+  ok(report.degraded.length > 0, "degradation pass recorded at least one summarization event", JSON.stringify(report.degraded));
+
+  const summarized = node.children.find((c) => c.devMeta && c.devMeta.localOverride);
+  ok(!!summarized, "the summarized cell carries devMeta.localOverride documenting the degradation — never a silent drop", JSON.stringify(summarized && summarized.devMeta));
+  const keptCount = node.children.length;
+  const summarizedCount = summarized.devMeta.summarizedCount;
+  ok(keptCount - 1 + summarizedCount === 200, "every one of the original 200 cells is accounted for: kept individually or folded into the summary node's count", `${keptCount}-1+${summarizedCount}`);
+}
+
+// ── 4.3 Layout planner: pixel-literal rejection + contract + retry ─────────
+section("4.3 Layout planner: pixel literals rejected, contract validation, retry-on-invalid");
+{
+  const { validateLayoutPlannerOutput, planLayout } = await importFrom("services/nofida-hub-adapter/ai/designer/layout-planner.mjs");
+
+  const withPixels = { type: "stack", direction: "vertical", padding: { left: 20, right: 20, top: 16, bottom: 16 }, width: 300, children: [] };
+  const rejected = validateLayoutPlannerOutput(withPixels);
+  ok(rejected.ok === false, "a layout with raw pixel padding/width literals is rejected", JSON.stringify(rejected.errors));
+  ok(rejected.errors.some((e) => e.includes("padding.left")), "the rejection names the specific offending field (padding.left)");
+  ok(rejected.errors.some((e) => e.includes(".width")), "the rejection also flags the raw-number width field");
+
+  const withConstraint = { type: "stack", direction: "vertical", padding: { left: "spacing.20" }, width: "fill", minHeight: 44, children: [] };
+  const accepted = validateLayoutPlannerOutput(withConstraint);
+  ok(accepted.ok === true, "minHeight as a raw number is accepted — it's a real size constraint, not a token field", JSON.stringify(accepted.errors));
+
+  const screen = RECORDED_CYCLE_ARCHITECTURE.screens[0];
+  const happyService = makeFakeAiSettingsService({ answers: [JSON.stringify(FIXTURE_SCREEN_LAYOUT)] });
+  const happyResult = await planLayout({ screen, components: RECORDED_CYCLE_COMPONENTS, density: RECORDED_CYCLE_ART_DIRECTION.density }, { aiSettingsService: happyService });
+  ok(happyResult.ok === true && happyService.callCount() === 1, "a valid first-attempt layout is accepted without a retry", JSON.stringify(happyResult.error));
+
+  const pixelThenGood = makeFakeAiSettingsService({ answers: [JSON.stringify({ ...FIXTURE_SCREEN_LAYOUT, padding: { left: 20 } }), JSON.stringify(FIXTURE_SCREEN_LAYOUT)] });
+  const retryResult = await planLayout({ screen, components: RECORDED_CYCLE_COMPONENTS, density: RECORDED_CYCLE_ART_DIRECTION.density }, { aiSettingsService: pixelThenGood });
+  ok(retryResult.ok === true && pixelThenGood.callCount() === 2, "a pixel-literal response is retried and recovers", pixelThenGood.callCount());
+}
+
+// ── 4.4 Fixture screen -> screenSpec -> parseScene/compileScene ────────────
+section("4.4 Fixture screen builds a screenSpec that compiles cleanly (create-mode, zero dropped nodes)");
+let FIXTURE_SCREEN_SPEC = null;
+let FIXTURE_ASSETS = null;
+{
+  const { resolveAssets } = await importFrom("services/nofida-hub-adapter/ai/designer/asset-resolver.mjs");
+  const { buildScreenSpec } = await importFrom("services/nofida-hub-adapter/ai/designer/designer-scene-builder.mjs");
+  const { computeTokenCoverage } = await importFrom("services/nofida-hub-adapter/ai/designer/token-coverage.mjs");
+  const { parseScene } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-validator.mjs");
+  const { canonicalizeScene } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-canonicalizer.mjs");
+  const { normalizeScene, maxFrameDepthOf } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-normalizer.mjs");
+  const { compileScene } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-compiler.mjs");
+  const { MAX_NODES } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-schema.mjs");
+
+  const screen = RECORDED_CYCLE_ARCHITECTURE.screens[0];
+  FIXTURE_ASSETS = resolveAssets({ productArchitecture: RECORDED_CYCLE_ARCHITECTURE, artDirection: RECORDED_CYCLE_ART_DIRECTION, components: RECORDED_CYCLE_COMPONENTS });
+  const platform = RECORDED_CYCLE_BRIEF.platform;
+  const frame = {
+    width: platform.width, height: platform.height,
+    safeAreaTop: platform.safeArea?.top || 0, safeAreaBottom: platform.safeArea?.bottom || 0,
+    safeAreaLeft: platform.safeArea?.left || 0, safeAreaRight: platform.safeArea?.right || 0,
+  };
+
+  const { screenSpec, report: buildReport } = buildScreenSpec({
+    screen, layout: FIXTURE_SCREEN_LAYOUT, manifest: RECORDED_CYCLE_MANIFEST, components: RECORDED_CYCLE_COMPONENTS,
+    assets: FIXTURE_ASSETS, themeVariant: "light", frame,
+  });
+  FIXTURE_SCREEN_SPEC = screenSpec;
+
+  ok(buildReport.overBudget === false, "no degradation was needed for this fixture");
+  ok(buildReport.totalNodeCount <= MAX_NODES, `node count (${buildReport.totalNodeCount}) is within the ${MAX_NODES}-node budget`, buildReport.totalNodeCount);
+  console.log(`  ....  node count = ${buildReport.totalNodeCount}, budget = ${MAX_NODES}`);
+
+  const parsed = parseScene(JSON.stringify(screenSpec));
+  ok(parsed.ok === true, "scene builder output passes parseScene()", parsed.error);
+
+  const canonical = canonicalizeScene(parsed.scene, {});
+  const normalized = normalizeScene(canonical);
+  const depth = maxFrameDepthOf(normalized.scene);
+  ok(depth <= 3, `real frame depth (${depth}) is within MAX_FRAME_DEPTH(3)`, depth);
+  console.log(`  ....  real frame depth = ${depth} (limit 3)`);
+
+  let idc = 0;
+  const compiled = compileScene(normalized.scene, { pageId: "page-1", newId: () => `s-${idc++}` });
+  ok(compiled.ok === true, "scene compiles in create-mode with zero dropped nodes (compileScene refuses partial by default)", compiled.error);
+  ok(!compiled.unresolvedNodes || compiled.unresolvedNodes.length === 0, "compiler reports no unresolved/dropped nodes");
+  console.log(`  ....  silently dropped nodes = 0 (compileScene ok=${compiled.ok})`);
+
+  const coverage = computeTokenCoverage(screenSpec);
+  ok(coverage.colorCoverage >= coverage.thresholds.color, `color coverage ${(coverage.colorCoverage * 100).toFixed(1)}% meets the ${coverage.thresholds.color * 100}% threshold`, coverage.colorCoverage);
+  ok(coverage.textCoverage >= coverage.thresholds.text, `text coverage ${(coverage.textCoverage * 100).toFixed(1)}% meets the ${coverage.thresholds.text * 100}% threshold`, coverage.textCoverage);
+  ok(coverage.spacingRadiusCoverage >= coverage.thresholds.spacingRadius, `spacing/radius coverage ${(coverage.spacingRadiusCoverage * 100).toFixed(1)}% meets the ${coverage.thresholds.spacingRadius * 100}% threshold`, coverage.spacingRadiusCoverage);
+  ok(coverage.ok === true, `overall token coverage (${(coverage.overallCoverage * 100).toFixed(1)}%) clears the ${coverage.thresholds.overall * 100}% gate`, coverage.overallCoverage);
+  console.log(`  ....  token coverage: color=${(coverage.colorCoverage * 100).toFixed(1)}%, text=${(coverage.textCoverage * 100).toFixed(1)}%, spacing/radius=${(coverage.spacingRadiusCoverage * 100).toFixed(1)}%`);
+}
+
+// ── 4.5 Token-coverage unit tests (violations + localOverride exemption) ───
+section("4.5 Token-coverage validator: violations detected, localOverride exempts, images exempt");
+{
+  const { computeTokenCoverage } = await importFrom("services/nofida-hub-adapter/ai/designer/token-coverage.mjs");
+
+  const compliant = { type: "section", children: [
+    { type: "card", fill: "#FFFFFF", tokens: { fillToken: "background.surface" }, children: [
+      { type: "text", content: "Hi", fill: "#000000", tokens: { textStyleToken: "typography.body", fillToken: "text.primary" } },
+    ] },
+  ] };
+  const rc = computeTokenCoverage(compliant);
+  ok(rc.ok === true && rc.colorCoverage === 1 && rc.textCoverage === 1, "a fully token-bound tree reports 100% coverage and ok=true", JSON.stringify(rc.violations));
+
+  const nonCompliant = { type: "section", children: [
+    { type: "card", fill: "#FFFFFF", children: [] },
+    { type: "text", content: "Hi", fill: "#000000" },
+  ] };
+  const rn = computeTokenCoverage(nonCompliant);
+  ok(rn.ok === false, "an unbound fill and an unbound text node are both flagged", JSON.stringify(rn.violations));
+  // 3, not 2: the card's unbound fill (1), the text node's unbound fill —
+  // a text node's own color is a real color usage too (2), plus the text
+  // node's missing textStyleToken (3). A text node's fill counting twice
+  // (once as "color", once as "text") is intentional, not a double-count
+  // bug — the two dimensions are genuinely independent bindings.
+  ok(rn.violations.length === 3, "the card's unbound fill, the text node's unbound fill, and its unbound typography are all reported", JSON.stringify(rn.violations));
+
+  const excused = { type: "section", children: [
+    { type: "card", fill: "#FFFFFF", devMeta: { localOverride: "decorative flourish, intentionally unbound" }, children: [] },
+  ] };
+  const re = computeTokenCoverage(excused);
+  ok(re.colorCoverage === 1, "devMeta.localOverride exempts an otherwise-unbound color from being a violation", JSON.stringify(re.violations));
+
+  const imageNode = { type: "image", fill: "#FFFFFF" };
+  const ri = computeTokenCoverage(imageNode);
+  ok(ri.counts.colorTotal === 0, "image content is exempt from color-coverage counting entirely", JSON.stringify(ri.counts));
+}
+
+// ── 4.6 Pipeline wiring: layout + scene stages run and cache ───────────────
+section("4.6 Pipeline runs layout + scene with the real modules and caches them");
+{
+  const { runPipelineStage, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { createDesignerInvokeStage } = await importFrom("services/nofida-hub-adapter/ai/designer/stage-invoker.mjs");
+
+  const providerFake = makeFakeAiSettingsService({ answers: [JSON.stringify(FIXTURE_SCREEN_LAYOUT)] });
+  const invokeStage = createDesignerInvokeStage({ aiSettingsService: providerFake, briefInput: { request: CYCLE_APP_REQUEST } });
+  const session = {
+    stageArtifacts: {
+      brief: { status: "ok", output: RECORDED_CYCLE_BRIEF },
+      product_architecture: { status: "ok", output: RECORDED_CYCLE_ARCHITECTURE },
+      art_direction: { status: "ok", output: RECORDED_CYCLE_ART_DIRECTION },
+      design_system: { status: "ok", output: RECORDED_CYCLE_MANIFEST },
+      components: { status: "ok", output: RECORDED_CYCLE_COMPONENTS },
+      assets: { status: "ok", output: FIXTURE_ASSETS },
+    },
+  };
+
+  const layoutStageDef = STAGE_ORDER.find((s) => s.stage === "layout");
+  const layoutResult = await runPipelineStage(layoutStageDef, { session, invokeStage });
+  ok(layoutResult.status === "ok", "layout stage runs via the real module and reports 'ok'", JSON.stringify(layoutResult).slice(0, 300));
+  session.stageArtifacts.layout = { status: "ok", output: layoutResult.output };
+  ok(providerFake.callCount() === 1, "provider invoked exactly once for the layout stage", providerFake.callCount());
+
+  const sceneStageDef = STAGE_ORDER.find((s) => s.stage === "scene");
+  const sceneResult = await runPipelineStage(sceneStageDef, { session, invokeStage });
+  ok(sceneResult.status === "ok", "scene stage runs and reports 'ok' without ever calling the provider", JSON.stringify(sceneResult).slice(0, 200));
+  ok(providerFake.callCount() === 1, "scene stage is fully deterministic — no additional provider invocation", providerFake.callCount());
+  session.stageArtifacts.scene = { status: "ok", output: sceneResult.output };
+
+  const cachedLayout = await runPipelineStage(layoutStageDef, { session, invokeStage });
+  ok(cachedLayout.status === "cached", "layout stage reports 'cached' on rerun");
+  const cachedScene = await runPipelineStage(sceneStageDef, { session, invokeStage });
+  ok(cachedScene.status === "cached", "scene stage reports 'cached' on rerun");
   ok(providerFake.callCount() === 1, "rerunning both cached stages makes no new provider call", providerFake.callCount());
 }
 

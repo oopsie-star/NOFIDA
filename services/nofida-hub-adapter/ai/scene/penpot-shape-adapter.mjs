@@ -244,10 +244,29 @@ export function lowerNode(node) {
   return null; // path, image — no safe substitution
 }
 
+// PATCH 026A.4 — only the PAINT-relevant token categories travel with the
+// paint itself; gapToken describes the ORIGINAL node's own layout (it stays
+// on that node, which keeps its children), not this synthetic rectangle.
+function paintTokensOf(tokens) {
+  if (!tokens) return undefined;
+  const out = {};
+  for (const key of ["fillToken", "radiusToken", "strokeToken", "shadowToken"]) {
+    if (tokens[key] !== undefined) out[key] = tokens[key];
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 // Synthesizes a plain rectangle carrying a grouping node's own paint, used by
 // scene-normalizer.mjs when a non-frame grouping node (group/section/stack/
 // card) has to give up its paint because Penpot's real "group" shape type
 // cannot carry fills/strokes/shadows itself.
+//
+// PATCH 026A.4 addendum: the paint MOVES here, so the paint's token binding
+// metadata must move with it — without this, a token-bound card's actual
+// fill/radius silently becomes untokenized after normalization, which is
+// exactly the gap token-coverage.mjs (026A.4) exists to catch. `devMeta` is
+// intentionally NOT copied — a caller-set localOverride reason on the
+// original node describes THAT node, not this new synthetic sibling.
 export function syntheticBackgroundRectFor(node) {
   return {
     type: "rectangle",
@@ -260,6 +279,10 @@ export function syntheticBackgroundRectFor(node) {
     borderRadius: node.borderRadius,
     borderRadiusTopLeft: node.borderRadiusTopLeft, borderRadiusTopRight: node.borderRadiusTopRight,
     borderRadiusBottomLeft: node.borderRadiusBottomLeft, borderRadiusBottomRight: node.borderRadiusBottomRight,
+    tokens: paintTokensOf(node.tokens),
+    semanticId: node.semanticId ? `${node.semanticId}/background` : undefined,
+    componentRole: node.componentRole,
+    themeVariant: node.themeVariant,
     children: [],
   };
 }

@@ -926,26 +926,87 @@ define({
   buildSystemPrompt: () => DESIGNER_ASSET_RESOLVER_PROMPT,
 });
 
+// PATCH 026A.4 — real prompt. Inputs (the screen + component list + art
+// direction density) are sent as the CALL message (see
+// layout-planner.mjs's buildUserMessage()). Geometry MATH is never this
+// task's job — layout-engine.mjs (pure code) resolves every token
+// reference to absolute pixels; this task only decides structure.
+const DESIGNER_LAYOUT_PLANNER_PROMPT = `
+You are NOFIDA AI's Layout Planner — a senior UX engineer who turns one screen's sections (from the ProductArchitecture) into a SemanticLayout tree describing HOW that screen is structured: stacked or gridded, in what direction, with what spacing rhythm. You never compute a pixel value yourself — that is the layout engine's job, downstream, using real code, not you.
+
+Input: a screen JSON object (id, purpose, primaryAction, sections, contentRequirements, states), the available component list, and the art direction's density, sent together as the user message.
+
+Respond with ONLY a single JSON object — no prose, no markdown fences — matching EXACTLY the SemanticLayout shape:
+
+{
+  "type": "stack",
+  "direction": "vertical",
+  "gapToken": "spacing.24",
+  "padding": { "left": "spacing.20", "right": "spacing.20", "top": "spacing.20", "bottom": "spacing.32" },
+  "width": "fill",
+  "safeArea": true,
+  "children": [
+    {},
+    {},
+    {}
+  ]
+}
+
+Non-negotiable structural rule: "children" must have EXACTLY ONE ENTRY PER SCREEN SECTION, in the SAME ORDER as the screen's "sections" array — child[i] corresponds to sections[i]. A later, deterministic stage pairs each child with its matching component and fills in real content; you only decide that child's own STRUCTURE if it needs one (most children stay an empty placeholder object — only give a child its own "type"/"direction"/"gapToken"/"padding"/"children" when that section is itself a multi-item layout, e.g. a row of tab labels).
+
+Field rules — every one of these is a TOKEN REFERENCE, never a literal number:
+- gapToken / any value inside "padding": a string like "spacing.16" — pick from a spacing scale, never invent a pixel number. A downstream validator mechanically rejects any number where a token string belongs.
+- width: "fill" (take the available width) or "hug" (size to content) — never a pixel number. There is no equivalent field for height; height is always content-driven ("hug") in this system.
+- alignment/distribution: plain descriptive strings ("center", "space-between", etc.), only where the section genuinely needs cross-axis control (e.g. centering icons in a row).
+- minWidth/maxWidth/minHeight/maxHeight: the ONLY fields allowed to hold a raw number — these are real pixel CONSTRAINTS (e.g. a touch target's minimum size), not token references. Use them sparingly, only for a genuine hard constraint the design system implies (e.g. minHeight around 44 for a primary action row).
+- safeArea: true only on a node that must clear the device's safe-area inset (e.g. a bottom action bar) — the root screen container already gets the platform's safe area applied automatically; you don't need to set it there.
+
+Density awareness: a "compact" density implies smaller gaps/padding token choices from the scale (tighter rhythm) than a "spacious" density — reflect the supplied density in which spacing tokens you choose, not by changing the structure.
+
+Boundaries:
+- Never output a hex color, a font name, or a raw pixel number anywhere except minWidth/maxWidth/minHeight/maxHeight.
+- Never add, remove, or reorder sections — the children array's length and order must exactly match the screen's sections.
+- Never invent content — you describe structure only.
+`.trim();
+
 define({
   id: "designer_layout_planner",
-  version: "026a.0",
+  version: "026a.4",
   taskType: "designer_layout_planner",
   role: "default",
   contextRequirements: ["ProductArchitecture", "DesignSystemManifest", "ComponentDefinition[]"],
   outputSchema: "SemanticLayout",
   safety: { previewOnly: true, allowCanvasMutation: false },
-  buildSystemPrompt: () => stubDesignerPrompt("designer_layout_planner", "026a.0"),
+  buildSystemPrompt: () => DESIGNER_LAYOUT_PLANNER_PROMPT,
 });
+
+// PATCH 026A.4 — real prompt, documentation-only: designer-scene-builder.mjs
+// is deterministic code (like asset-resolver.mjs — see that module's own
+// prompt-registry comment for the same reasoning). Combining an already-
+// resolved layout, manifest, components, assets, and content into one
+// screenSpec is mechanical assembly, not a creative decision; every
+// creative call was already made in earlier 026A stages. This prompt
+// documents the assembly policy for a human reading the registry.
+const DESIGNER_SCENE_BUILDER_PROMPT = `
+NOFIDA's Scene Builder combines a screen's already-decided structure, design tokens, components, and assets into one concrete screenSpec — the same JSON tree shape the existing NOFIDA Scene Model pipeline (parseScene -> canonicalizeScene -> normalizeScene -> compileScene) already knows how to turn into real Penpot shapes. Nothing here goes to Penpot directly, and nothing here decides WHAT the screen contains — that was already decided by the brief interpreter, product architect, art director, design system generator, component architect, asset resolver, and layout planner in the stages before this one.
+
+The assembly policy, mechanically enforced by platform code (not an LLM call):
+- Each screen section is paired with the best-matching component from the component list (by role/name keyword overlap), so repeated patterns (e.g. a week or month calendar) reuse the SAME component definition rather than being drawn as unrelated shapes.
+- The layout planner's SemanticLayout tree is resolved into absolute pixel geometry by the layout engine (pure code, no LLM) — every spacing/radius token is resolved to both a real value (so the existing compiler renders it today) and kept as symbolic metadata (so the binding survives for future re-theming).
+- Every generated node carries a stable semanticId (<screen-id>/<component-role>/<index>), a meaningful layer name, componentRole, token bindings, and the current themeVariant — never a hardcoded Penpot id.
+- Real, specific copy is pulled from the already-authored ProductBrief/ProductArchitecture content — never invented here, never "Lorem ipsum".
+- The result is validated for token coverage (color/text/spacing-radius binding) before the pipeline accepts it — a screen that hardcodes values instead of binding them fails this stage.
+`.trim();
 
 define({
   id: "designer_scene_builder",
-  version: "026a.0",
+  version: "026a.4",
   taskType: "designer_scene_builder",
   role: "default",
   contextRequirements: ["SemanticLayout", "DesignSystemManifest", "AssetResolution"],
   outputSchema: "screen_spec",
   safety: { previewOnly: true, allowCanvasMutation: false },
-  buildSystemPrompt: () => stubDesignerPrompt("designer_scene_builder", "026a.0"),
+  buildSystemPrompt: () => DESIGNER_SCENE_BUILDER_PROMPT,
 });
 
 define({
