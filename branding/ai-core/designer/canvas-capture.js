@@ -102,7 +102,12 @@
       return Promise.resolve(unavailable("capture is not a usable image — refusing to upload"));
     }
 
-    return fetch("/ai/designer/captures", {
+    // /api/nofida/ai/ is the only prefix nginx proxies to nofida-hub-adapter
+    // (see branding/nginx/nofida.conf) — this call runs in the top-level
+    // editor page (same origin as nofida-ai-core.js), not the plugin
+    // sandbox, so it must use the same prefix every other NOFIDA AI fetch
+    // in this page uses.
+    return fetch("/api/nofida/ai/designer/captures", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

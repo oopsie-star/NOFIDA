@@ -116,6 +116,49 @@
     return scenePipelinePromise;
   }
 
+  // PATCH 026A.8 — lazy-loads the full live Autonomous Designer runtime:
+  // transit+persistence (reusing loadScenePipeline()'s own adapter step),
+  // feature-flags.js, canvas-capture.js, and designer-workflow.js, in that
+  // order (each later script assumes the earlier ones already registered
+  // themselves on window.NofidaDesigner). Idempotent/cached the same way
+  // loadScenePipeline() is — nofida-ai-core.js may call this once per panel
+  // load, well before the user's first message.
+  var featureFlagsPromise = null;
+  // Loads ONLY feature-flags.js (tiny, no adapters) — nofida-ai-core.js
+  // calls this eagerly (e.g. once settings are loaded) so
+  // NofidaDesigner.FeatureFlags.isEnabled() can gate a chat message BEFORE
+  // paying for the full designer runtime below.
+  function loadFeatureFlags() {
+    if (featureFlagsPromise) return featureFlagsPromise;
+    featureFlagsPromise = (window.NofidaDesigner && window.NofidaDesigner.FeatureFlags)
+      ? Promise.resolve(window.NofidaDesigner.FeatureFlags)
+      : loadScript(DESIGNER_BASE + "feature-flags.js" + CACHE_BUST).then(function () {
+          return window.NofidaDesigner.FeatureFlags;
+        });
+    return featureFlagsPromise;
+  }
+
+  var designerWorkflowPromise = null;
+  function loadDesignerWorkflowRuntime() {
+    if (designerWorkflowPromise) return designerWorkflowPromise;
+    designerWorkflowPromise = loadScenePipeline()
+      .then(loadFeatureFlags)
+      .then(function () {
+        return (window.NofidaDesigner && window.NofidaDesigner.CanvasCapture)
+          ? Promise.resolve()
+          : loadScript(DESIGNER_BASE + "canvas-capture.js" + CACHE_BUST);
+      })
+      .then(function () {
+        return (window.NofidaDesigner && window.NofidaDesigner.Workflow)
+          ? Promise.resolve()
+          : loadScript(DESIGNER_BASE + "designer-workflow.js" + CACHE_BUST);
+      })
+      .then(function () {
+        return window.NofidaDesigner.Workflow;
+      });
+    return designerWorkflowPromise;
+  }
+
   // Stable (sorted-key) stringify + a small non-cryptographic hash — used
   // only to build the idempotency key's normalizedSceneHash component, not
   // for anything security-sensitive.
@@ -334,6 +377,16 @@
       if (origin) pluginOrigin = origin;
       this.setTransport("plugin");
       console.info("[Nofida AI] companion plugin connected");
+    },
+
+    // PATCH 026A.8 — Promise<NofidaDesigner.Workflow>. See loadDesignerWorkflowRuntime() above.
+    loadDesignerWorkflow: function () {
+      return loadDesignerWorkflowRuntime();
+    },
+
+    // PATCH 026A.8 — Promise<NofidaDesigner.FeatureFlags>, cheap/eager-safe. See loadFeatureFlags() above.
+    loadFeatureFlags: function () {
+      return loadFeatureFlags();
     },
 
     generateLayers: function (spec) {

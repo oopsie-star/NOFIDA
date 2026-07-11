@@ -2373,8 +2373,52 @@
   }
 
   // Free-text chat entry point (submit button / Enter key)
+  // PATCH 026A.8 — a normal chat message is routed to the live Autonomous
+  // Designer workflow (interpretation card -> build -> capture -> critique/
+  // repair loop -> results + handoff) instead of the regular /ai/ask
+  // request whenever nofida_ai_autonomous_designer_v1 is enabled (both the
+  // server flag AND the client hard gate — see feature-flags.js's
+  // isEnabled()). Falls back to the normal chat path on any failure to
+  // determine the flag state, so a settings-load hiccup never blocks chat.
   function sendAiMessage(message) {
-    sendAiTask(null, message);
+    if (!state.bridge || typeof state.bridge.loadFeatureFlags !== "function") {
+      sendAiTask(null, message);
+      return;
+    }
+    ensureSettingsLoaded().then(function (settings) {
+      var serverFlags = (settings && settings.flags) || {};
+      return state.bridge.loadFeatureFlags().then(function (FeatureFlags) {
+        if (FeatureFlags && FeatureFlags.isEnabled(serverFlags, "autonomousDesignerV1") && message) {
+          startDesignerWorkflow(message, serverFlags);
+          return;
+        }
+        sendAiTask(null, message);
+      });
+    }).catch(function () {
+      sendAiTask(null, message);
+    });
+  }
+
+  function startDesignerWorkflow(message, serverFlags) {
+    appendUserMsg(message, []);
+    state.els.input.value = "";
+    state.bridge.loadDesignerWorkflow().then(function (Workflow) {
+      var cardEl = Workflow.start(message, { serverFlags: serverFlags });
+      var row = document.createElement("div");
+      row.className = "ai-msg";
+      var avatar = document.createElement("div");
+      avatar.className = "ai-avatar";
+      avatar.textContent = "N";
+      var content = document.createElement("div");
+      content.className = "ai-content";
+      content.appendChild(cardEl);
+      row.appendChild(avatar);
+      row.appendChild(content);
+      state.els.log.appendChild(row);
+      state.els.log.scrollTop = state.els.log.scrollHeight;
+    }).catch(function (err) {
+      appendAiMsg("⚠ Не удалось загрузить модуль автономного дизайнера: " + ((err && err.message) || err), null);
+    });
   }
 
   function loadLibraries() {

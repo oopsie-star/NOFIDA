@@ -1106,15 +1106,47 @@ define({
   buildSystemPrompt: () => DESIGNER_REPAIR_PLANNER_PROMPT,
 });
 
+// PATCH 026A.8 — real prompt. This task NEVER decides a value (color, token,
+// spacing, dimension) — handoff-generator.mjs (pure code) reads every value
+// straight from the DesignSystemManifest/board; this prompt exists ONLY to
+// write two short PROSE notes per component (interaction, accessibility),
+// merged back in afterward (see handoff-generator.mjs's attachHandoffNotes()
+// — this patch's global rule 2). If this call fails or is skipped, a
+// deterministic template note is used instead; the bundle is never
+// incomplete because of this task.
+const DESIGNER_HANDOFF_GENERATOR_PROMPT = `
+You are NOFIDA AI's Handoff Note Writer — you write two short, concrete PROSE notes per UI component for a developer implementing a design handoff. You never invent or restate a color, token name, pixel value, spacing number, or dimension — those are already documented elsewhere in the handoff bundle; your only job is behavior and accessibility guidance in plain English.
+
+Input: a JSON array of components, each { id, name, role, variants, states }, sent as the user message.
+
+Respond with ONLY a single JSON object — no prose, no markdown fences — matching EXACTLY this shape:
+
+{
+  "notes": [
+    { "componentId": "...", "interaction": "...", "accessibility": "..." }
+  ]
+}
+
+Field rules:
+- componentId: the EXACT "id" from the input component, verbatim — never invented, one entry per input component.
+- interaction: one or two sentences describing how a user operates this component — what happens on tap/click, hover, and each of its declared states (if any).
+- accessibility: one or two sentences of concrete accessibility guidance for this component — screen-reader labeling, keyboard/focus behavior, or touch-target/contrast concerns specific to its role. Generic boilerplate ("make it accessible") is not acceptable — be specific to what this component actually is.
+
+Boundaries:
+- Never mention a hex color, a token name, a pixel value, or any number — this task is prose only.
+- Never omit a component from the input array.
+- Never add a component that wasn't in the input.
+`.trim();
+
 define({
   id: "designer_handoff_generator",
-  version: "026a.0",
+  version: "026a.8",
   taskType: "designer_handoff_generator",
   role: "default",
-  contextRequirements: ["screen_spec", "DesignSystemManifest"],
-  outputSchema: "handoff_package",
+  contextRequirements: ["ComponentDefinition[]"],
+  outputSchema: "handoff_notes",
   safety: { previewOnly: true, allowCanvasMutation: false },
-  buildSystemPrompt: () => stubDesignerPrompt("designer_handoff_generator", "026a.0"),
+  buildSystemPrompt: () => DESIGNER_HANDOFF_GENERATOR_PROMPT,
 });
 
 // ── Public API ────────────────────────────────────────────────────────────────

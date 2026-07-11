@@ -160,6 +160,31 @@ export async function getCaptureArtifact(profileId, sessionId, semanticId, revis
   return session.captures?.[semanticId]?.[revisionKey] || null;
 }
 
+// PATCH 026A.8 — resolved light/dark board trees (see designer-scene-
+// builder.mjs's buildPairedThemeBoards()). Distinct from stageArtifacts.scene
+// (026A.4's single-theme, single-shot stage output) because the live
+// orchestrator (designer-orchestrator.mjs) rebuilds a PAIR and the
+// critique/repair loop mutates it across several HTTP round-trips — this is
+// the "current state of the canvas" the next repair pass reads and writes,
+// always overwritten wholesale (never merged), so it can never drift from
+// what was last actually compiled and handed to the browser.
+export async function saveBoards(profileId, sessionId, { light, dark }) {
+  const store = await readStore(profileId);
+  const session = store.sessions.find((s) => s.id === sessionId);
+  if (!session) throw Object.assign(new Error("designer session not found"), { code: "session_not_found", status: 404 });
+
+  session.boards = { light: light || null, dark: dark || null };
+  session.updatedAt = new Date().toISOString();
+
+  await writeStore(profileId, store);
+  return session;
+}
+
+export async function getBoards(profileId, sessionId) {
+  const session = await getSession(profileId, sessionId);
+  return session ? (session.boards || null) : null;
+}
+
 // PATCH 026A.7 — critique/repair loop pass artifacts. Keyed by pass index
 // (0 = the initial pre-repair evaluation, 1..N = post-repair re-evaluations
 // — see pipeline.mjs's runCritiqueRepairLoop()), NOT by pipeline stage —

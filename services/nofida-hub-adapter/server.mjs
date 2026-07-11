@@ -17,6 +17,7 @@ import * as threadStore from "./ai/thread-store.mjs";
 import * as designerSessionStore from "./ai/designer/session-store.mjs";
 import { getDesignerFeatureFlags } from "./ai/designer/feature-flags.mjs";
 import { validateCapture } from "./ai/designer/capture-validator.mjs";
+import * as designerOrchestrator from "./ai/designer/designer-orchestrator.mjs";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3101);
@@ -1370,6 +1371,171 @@ async function handleAiDesignerCapturePost(req, res) {
   }
 }
 
+// PATCH 026A.8 — live orchestration routes. Every handler below is a thin
+// wrapper: resolve the session cookie -> resolve the profile -> gate on
+// nofida_ai_autonomous_designer_v1 -> hand off to designer-orchestrator.mjs
+// (the actual sequencing/compute lives there, unit-tested independently of
+// this HTTP layer — see verify-026a-autonomous-designer.mjs section 8).
+// None of these ever touch Penpot directly — every success response either
+// carries a Change IR for the browser to apply through the EXISTING,
+// unmodified persistence-adapter.js, or plain-language/JSON data (the
+// interpretation card, a CritiqueReport, the handoff bundle).
+
+function requireAutonomousDesignerFlag(res) {
+  const flags = getDesignerFeatureFlags();
+  if (!flags.autonomousDesignerV1) {
+    fail(res, 403, "designer_disabled", "nofida_ai_autonomous_designer_v1 is disabled.");
+    return null;
+  }
+  return flags;
+}
+
+function designerErrorStatus(code) {
+  if (code === "session_not_found") return 404;
+  if (code === "missing_input" || code === "missing_page_id" || code === "max_repair_passes_exceeded") return 400;
+  if (code === "needs_clarification") return 200; // structured refusal, not a transport error
+  return 422; // contract_violation, node_budget_exceeded, token_coverage_below_threshold, theme_parity_violation, compile_failed, ...
+}
+
+async function handleAiDesignerSessionCreate(req, res) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for the Autonomous Designer.");
+  if (!cookieHeader) return;
+  if (!requireAutonomousDesignerFlag(res)) return;
+
+  let body;
+  try {
+    body = await parseBody(req, JSON_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "invalid_json", error.message);
+    return;
+  }
+
+  const userPrompt = typeof body.userPrompt === "string" ? body.userPrompt.trim() : "";
+  if (!userPrompt) {
+    fail(res, 400, "missing_input", "userPrompt is required.");
+    return;
+  }
+
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const result = await designerOrchestrator.createInterpretationSession({ profileId, userPrompt }, { aiSettingsService });
+  if (result.ok) {
+    json(res, 200, { ok: true, sessionId: result.sessionId, interpretation: result.interpretation });
+    return;
+  }
+  if (result.needsClarification) {
+    json(res, 200, { ok: false, needsClarification: true, question: result.question, sessionId: result.sessionId });
+    return;
+  }
+  json(res, designerErrorStatus(result.error.code), { ok: false, sessionId: result.sessionId, error: result.error });
+}
+
+async function handleAiDesignerSessionBuild(req, res, sessionId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for the Autonomous Designer.");
+  if (!cookieHeader) return;
+  if (!requireAutonomousDesignerFlag(res)) return;
+
+  let body;
+  try {
+    body = await parseBody(req, JSON_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "invalid_json", error.message);
+    return;
+  }
+
+  const pageId = typeof body.pageId === "string" ? body.pageId.trim() : "";
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const result = await designerOrchestrator.buildScreen({ profileId, sessionId, pageId }, { aiSettingsService });
+  if (result.ok) {
+    json(res, 200, { ok: true, changes: result.changes, light: result.light, dark: result.dark, pass: result.pass });
+    return;
+  }
+  json(res, designerErrorStatus(result.error.code), { ok: false, error: result.error });
+}
+
+async function handleAiDesignerSessionCritique(req, res, sessionId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for the Autonomous Designer.");
+  if (!cookieHeader) return;
+  if (!requireAutonomousDesignerFlag(res)) return;
+
+  let body;
+  try {
+    body = await parseBody(req, JSON_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "invalid_json", error.message);
+    return;
+  }
+
+  const pass = Number.isFinite(body.pass) ? body.pass : 0;
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const result = await designerOrchestrator.runCritique({ profileId, sessionId, pass }, { aiSettingsService });
+  if (result.ok) {
+    json(res, 200, { ok: true, pass: result.pass, critique: result.critique, confidence: result.confidence, approved: result.approved });
+    return;
+  }
+  json(res, designerErrorStatus(result.error.code), { ok: false, error: result.error });
+}
+
+async function handleAiDesignerSessionRepair(req, res, sessionId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for the Autonomous Designer.");
+  if (!cookieHeader) return;
+  if (!requireAutonomousDesignerFlag(res)) return;
+
+  let body;
+  try {
+    body = await parseBody(req, JSON_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "invalid_json", error.message);
+    return;
+  }
+
+  const pass = Number.isFinite(body.pass) ? body.pass : undefined;
+  const pageId = typeof body.pageId === "string" ? body.pageId.trim() : "";
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const result = await designerOrchestrator.runRepair({ profileId, sessionId, pass, pageId }, { aiSettingsService });
+  if (result.ok) {
+    if (result.localRepairImpossible) {
+      json(res, 200, { ok: true, localRepairImpossible: true, reason: result.reason });
+      return;
+    }
+    if (result.gateFailed) {
+      json(res, 200, { ok: true, gateFailed: true, gateFailure: result.gateFailure });
+      return;
+    }
+    json(res, 200, { ok: true, pass: result.pass, changes: result.changes, light: result.light, dark: result.dark });
+    return;
+  }
+  json(res, designerErrorStatus(result.error.code), { ok: false, error: result.error });
+}
+
+async function handleAiDesignerSessionHandoff(req, res, sessionId) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for the Autonomous Designer.");
+  if (!cookieHeader) return;
+  const flags = requireAutonomousDesignerFlag(res);
+  if (!flags) return;
+  if (!flags.handoffV1) {
+    fail(res, 403, "handoff_disabled", "nofida_ai_handoff_v1 is disabled.");
+    return;
+  }
+
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  const result = await designerOrchestrator.buildHandoffBundle({ profileId, sessionId }, { aiSettingsService });
+  if (result.ok) {
+    json(res, 200, { ok: true, bundle: result.bundle });
+    return;
+  }
+  json(res, designerErrorStatus(result.error.code), { ok: false, error: result.error });
+}
+
 async function handleAiSettingsGet(req, res, url) {
   if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
   try {
@@ -2033,6 +2199,34 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/ai/designer/captures") {
     await handleAiDesignerCapturePost(req, res);
     return;
+  }
+
+  // PATCH 026A.8 — /ai/designer/sessions[/:id[/build|critique|repair|handoff]]
+  if (req.method === "POST" && url.pathname === "/ai/designer/sessions") {
+    await handleAiDesignerSessionCreate(req, res);
+    return;
+  }
+
+  const sessionSubRouteMatch = /^\/ai\/designer\/sessions\/([^/]+)\/(build|critique|repair|handoff)$/.exec(url.pathname);
+  if (sessionSubRouteMatch) {
+    const sessionId = decodeURIComponent(sessionSubRouteMatch[1]);
+    const subRoute = sessionSubRouteMatch[2];
+    if (subRoute === "build" && req.method === "POST") {
+      await handleAiDesignerSessionBuild(req, res, sessionId);
+      return;
+    }
+    if (subRoute === "critique" && req.method === "POST") {
+      await handleAiDesignerSessionCritique(req, res, sessionId);
+      return;
+    }
+    if (subRoute === "repair" && req.method === "POST") {
+      await handleAiDesignerSessionRepair(req, res, sessionId);
+      return;
+    }
+    if (subRoute === "handoff" && req.method === "GET") {
+      await handleAiDesignerSessionHandoff(req, res, sessionId);
+      return;
+    }
   }
 
   fail(res, 404, "not_found", "Route not found.");
