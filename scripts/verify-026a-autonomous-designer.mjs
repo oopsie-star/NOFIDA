@@ -210,9 +210,12 @@ section("0.3 Prompt registry (11 designer tasks) + intent-router flag gate");
   const { getPromptDefinition, DESIGNER_TASK_TYPES, TASK_TYPES } = await importFrom("services/nofida-hub-adapter/ai/prompt-registry.mjs");
   const { routeTask } = await importFrom("services/nofida-hub-adapter/ai/intent-router.mjs");
 
-  // PATCH 026A.1 implements two of the eleven prompts for real; the rest
-  // stay 026A.0 stubs until their own sub-patch lands.
-  const IMPLEMENTED_TASK_TYPES = new Set(["designer_brief_interpreter", "designer_product_architect"]);
+  // PATCH 026A.1/026A.2 implement four of the eleven prompts for real; the
+  // rest stay 026A.0 stubs until their own sub-patch lands.
+  const IMPLEMENTED_TASK_TYPES = new Set([
+    "designer_brief_interpreter", "designer_product_architect",
+    "designer_art_director", "designer_system_generator",
+  ]);
 
   ok(DESIGNER_TASK_TYPES.size === 11, "DESIGNER_TASK_TYPES has exactly 11 entries", DESIGNER_TASK_TYPES.size);
   for (const taskType of DESIGNER_TASK_TYPES) {
@@ -597,28 +600,35 @@ section("1.4 Product/UX architect: contract validation + retry-on-invalid");
 }
 
 // ── 1.5 Orchestrator wiring: real stages replace stubs, cache holds ─────────
+// Exercises brief/product_architecture in isolation via runPipelineStage()
+// rather than a full runPipeline() run, so this test doesn't have to know
+// how many LATER stages stage-invoker.mjs has wired up by the time a future
+// sub-patch lands (026A.2 already extends it to art_direction/design_system
+// — see section 2.8 below for the full-pipeline depth test).
 section("1.5 Pipeline runs the real brief/product_architecture stages and caches them");
 {
-  const { runPipeline, runPipelineStage, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { runPipelineStage, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
   const { createDesignerInvokeStage } = await importFrom("services/nofida-hub-adapter/ai/designer/stage-invoker.mjs");
 
   const providerFake = makeFakeAiSettingsService({ answers: [JSON.stringify(RECORDED_CYCLE_BRIEF), JSON.stringify(RECORDED_CYCLE_ARCHITECTURE)] });
   const invokeStage = createDesignerInvokeStage({ aiSettingsService: providerFake, briefInput: { request: CYCLE_APP_REQUEST } });
   const session = { stageArtifacts: {} };
 
-  const firstRun = await runPipeline({ session, invokeStage });
-  ok(firstRun.ok === false && firstRun.error.stage === "art_direction" && firstRun.error.code === "stage_not_wired", "pipeline runs both real stages then stops cleanly at the next un-wired stage", JSON.stringify(firstRun.error));
-  ok(firstRun.results.length === 2 && firstRun.results.every((r) => r.status === "ok"), "brief and product_architecture both complete with status 'ok'", JSON.stringify(firstRun.results.map((r) => [r.stage, r.status])));
+  const briefStage = await runPipelineStage(STAGE_ORDER[0], { session, invokeStage });
+  ok(briefStage.status === "ok", "brief stage runs via the real module and reports 'ok'", JSON.stringify(briefStage));
+  session.stageArtifacts.brief = { status: "ok", output: briefStage.output };
+
+  const architectureStage = await runPipelineStage(STAGE_ORDER[1], { session, invokeStage });
+  ok(architectureStage.status === "ok", "product_architecture stage runs via the real module and reports 'ok'", JSON.stringify(architectureStage));
+  session.stageArtifacts.product_architecture = { status: "ok", output: architectureStage.output };
+
   ok(providerFake.callCount() === 2, "provider invoked exactly once per real stage on a cold run", providerFake.callCount());
 
-  const secondRun = await runPipeline({ session, invokeStage });
-  ok(secondRun.error.stage === "art_direction", "second run against the same session reaches the same un-wired stage");
-  ok(providerFake.callCount() === 2, "second run resumes brief/product_architecture from the session cache — no additional provider invocations", providerFake.callCount());
-
-  // Same guarantee at the single-stage level (matches the 026A.0 cache test shape).
   const cachedBrief = await runPipelineStage(STAGE_ORDER[0], { session, invokeStage });
   ok(cachedBrief.status === "cached", "brief stage individually reports 'cached' on rerun");
-  ok(providerFake.callCount() === 2, "rerunning the cached brief stage alone still makes no new provider call");
+  const cachedArchitecture = await runPipelineStage(STAGE_ORDER[1], { session, invokeStage });
+  ok(cachedArchitecture.status === "cached", "product_architecture stage individually reports 'cached' on rerun");
+  ok(providerFake.callCount() === 2, "rerunning both cached stages makes no new provider call");
 }
 
 // ── Live run (optional, gated) ──────────────────────────────────────────────
@@ -643,6 +653,307 @@ if (LIVE) {
   }
 } else {
   console.log("  SKIP  live provider call (set NOFIDA_AI_VERIFY_LIVE=1 and configure a provider to enable)");
+}
+
+// =============================================================================
+// SECTION 026A.2 — Visual Language: Art Director + Design System Generator
+// =============================================================================
+console.log("\nPATCH 026A.2 — Visual Language");
+
+// ── Recorded fixtures (built on 026A.1's cycle-tracker brief/architecture) ──
+const RECORDED_CYCLE_ART_DIRECTION = {
+  direction: "calm-focused-cycle-care",
+  keywords: ["gentle", "reassuring", "precise", "private"],
+  density: "comfortable",
+  contrast: "medium",
+  cornerStyle: "rounded",
+  surfaceStyle: "soft layered surfaces with a single restrained accent",
+  imageStrategy: "abstract, non-figurative gradient/shape accents only — no photography of people",
+  themeStrategy: "paired-light-dark, dark independently tuned for low-light/night checking",
+  avoid: ["clinical hospital aesthetic", "alarming red-heavy status colors", "generic admin dashboard look", "stock photography of unrelated people"],
+};
+const RECORDED_CYCLE_ART_DIRECTION_RATIONALE = "A women's-health tracking app needs a calm, private, reassuring register rather than a clinical or playful one, so users feel comfortable checking sensitive data daily. Medium contrast and comfortable density keep the four required data views legible without feeling like a hospital chart. The dark theme gets its own tuning since low-light/night checking is a primary use case implied by the brief.";
+
+// A hand-authored, contrast-verified, non-inverted manifest — see the git
+// history / design-system-validators.mjs for how these hex values were
+// chosen; every semantic hex below is deliberately one of the declared
+// primitives, and the dark theme's values were tuned independently rather
+// than derived from light by formula.
+const RECORDED_CYCLE_MANIFEST = {
+  name: "Cycle Care",
+  themes: {
+    light: { mood: "soft, airy, reassuring daylight surface" },
+    dark: { mood: "calm, low-glare surface tuned for night checking" },
+  },
+  tokens: {
+    color: {
+      primitives: {
+        neutral: {
+          "0": "#FFFFFF", "50": "#F7F5FB", "100": "#EDE9F5", "300": "#C9C2DA",
+          "500": "#8B8598", "600": "#726B82", "700": "#5B5468", "800": "#241D33", "900": "#1C1626", "950": "#14101B",
+        },
+        brand: { "300": "#B9A6FF", "500": "#7C4DFF", "700": "#5A2FD1" },
+        success: { "300": "#4ADE9A", "500": "#1B8A5A" },
+        warning: { "300": "#FFB84D", "500": "#A85D00" },
+        danger: { "300": "#FF6B81", "500": "#C4314B" },
+        information: { "300": "#7EA6FF", "500": "#2F6FED" },
+      },
+    },
+    typography: {
+      display: { family: "Inter", size: 32, weight: "800", lineHeight: 38, letterSpacing: -0.2 },
+      pageTitle: { family: "Inter", size: 24, weight: "700", lineHeight: 30, letterSpacing: 0 },
+      sectionTitle: { family: "Inter", size: 18, weight: "700", lineHeight: 24, letterSpacing: 0 },
+      cardTitle: { family: "Inter", size: 16, weight: "600", lineHeight: 22, letterSpacing: 0 },
+      body: { family: "Inter", size: 15, weight: "400", lineHeight: 22, letterSpacing: 0 },
+      bodyCompact: { family: "Inter", size: 13, weight: "400", lineHeight: 18, letterSpacing: 0 },
+      label: { family: "Inter", size: 13, weight: "600", lineHeight: 16, letterSpacing: 0.2 },
+      caption: { family: "Inter", size: 12, weight: "400", lineHeight: 16, letterSpacing: 0 },
+      button: { family: "Inter", size: 15, weight: "600", lineHeight: 20, letterSpacing: 0.1 },
+      numericHighlight: { family: "Inter", size: 28, weight: "700", lineHeight: 32, letterSpacing: 0 },
+    },
+    spacing: { scale: [2, 4, 8, 12, 16, 20, 24, 32, 40, 48] },
+    radius: { control: 12, card: 20, panel: 24, modal: 28, pill: 999, circle: 999 },
+    shadow: {
+      light: { card: { offsetY: 2, blur: 8, color: "#000000", opacity: 0.08 }, modal: { offsetY: 12, blur: 32, color: "#000000", opacity: 0.18 } },
+      dark: { card: { offsetY: 2, blur: 8, color: "#000000", opacity: 0.4 }, modal: { offsetY: 12, blur: 32, color: "#000000", opacity: 0.55 } },
+    },
+    border: {
+      light: { hairline: "#EDE9F5", strong: "#C9C2DA" },
+      dark: { hairline: "#241D33", strong: "#5B5468" },
+    },
+  },
+  semanticTokens: {
+    light: {
+      "background.canvas": "#F7F5FB", "background.surface": "#FFFFFF", "background.surfaceElevated": "#FFFFFF",
+      "text.primary": "#1C1626", "text.secondary": "#5B5468", "text.muted": "#8B8598",
+      "border.default": "#C9C2DA", "border.strong": "#8B8598",
+      "action.primary": "#7C4DFF", "action.primaryText": "#FFFFFF",
+      "state.selected": "#EDE9F5", "state.disabled": "#C9C2DA",
+      "status.success": "#1B8A5A", "status.warning": "#A85D00", "status.danger": "#C4314B",
+    },
+    dark: {
+      "background.canvas": "#14101B", "background.surface": "#1C1626", "background.surfaceElevated": "#241D33",
+      "text.primary": "#FFFFFF", "text.secondary": "#C9C2DA", "text.muted": "#726B82",
+      "border.default": "#5B5468", "border.strong": "#C9C2DA",
+      "action.primary": "#B9A6FF", "action.primaryText": "#1C1626",
+      "state.selected": "#241D33", "state.disabled": "#5B5468",
+      "status.success": "#4ADE9A", "status.warning": "#FFB84D", "status.danger": "#FF6B81",
+    },
+  },
+  componentDefaults: {
+    button: { radius: "control", minHeight: 44 },
+    input: { radius: "control", minHeight: 44 },
+    card: { radius: "card" },
+  },
+  accessibility: {
+    minContrastBody: 4.5,
+    minContrastLargeText: 3,
+    minControlSize: 44,
+    focusRule: "every interactive control gets a 2px visible focus ring using action.primary, never removed",
+    disabledRule: "disabled controls use state.disabled fill and text.muted label, never full-opacity text",
+    colorIndependentStatusRule: "status colors are always paired with an icon or text label, never color alone",
+  },
+};
+
+// ── 2.1 Fixtures are contract-valid and pass the deep validators ───────────
+section("2.1 Recorded ArtDirection + DesignSystemManifest fixtures validate");
+{
+  const { validateContract } = await importFrom("services/nofida-hub-adapter/ai/designer/contracts.mjs");
+  const { validateManifest, checkContrast, checkIntegrity, checkNotInvertedDark } =
+    await importFrom("services/nofida-hub-adapter/ai/designer/design-system-validators.mjs");
+
+  const artResult = validateContract("ArtDirection", RECORDED_CYCLE_ART_DIRECTION);
+  ok(artResult.ok === true, "recorded ArtDirection fixture validates against the contract", artResult.errors.join("; "));
+
+  const manifestContract = validateContract("DesignSystemManifest", RECORDED_CYCLE_MANIFEST);
+  ok(manifestContract.ok === true, "recorded manifest passes the shallow DesignSystemManifest contract", manifestContract.errors.join("; "));
+
+  const integrity = checkIntegrity(RECORDED_CYCLE_MANIFEST);
+  ok(integrity.ok === true, "recorded manifest passes the integrity checker", integrity.errors.join("; "));
+
+  const contrast = checkContrast(RECORDED_CYCLE_MANIFEST);
+  ok(contrast.ok === true, "recorded manifest passes the contrast checker in both themes", contrast.errors.join("; "));
+
+  const notInverted = checkNotInvertedDark(RECORDED_CYCLE_MANIFEST);
+  ok(notInverted.ok === true, "recorded manifest's dark theme is not flagged as an inverted light theme", notInverted.errors.join("; "));
+
+  const full = validateManifest(RECORDED_CYCLE_MANIFEST);
+  ok(full.ok === true, "validateManifest() (contract + all deep checks combined) accepts the recorded manifest", full.errors.join("; "));
+}
+
+// ── 2.2 Contrast checker unit tests against known pass/fail color pairs ────
+section("2.2 Contrast checker: known pass/fail color pairs + WCAG thresholds");
+{
+  const { contrastRatio, relativeLuminance } = await importFrom("services/nofida-hub-adapter/ai/designer/design-system-validators.mjs");
+
+  ok(Math.abs(contrastRatio("#000000", "#FFFFFF") - 21) < 0.01, "black on white is the maximum 21:1 ratio", contrastRatio("#000000", "#FFFFFF"));
+  ok(Math.abs(contrastRatio("#808080", "#808080") - 1) < 0.01, "identical colors have a 1:1 ratio (no contrast)", contrastRatio("#808080", "#808080"));
+  ok(contrastRatio("#CCCCCC", "#FFFFFF") < 4.5, "light gray on white fails the 4.5:1 body-text threshold", contrastRatio("#CCCCCC", "#FFFFFF"));
+  ok(contrastRatio("#1C1626", "#F7F5FB") >= 4.5, "the fixture's text.primary/background.canvas pair clears 4.5:1", contrastRatio("#1C1626", "#F7F5FB"));
+  ok(relativeLuminance("#FFFFFF") === 1, "white has relative luminance 1");
+  ok(relativeLuminance("#000000") === 0, "black has relative luminance 0");
+  ok(contrastRatio("not-a-color", "#FFFFFF") === null, "an unparseable color returns null instead of throwing");
+}
+
+// ── 2.3 Integrity checker unit tests against broken manifests ──────────────
+section("2.3 Integrity checker rejects a manifest missing a dark resolution or a typography style");
+{
+  const { checkIntegrity } = await importFrom("services/nofida-hub-adapter/ai/designer/design-system-validators.mjs");
+
+  const missingDarkToken = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  delete missingDarkToken.semanticTokens.dark["text.secondary"];
+  const missingDarkResult = checkIntegrity(missingDarkToken);
+  ok(missingDarkResult.ok === false, "integrity checker rejects a manifest missing a dark theme token resolution", JSON.stringify(missingDarkResult.errors));
+  ok(missingDarkResult.errors.some((e) => e.includes("text.secondary")), "the specific missing token is named in the error", JSON.stringify(missingDarkResult.errors));
+
+  const unresolvedSemanticToken = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  unresolvedSemanticToken.semanticTokens.light["text.primary"] = "#123456"; // not a declared primitive
+  const unresolvedResult = checkIntegrity(unresolvedSemanticToken);
+  ok(unresolvedResult.ok === false, "integrity checker rejects a semantic token hex that isn't a declared primitive", JSON.stringify(unresolvedResult.errors));
+
+  const missingTypographyStyle = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  delete missingTypographyStyle.tokens.typography.caption;
+  const missingTypographyResult = checkIntegrity(missingTypographyStyle);
+  ok(missingTypographyResult.ok === false, "integrity checker rejects a manifest missing a required typography style", JSON.stringify(missingTypographyResult.errors));
+  ok(missingTypographyResult.errors.some((e) => e.includes("caption")), "the specific missing typography style is named in the error", JSON.stringify(missingTypographyResult.errors));
+
+  const nonIncreasingSpacing = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  nonIncreasingSpacing.tokens.spacing.scale = [4, 8, 8, 16];
+  const spacingResult = checkIntegrity(nonIncreasingSpacing);
+  ok(spacingResult.ok === false, "integrity checker rejects a spacing scale that is not strictly increasing", JSON.stringify(spacingResult.errors));
+
+  const incompleteAccessibility = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  delete incompleteAccessibility.accessibility.focusRule;
+  const a11yResult = checkIntegrity(incompleteAccessibility);
+  ok(a11yResult.ok === false, "integrity checker rejects an accessibility block missing a required rule", JSON.stringify(a11yResult.errors));
+}
+
+// ── 2.4 Inverted-dark fixture is rejected ───────────────────────────────────
+section("2.4 A mechanically-inverted dark theme is rejected");
+{
+  const { checkNotInvertedDark } = await importFrom("services/nofida-hub-adapter/ai/designer/design-system-validators.mjs");
+
+  function invertHex(hex) {
+    const int = parseInt(hex.replace("#", ""), 16);
+    const r = 255 - ((int >> 16) & 255);
+    const g = 255 - ((int >> 8) & 255);
+    const b = 255 - (int & 255);
+    return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+  }
+
+  const invertedManifest = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  const invertedDark = {};
+  for (const [name, hex] of Object.entries(RECORDED_CYCLE_MANIFEST.semanticTokens.light)) {
+    invertedDark[name] = invertHex(hex);
+  }
+  invertedManifest.semanticTokens.dark = invertedDark;
+
+  const invertedResult = checkNotInvertedDark(invertedManifest);
+  ok(invertedResult.ok === false, "a dark theme that is a 100% channel inversion of light is rejected", JSON.stringify(invertedResult.errors));
+
+  // Sanity: the recorded (real) fixture is NOT flagged even though a couple
+  // of individual tokens may coincidentally invert.
+  const realResult = checkNotInvertedDark(RECORDED_CYCLE_MANIFEST);
+  ok(realResult.ok === true, "a legitimately-designed dark theme is not rejected by the same heuristic", JSON.stringify(realResult.errors));
+}
+
+// ── 2.5 Art director: contract + rationale validation, retry-on-invalid ────
+section("2.5 Art director: contract + rationale validation, retry-on-invalid");
+{
+  const { directArt } = await importFrom("services/nofida-hub-adapter/ai/designer/art-director.mjs");
+
+  const goodAnswer = JSON.stringify({ ...RECORDED_CYCLE_ART_DIRECTION, rationale: RECORDED_CYCLE_ART_DIRECTION_RATIONALE });
+  const happyService = makeFakeAiSettingsService({ answers: [goodAnswer] });
+  const happyResult = await directArt({ productBrief: RECORDED_CYCLE_BRIEF, productArchitecture: RECORDED_CYCLE_ARCHITECTURE }, { aiSettingsService: happyService });
+  ok(happyResult.ok === true && happyService.callCount() === 1, "valid first-attempt ArtDirection+rationale is accepted without a retry", JSON.stringify(happyResult.error));
+  ok(happyResult.ok && happyResult.rationale === RECORDED_CYCLE_ART_DIRECTION_RATIONALE, "rationale is returned separately from the contract fields");
+  ok(happyResult.ok && !("rationale" in happyResult.artDirection), "rationale is stripped out of the ArtDirection object itself (contract stays immutable)");
+
+  // Missing rationale is a retryable validation failure, not silently accepted.
+  const missingRationaleThenGood = makeFakeAiSettingsService({ answers: [JSON.stringify(RECORDED_CYCLE_ART_DIRECTION), goodAnswer] });
+  const retryResult = await directArt({ productBrief: RECORDED_CYCLE_BRIEF, productArchitecture: RECORDED_CYCLE_ARCHITECTURE }, { aiSettingsService: missingRationaleThenGood });
+  ok(retryResult.ok === true && missingRationaleThenGood.callCount() === 2, "a response missing rationale is retried and recovers", missingRationaleThenGood.callCount());
+}
+
+// ── 2.6 Design system generator: deep-validator retry loop ─────────────────
+section("2.6 Design system generator: validate → repair-retry with specific errors → fail structurally");
+{
+  const { generateDesignSystem } = await importFrom("services/nofida-hub-adapter/ai/designer/design-system-generator.mjs");
+
+  const happyService = makeFakeAiSettingsService({ answers: [JSON.stringify(RECORDED_CYCLE_MANIFEST)] });
+  const happyResult = await generateDesignSystem({ productBrief: RECORDED_CYCLE_BRIEF, artDirection: RECORDED_CYCLE_ART_DIRECTION }, { aiSettingsService: happyService });
+  ok(happyResult.ok === true && happyService.callCount() === 1, "a valid first-attempt manifest is accepted without a retry", JSON.stringify(happyResult.error));
+
+  // Broken manifest (bad contrast: near-identical text/background) once, then the good recorded fixture.
+  const brokenManifest = JSON.parse(JSON.stringify(RECORDED_CYCLE_MANIFEST));
+  brokenManifest.semanticTokens.light["text.primary"] = brokenManifest.semanticTokens.light["background.canvas"]; // 1:1 contrast — a hard fail
+  let repairPromptSeenErrors = null;
+  const retryService = {
+    callCount: () => calls,
+    async resolveModelForRole() { return { providerId: "fake", providerLabel: "Fake", modelId: "fake-model" }; },
+    async callWithResolvedModel({ message }) {
+      calls += 1;
+      if (calls === 2) repairPromptSeenErrors = message; // the repair-retry message
+      return { answer: calls === 1 ? JSON.stringify(brokenManifest) : JSON.stringify(RECORDED_CYCLE_MANIFEST), providerId: "fake", providerLabel: "Fake", modelId: "fake-model" };
+    },
+  };
+  let calls = 0;
+  const retryResult = await generateDesignSystem({ productBrief: RECORDED_CYCLE_BRIEF, artDirection: RECORDED_CYCLE_ART_DIRECTION }, { aiSettingsService: retryService });
+  ok(retryResult.ok === true && retryService.callCount() === 2, "generator recovers after one contract/contrast-violating attempt", retryService.callCount());
+  ok(typeof repairPromptSeenErrors === "string" && repairPromptSeenErrors.includes("contrast"), "the repair-retry message carries the SPECIFIC validator error, not a generic 'try again'", (repairPromptSeenErrors || "").slice(0, 400));
+
+  // Exhausted retries — broken both times fails structurally.
+  const failService = makeFakeAiSettingsService({ answers: [JSON.stringify(brokenManifest), JSON.stringify(brokenManifest)] });
+  const failResult = await generateDesignSystem({ productBrief: RECORDED_CYCLE_BRIEF, artDirection: RECORDED_CYCLE_ART_DIRECTION }, { aiSettingsService: failService });
+  ok(failResult.ok === false && failResult.error?.code === "contract_violation", "exhausting the retry budget fails structurally, not silently", JSON.stringify(failResult.error));
+  ok(failService.callCount() === 2, "exactly MAX_RETRIES+1 attempts were made before giving up", failService.callCount());
+}
+
+// ── 2.7 Validators are pure code — no network access, no provider import ───
+section("2.7 Validators run without any network access");
+{
+  const validatorsSrc = fs.readFileSync(path.join(REPO_ROOT, "services/nofida-hub-adapter/ai/designer/design-system-validators.mjs"), "utf8");
+  ok(!/ai-service|fetch\(|http:|https:/i.test(validatorsSrc), "design-system-validators.mjs imports no provider/network module and calls no fetch");
+
+  const { checkContrast, checkIntegrity, checkNotInvertedDark, validateManifest } =
+    await importFrom("services/nofida-hub-adapter/ai/designer/design-system-validators.mjs");
+  const start = Date.now();
+  const r1 = checkContrast(RECORDED_CYCLE_MANIFEST);
+  const r2 = checkIntegrity(RECORDED_CYCLE_MANIFEST);
+  const r3 = checkNotInvertedDark(RECORDED_CYCLE_MANIFEST);
+  const r4 = validateManifest(RECORDED_CYCLE_MANIFEST);
+  const elapsed = Date.now() - start;
+  ok([r1, r2, r3, r4].every((r) => typeof r.ok === "boolean"), "all four validators return synchronously (no Promise, no await needed)");
+  ok(elapsed < 50, "all four validators complete in well under a network round-trip's worth of time", `${elapsed}ms`);
+}
+
+// ── 2.8 Pipeline wiring: art_direction + design_system stages run and cache ─
+section("2.8 Pipeline runs art_direction + design_system with the real modules and caches them");
+{
+  const { runPipeline, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { createDesignerInvokeStage } = await importFrom("services/nofida-hub-adapter/ai/designer/stage-invoker.mjs");
+
+  const answers = [
+    JSON.stringify(RECORDED_CYCLE_BRIEF),
+    JSON.stringify(RECORDED_CYCLE_ARCHITECTURE),
+    JSON.stringify({ ...RECORDED_CYCLE_ART_DIRECTION, rationale: RECORDED_CYCLE_ART_DIRECTION_RATIONALE }),
+    JSON.stringify(RECORDED_CYCLE_MANIFEST),
+  ];
+  const providerFake = makeFakeAiSettingsService({ answers });
+  const invokeStage = createDesignerInvokeStage({ aiSettingsService: providerFake, briefInput: { request: CYCLE_APP_REQUEST } });
+  const session = { stageArtifacts: {} };
+
+  const firstRun = await runPipeline({ session, invokeStage });
+  ok(firstRun.ok === false && firstRun.error.stage === "components" && firstRun.error.code === "stage_not_wired", "pipeline runs all four real stages then stops cleanly at the next un-wired stage", JSON.stringify(firstRun.error));
+  ok(firstRun.results.length === 4 && firstRun.results.every((r) => r.status === "ok"), "brief, product_architecture, art_direction, and design_system all complete with status 'ok'", JSON.stringify(firstRun.results.map((r) => [r.stage, r.status])));
+  ok(providerFake.callCount() === 4, "provider invoked exactly once per real stage on a cold run", providerFake.callCount());
+
+  const artDirectionArtifact = session.stageArtifacts.art_direction.output;
+  ok(artDirectionArtifact && !("rationale" in artDirectionArtifact), "the cached art_direction artifact holds pure ArtDirection fields, not the rationale wrapper");
+
+  const secondRun = await runPipeline({ session, invokeStage });
+  ok(secondRun.error.stage === "components", "second run against the same session reaches the same un-wired stage");
+  ok(providerFake.callCount() === 4, "second run resumes all four real stages from the session cache — no additional provider invocations", providerFake.callCount());
 }
 
 console.log(`\n${passed} passed, ${failures} failed`);
