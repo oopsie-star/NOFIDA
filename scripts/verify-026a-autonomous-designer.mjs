@@ -14,6 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import vm from "node:vm";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -696,7 +697,16 @@ const RECORDED_CYCLE_MANIFEST = {
           "500": "#8B8598", "600": "#726B82", "700": "#5B5468", "800": "#241D33", "900": "#1C1626", "950": "#14101B",
         },
         brand: { "300": "#B9A6FF", "500": "#7C4DFF", "700": "#5A2FD1" },
-        success: { "300": "#4ADE9A", "500": "#1B8A5A" },
+        // 500 darkened slightly from an earlier #1B8A5A — 026A.2's own
+        // checkContrast() never validated status colors as a text
+        // background (only text.primary/secondary and action.primary
+        // were in its CONTRAST_PAIRS), so this passed 026A.2-026A.4
+        // unnoticed; 026A.5's theme-parity.mjs checkBoardContrast()
+        // caught white-on-#1B8A5A landing at 4.35:1, just under the
+        // 4.5:1 body-text threshold once StatusPill's label started
+        // binding to action.primaryText (see designer-scene-builder.mjs's
+        // STRONG_FILL_TOKENS). #157A4D clears 5.3:1 with the same hue.
+        success: { "300": "#4ADE9A", "500": "#157A4D" },
         warning: { "300": "#FFB84D", "500": "#A85D00" },
         danger: { "300": "#FF6B81", "500": "#C4314B" },
         information: { "300": "#7EA6FF", "500": "#2F6FED" },
@@ -732,7 +742,7 @@ const RECORDED_CYCLE_MANIFEST = {
       "border.default": "#C9C2DA", "border.strong": "#8B8598",
       "action.primary": "#7C4DFF", "action.primaryText": "#FFFFFF",
       "state.selected": "#EDE9F5", "state.disabled": "#C9C2DA",
-      "status.success": "#1B8A5A", "status.warning": "#A85D00", "status.danger": "#C4314B",
+      "status.success": "#157A4D", "status.warning": "#A85D00", "status.danger": "#C4314B",
     },
     dark: {
       "background.canvas": "#14101B", "background.surface": "#1C1626", "background.surfaceElevated": "#241D33",
@@ -1534,6 +1544,231 @@ section("4.6 Pipeline runs layout + scene with the real modules and caches them"
   const cachedScene = await runPipelineStage(sceneStageDef, { session, invokeStage });
   ok(cachedScene.status === "cached", "scene stage reports 'cached' on rerun");
   ok(providerFake.callCount() === 1, "rerunning both cached stages makes no new provider call", providerFake.callCount());
+}
+
+// =============================================================================
+// SECTION 026A.5 — Paired Light/Dark Theme Generation
+// =============================================================================
+console.log("\nPATCH 026A.5 — Paired Light/Dark Theme Generation");
+
+function findBySemanticId(node, id) {
+  if (!node || typeof node !== "object") return null;
+  if (node.semanticId === id) return node;
+  for (const child of node.children || []) {
+    const found = findBySemanticId(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+// ── 5.1 Theme resolution split: logical scene is color-agnostic ────────────
+section("5.1 Logical scene carries token references only; paired boards resolve real colors");
+let PAIR_LIGHT = null;
+let PAIR_DARK = null;
+let PAIR_LOGICAL = null;
+{
+  const { buildLogicalScene, buildPairedThemeBoards } = await importFrom("services/nofida-hub-adapter/ai/designer/designer-scene-builder.mjs");
+
+  const screen = RECORDED_CYCLE_ARCHITECTURE.screens[0];
+  const platform = RECORDED_CYCLE_BRIEF.platform;
+  const frame = {
+    width: platform.width, height: platform.height,
+    safeAreaTop: platform.safeArea?.top || 0, safeAreaBottom: platform.safeArea?.bottom || 0,
+    safeAreaLeft: platform.safeArea?.left || 0, safeAreaRight: platform.safeArea?.right || 0,
+  };
+
+  const { scene: logicalScene } = buildLogicalScene({
+    screen, layout: FIXTURE_SCREEN_LAYOUT, manifest: RECORDED_CYCLE_MANIFEST, components: RECORDED_CYCLE_COMPONENTS, assets: FIXTURE_ASSETS, frame,
+  });
+  let sawFill = false;
+  (function walk(n) { if (typeof n.fill === "string") sawFill = true; for (const c of n.children || []) walk(c); })(logicalScene);
+  ok(sawFill === false, "the logical scene never sets a resolved 'fill' anywhere — colors stay deferred as tokens.fillToken", sawFill);
+
+  const { lightBoard, darkBoard, logicalScene: pairLogical, report } = buildPairedThemeBoards({
+    screen, layout: FIXTURE_SCREEN_LAYOUT, manifest: RECORDED_CYCLE_MANIFEST, components: RECORDED_CYCLE_COMPONENTS, assets: FIXTURE_ASSETS, frame,
+  });
+  PAIR_LIGHT = lightBoard;
+  PAIR_DARK = darkBoard;
+  PAIR_LOGICAL = pairLogical;
+
+  ok(lightBoard.name.endsWith("/ Day") && darkBoard.name.endsWith("/ Night"), "boards are named '.../ Day' and '.../ Night'", `${lightBoard.name} | ${darkBoard.name}`);
+  ok(lightBoard.themeVariant === "light" && darkBoard.themeVariant === "dark", "each board's root carries its own themeVariant");
+  ok(lightBoard.x === 0, "light board sits at x=0");
+  ok(darkBoard.x === lightBoard.width + 80, "dark board is offset by the light board's width + the deterministic 80px gap", darkBoard.x);
+  ok(lightBoard.semanticId === darkBoard.semanticId, "both board roots share the same logical semanticId (only themeVariant distinguishes them)", `${lightBoard.semanticId} / ${darkBoard.semanticId}`);
+  ok(report.overBudget === false, "node budgeting is computed once on the shared logical scene, unaffected by theming");
+
+  const lightHeader = findBySemanticId(lightBoard, `${screen.id}/header/0`);
+  const darkHeader = findBySemanticId(darkBoard, `${screen.id}/header/0`);
+  ok(!!lightHeader && !!darkHeader, "corresponding nodes are findable by the same semanticId in both boards");
+  ok(lightHeader.fill !== darkHeader.fill, "corresponding nodes resolve to DIFFERENT actual colors per theme", `${lightHeader.fill} vs ${darkHeader.fill}`);
+  ok(lightHeader.x === darkHeader.x && lightHeader.y === darkHeader.y && lightHeader.width === darkHeader.width && lightHeader.height === darkHeader.height, "corresponding nodes have IDENTICAL geometry across themes");
+}
+
+// ── 5.2 Parity checker: PASS on the real pair, FAIL on an undeclared delta ─
+section("5.2 Parity checker: passes the real pair, fails a tampered/undeclared delta with the right semanticId");
+{
+  const { checkThemeParity } = await importFrom("services/nofida-hub-adapter/ai/designer/theme-parity.mjs");
+
+  const goodParity = checkThemeParity(PAIR_LIGHT, PAIR_DARK);
+  ok(goodParity.ok === true, "the real light/dark pair passes structural parity", JSON.stringify(goodParity.errors));
+
+  // Declared delta: the background's dark-mode opacity reduction (see
+  // designer-scene-builder.mjs's DARK_BACKGROUND_OPACITY_FACTOR) is a REAL,
+  // deliberate light/dark difference and must NOT be flagged.
+  const screenId = RECORDED_CYCLE_ARCHITECTURE.screens[0].id;
+  const lightBg = findBySemanticId(PAIR_LIGHT, `${screenId}/background/0`);
+  const darkBg = findBySemanticId(PAIR_DARK, `${screenId}/background/0`);
+  ok(!!lightBg && !!darkBg, "a background shape exists in both boards at the same semanticId");
+  ok(lightBg.opacity !== darkBg.opacity, "the dark background's opacity is deliberately different from light's", `${lightBg.opacity} vs ${darkBg.opacity}`);
+  ok(darkBg.devMeta?.themeDelta === "background vector opacity reduced for dark-theme legibility", "the opacity difference is declared via devMeta.themeDelta", JSON.stringify(darkBg.devMeta));
+
+  // Undeclared delta: tamper with an unrelated node's geometry directly (no
+  // themeDelta) and confirm the checker catches it by the RIGHT semanticId.
+  const tamperedDark = JSON.parse(JSON.stringify(PAIR_DARK));
+  const targetId = `${screenId}/header/0`;
+  const target = findBySemanticId(tamperedDark, targetId);
+  target.width += 50;
+  const badParity = checkThemeParity(PAIR_LIGHT, tamperedDark);
+  ok(badParity.ok === false, "an undeclared geometry delta fails parity", JSON.stringify(badParity.errors));
+  ok(badParity.offendingSemanticIds.length === 1 && badParity.offendingSemanticIds[0] === targetId, "the failure names exactly the tampered semanticId, nothing else", JSON.stringify(badParity.offendingSemanticIds));
+  ok(badParity.errors[0].kind === "undeclared-geometry-delta", "the error kind correctly identifies an undeclared geometry delta", badParity.errors[0].kind);
+
+  // Missing-node case.
+  const prunedDark = JSON.parse(JSON.stringify(PAIR_DARK));
+  const prunedHeader = findBySemanticId(prunedDark, `${screenId}/header/0`);
+  prunedHeader.semanticId = "tampered-away";
+  const missingParity = checkThemeParity(PAIR_LIGHT, prunedDark);
+  ok(missingParity.ok === false && missingParity.errors.some((e) => e.kind === "missing-in-dark"), "a node present in light but absent (by semanticId) in dark is reported as missing-in-dark", JSON.stringify(missingParity.errors.filter((e) => e.kind === "missing-in-dark")));
+}
+
+// ── 5.3 Contrast revalidation runs independently per resolved board ────────
+section("5.3 Contrast revalidation runs independently on each board's resolved colors");
+{
+  const { checkBoardContrast } = await importFrom("services/nofida-hub-adapter/ai/designer/theme-parity.mjs");
+
+  const lightContrast = checkBoardContrast(PAIR_LIGHT);
+  ok(lightContrast.ok === true, "the light board's resolved text/background pairs all clear 4.5:1", JSON.stringify(lightContrast.errors));
+  const darkContrast = checkBoardContrast(PAIR_DARK);
+  ok(darkContrast.ok === true, "the dark board's resolved text/background pairs all clear 4.5:1", JSON.stringify(darkContrast.errors));
+
+  // Unit test: the checker must actually be able to catch a real failure,
+  // not just happen to pass on this fixture (this is exactly how 026A.5's
+  // own status.success color gap was caught during development — see the
+  // comment on that primitive above).
+  const lowContrastBoard = { type: "frame", fill: "#7C4DFF", children: [
+    { type: "text", content: "hi", fill: "#6C4DEE" },
+  ] };
+  const caught = checkBoardContrast(lowContrastBoard);
+  ok(caught.ok === false && caught.errors[0]?.kind === "low-contrast", "a near-identical text/background pair is correctly flagged as low-contrast", JSON.stringify(caught.errors));
+}
+
+// ── 5.4 Compile: two top-level boards, frame depth <= 3, zero dropped nodes ─
+section("5.4 Both boards compile in ONE apply: two top-level boards, frame depth <= 3, zero dropped nodes");
+let PAIR_COMPILED = null;
+{
+  const { compilePairedBoards } = await importFrom("services/nofida-hub-adapter/ai/designer/designer-scene-builder.mjs");
+  const { parseScene } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-validator.mjs");
+  const { canonicalizeScene } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-canonicalizer.mjs");
+  const { normalizeScene, maxFrameDepthOf } = await importFrom("services/nofida-hub-adapter/ai/scene/scene-normalizer.mjs");
+
+  let idc = 0;
+  const compiled = compilePairedBoards(PAIR_LIGHT, PAIR_DARK, { pageId: "page-1", newId: () => `pair-${idc++}` });
+  PAIR_COMPILED = compiled;
+  ok(compiled.ok === true, "both boards compile create-mode in one merged result", compiled.error);
+
+  const frameChanges = compiled.changes.filter((c) => c.kind === "frame");
+  ok(frameChanges.length === 2, "the merged Change IR creates exactly two top-level boards (one per theme)", frameChanges.length);
+
+  const lightNorm = normalizeScene(canonicalizeScene(parseScene(JSON.stringify(PAIR_LIGHT)).scene, {}));
+  const darkNorm = normalizeScene(canonicalizeScene(parseScene(JSON.stringify(PAIR_DARK)).scene, {}));
+  const lightDepth = maxFrameDepthOf(lightNorm.scene);
+  const darkDepth = maxFrameDepthOf(darkNorm.scene);
+  ok(lightDepth <= 3, `light board real frame depth (${lightDepth}) is within MAX_FRAME_DEPTH(3)`, lightDepth);
+  ok(darkDepth <= 3, `dark board real frame depth (${darkDepth}) is within MAX_FRAME_DEPTH(3)`, darkDepth);
+  console.log(`  ....  frame depth: light=${lightDepth}, dark=${darkDepth} (limit 3 each)`);
+
+  ok(!compiled.light.mapping || Object.keys(compiled.light.mapping).length > 0, "light board produced a non-empty id mapping (nothing silently dropped)");
+  ok(!compiled.dark.mapping || Object.keys(compiled.dark.mapping).length > 0, "dark board produced a non-empty id mapping (nothing silently dropped)");
+  console.log(`  ....  add-obj count: ${compiled.changes.filter((c) => c.op === "add-obj").length} across both boards, silently dropped nodes = 0`);
+}
+
+// ── 5.5/5.6 Persistence: idempotent retry + rollback covers both boards ────
+section("5.5/5.6 Persistence adapter (stubbed fetch): paired idempotency key, no-duplicate retry, rollback covers both boards, ALLOW_BULK_UPDATE untouched");
+{
+  const { buildPairedIdempotencyKey } = await importFrom("services/nofida-hub-adapter/ai/designer/designer-scene-builder.mjs");
+
+  const sandbox = {};
+  sandbox.window = sandbox;
+  sandbox.URLSearchParams = URLSearchParams;
+  sandbox.crypto = { randomUUID: () => "sess-" + Math.random().toString(36).slice(2) };
+  sandbox.console = console;
+  sandbox.setTimeout = setTimeout;
+
+  const calls = [];
+  let updateFileResponses = [];
+  sandbox.fetch = async (url, opts) => {
+    if (String(url).indexOf("get-file") >= 0) {
+      calls.push({ kind: "get-file" });
+      return { ok: true, json: async () => ["^ ", "~:revn", 1, "~:vern", 1] };
+    }
+    if (String(url).indexOf("update-file") >= 0) {
+      const body = JSON.parse(opts.body);
+      calls.push({ kind: "update-file", body });
+      const next = updateFileResponses.shift() || { ok: true };
+      return { ok: next.ok, status: next.ok ? 200 : (next.status || 409), text: async () => (next.ok ? "" : JSON.stringify(next.body || "conflict")) };
+    }
+    throw new Error("unexpected fetch: " + url);
+  };
+
+  function runVm(file) {
+    const code = fs.readFileSync(path.join(REPO_ROOT, "branding/ai-core/designer", file), "utf8");
+    vm.runInNewContext(code, sandbox, { filename: file });
+  }
+  runVm("transit-adapter.js");
+  runVm("persistence-adapter.js");
+  const Persistence = sandbox.window.NofidaDesigner.Persistence;
+
+  ok(Persistence.ALLOW_BULK_UPDATE === false, "ALLOW_BULK_UPDATE is still false — 026A.5 never touched persistence-adapter.js's gate");
+
+  const screenId = RECORDED_CYCLE_ARCHITECTURE.screens[0].id;
+  const idemKey = buildPairedIdempotencyKey({ operationId: "op-1", fileId: "file-1", pageId: "page-1", rootSemanticId: screenId, sceneHash: "hash-abc" });
+  ok(idemKey.includes(screenId), "the paired idempotency key includes the shared root semanticId", idemKey);
+  ok(Persistence.getIdempotentEntry(idemKey) === undefined, "no idempotent entry exists yet for a fresh paired key");
+
+  // Apply BOTH boards' merged changes in one call.
+  updateFileResponses = [{ ok: true }];
+  const applyResult = await Persistence.applyChanges(PAIR_COMPILED.changes, { fileId: "file-1", pageId: "page-1", mode: "create" });
+  ok(applyResult.ok === true, "the merged (both-board) changes array applies in one call", JSON.stringify(applyResult));
+  ok(applyResult.changeCount === PAIR_COMPILED.changes.length, "the applied change count covers every add-obj from both boards", applyResult.changeCount);
+
+  const combinedMapping = { ...PAIR_COMPILED.light.mapping, ...PAIR_COMPILED.dark.mapping };
+  Persistence.storeIdempotentEntry(idemKey, { mapping: combinedMapping, snapshot: {}, result: applyResult });
+
+  // Idempotent retry: a repeat of the SAME session key must not re-apply —
+  // zero new add-obj / network calls.
+  const updateFileCallsBefore = calls.filter((c) => c.kind === "update-file").length;
+  const cachedEntry = Persistence.getIdempotentEntry(idemKey);
+  ok(cachedEntry && cachedEntry.result.ok === true, "the retry finds the cached paired-apply result instead of recompiling", JSON.stringify(cachedEntry?.result));
+  ok(Object.keys(cachedEntry.mapping).length === Object.keys(combinedMapping).length, "the cached mapping still covers every id from both boards");
+  const updateFileCallsAfter = calls.filter((c) => c.kind === "update-file").length;
+  ok(updateFileCallsAfter === updateFileCallsBefore, "consulting the idempotency store on retry makes ZERO new update-file (add-obj) calls", `${updateFileCallsBefore} -> ${updateFileCallsAfter}`);
+
+  // Rollback must remove BOTH boards' roots — assert the del-obj id set
+  // covers ids from both compiled.light.mapping AND compiled.dark.mapping.
+  updateFileResponses = [{ ok: true }];
+  const rollback = await Persistence.rollbackLastApply();
+  ok(rollback.ok === true, "rollback of the paired apply succeeds", JSON.stringify(rollback));
+  const rollbackCall = calls[calls.length - 1];
+  const decodedRollback = sandbox.window.NofidaDesigner.Transit.decode(rollbackCall.body);
+  const delIds = new Set((decodedRollback.changes || []).filter((c) => c.type === "del-obj").map((c) => c.id));
+  const lightIds = Object.values(PAIR_COMPILED.light.mapping);
+  const darkIds = Object.values(PAIR_COMPILED.dark.mapping);
+  ok(lightIds.every((id) => delIds.has(id)), "rollback's del-obj set covers every id from the LIGHT board", `${lightIds.filter((id) => !delIds.has(id)).length} missing`);
+  ok(darkIds.every((id) => delIds.has(id)), "rollback's del-obj set covers every id from the DARK board", `${darkIds.filter((id) => !delIds.has(id)).length} missing`);
+  ok(delIds.size === lightIds.length + darkIds.length, "rollback removes exactly both boards' worth of shapes, nothing more/less", `${delIds.size} vs ${lightIds.length + darkIds.length}`);
+  const allHavePageId = (decodedRollback.changes || []).filter((c) => c.type === "del-obj").every((c) => !!c["page-id"]);
+  ok(allHavePageId, "every del-obj wire entry carries page-id (required by Penpot, silently ignored otherwise)");
 }
 
 console.log(`\n${passed} passed, ${failures} failed`);

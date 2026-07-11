@@ -1,34 +1,47 @@
-// PATCH 026A.4 — Scene Builder.
+// PATCH 026A.4/026A.5 — Scene Builder + paired light/dark theme resolution.
 //
 // Combines product structure (ProductArchitecture screen) + design system
 // (DesignSystemManifest) + components + assets + layout-engine geometry +
-// content into ONE screenSpec per screen, compatible with the EXISTING
-// 025A pipeline (parseScene() -> canonicalizeScene() -> normalizeScene() ->
+// content into ONE LOGICAL scene, compatible with the EXISTING 025A
+// pipeline (parseScene() -> canonicalizeScene() -> normalizeScene() ->
 // compileScene()) — nothing lower; this module never emits Penpot Transit/
 // UUIDs.
 //
-// Deterministic, like asset-resolver.mjs — every creative/product decision
-// (what components exist, what content matters, what visual direction) was
-// already made in earlier 026A stages. This module's job is mechanical
-// assembly: pair each screen SECTION with the best-matching COMPONENT
-// (keyword-scored, greedy-unique), expand calendar-role sections into a
-// grid of day cells, resolve the layout-planner's SemanticLayout tree into
-// absolute geometry via layout-engine.mjs, and resolve every token
-// reference (color/typography/radius) into BOTH a real value (so the
-// EXISTING compiler renders it correctly today — it resolves nothing
-// itself, see penpot-shape-adapter.mjs) AND the symbolic `tokens.*`
-// metadata (so the binding survives for future re-theming/handoff).
+// PATCH 026A.5 split this into two passes:
+//   1. buildLogicalScene() — theme-AGNOSTIC. Geometry (from layout-engine,
+//      identical regardless of theme), structure, content, and token
+//      REFERENCES (tokens.fillToken etc.) are all decided here. Colors are
+//      deliberately left unresolved — `fill` is never set in the logical
+//      scene, only the token reference that WOULD resolve to one.
+//   2. resolveThemeBoard() — pure code, no LLM (026A.5 global rule 3):
+//      walks the logical scene and resolves every token reference against
+//      ONE theme from the manifest, producing a themed board. Calling this
+//      twice (light, dark) on the SAME logical scene is what guarantees
+//      identical information architecture/geometry between the pair —
+//      there is structurally no way for them to diverge except where this
+//      function deliberately introduces a themeDelta (see
+//      DARK_BACKGROUND_OPACITY_FACTOR below).
+// buildScreenSpec() (026A.4's original single-theme entry point) is now a
+// thin wrapper over the two passes, so stage-invoker.mjs's existing "scene"
+// stage needed no changes.
 //
 // Every generated node carries a stable `semanticId`
 // (`<screen-id>/<component-role>/<index>[/part]`), a meaningful layer
 // `name`, `componentRole`, `tokens`, and `themeVariant` — see
-// scene-schema.mjs's PATCH 026A.0 metadata fields.
+// scene-schema.mjs's PATCH 026A.0 metadata fields. Corresponding light/dark
+// nodes share the SAME semanticId (themeVariant is what distinguishes
+// them) — this is also what scene-canonicalizer.mjs's nid-from-semanticId
+// rule (026A.0) relies on to keep the pair's identities correlated.
 
 import {
   resolveLayout, enforceNodeBudget, measureText,
   resolveRadiusToken, resolveColorToken, resolveTypographyToken,
 } from "./layout-engine.mjs";
 import { MAX_NODES } from "../scene/scene-schema.mjs";
+import { parseScene } from "../scene/scene-validator.mjs";
+import { canonicalizeScene } from "../scene/scene-canonicalizer.mjs";
+import { normalizeScene } from "../scene/scene-normalizer.mjs";
+import { compileScene } from "../scene/scene-compiler.mjs";
 
 // ── Section <-> component matching ──────────────────────────────────────
 // Greedy-unique keyword scoring: each component can only be assigned to one
@@ -123,7 +136,7 @@ function contentFor(component, screen) {
   return result;
 }
 
-// ── Style resolution (token -> real value, keeping the token reference) ──
+// ── Token references (theme-agnostic — no color resolution here) ───────
 function compactTokens(tokens) {
   const out = {};
   for (const [key, value] of Object.entries(tokens || {})) {
@@ -132,17 +145,17 @@ function compactTokens(tokens) {
   return Object.keys(out).length ? out : undefined;
 }
 
-function resolveNodeStyle(tokenBindings, manifest, themeVariant) {
+function resolveNodeStyleTokens(tokenBindings, manifest) {
   const fillRef = tokenBindings?.fill || "background.surface";
   const radiusRef = tokenBindings?.cornerRadius;
-  const fill = resolveColorToken(manifest, themeVariant, fillRef) || resolveColorToken(manifest, themeVariant, "background.surface") || "#FFFFFF";
-  // Deliberately no fallback pixel radius: if there's no resolvable
-  // radiusToken, borderRadius stays unset rather than hardcoding a value
-  // token-coverage.mjs would then have to flag as unbound — the point of a
-  // token-driven system is that an unstyled property beats a hidden magic
-  // number.
+  // Radius is theme-INDEPENDENT in the 026A.2 manifest schema (one
+  // tokens.radius map, not split by theme) so it's safe to resolve eagerly
+  // here rather than deferring to resolveThemeBoard(). Deliberately no
+  // fallback pixel radius when there's no resolvable token: an unstyled
+  // property beats a hidden magic number (token-coverage.mjs would have to
+  // flag a hardcoded fallback as unbound anyway).
   const borderRadius = radiusRef ? (resolveRadiusToken(manifest, radiusRef) ?? undefined) : undefined;
-  return { fill, borderRadius, fillRef, radiusRef };
+  return { borderRadius, fillRef, radiusRef };
 }
 
 // ── Leaf measurement (layout-engine's injectable measurer) ──────────────
@@ -173,8 +186,10 @@ function makeLeafMeasurer(matchedComponents, screen, manifest) {
   };
 }
 
-// ── Realize resolved-geometry leaves into real Scene Model nodes ────────
-function realizeCalendarCell(cellNode, manifest, themeVariant, screenId, sectionIndex, cellIndex) {
+// ── Realize resolved-geometry leaves into real (theme-agnostic) Scene
+// Model nodes — every node below carries `tokens.fillToken` but never
+// `fill` itself; resolveThemeBoard() is the only place `fill` gets set. ──
+function realizeCalendarCell(cellNode, screenId, sectionIndex, cellIndex) {
   const overridden = cellNode.devMeta?.localOverride;
   return {
     type: "text",
@@ -182,22 +197,20 @@ function realizeCalendarCell(cellNode, manifest, themeVariant, screenId, section
     x: cellNode.x, y: cellNode.y, width: cellNode.width, height: cellNode.height,
     content: overridden ? cellNode.name : String(cellIndex + 1),
     fontSize: 13, fontWeight: "500", align: "center",
-    fill: resolveColorToken(manifest, themeVariant, "text.primary") || "#000000",
     tokens: compactTokens({ textStyleToken: "typography.caption", fillToken: "text.primary" }),
     semanticId: `${screenId}/calendar-cell/${sectionIndex}/${cellIndex}`,
     componentRole: "calendar-cell",
-    themeVariant,
     devMeta: cellNode.devMeta,
   };
 }
 
-function realizeSectionNode(childNode, component, sectionText, screen, manifest, themeVariant, index) {
+function realizeSectionNode(childNode, component, sectionText, screen, manifest, index) {
   const calendarRule = matchCalendarRule(sectionText);
   const isCalendarGrid = calendarRule && Array.isArray(childNode.children) && childNode.children.length > 0;
 
   if (isCalendarGrid) {
     const cells = childNode.children.map((cellNode, cellIndex) =>
-      realizeCalendarCell(cellNode, manifest, themeVariant, screen.id, index, cellIndex));
+      realizeCalendarCell(cellNode, screen.id, index, cellIndex));
     return {
       type: "section",
       name: component ? component.name : `Calendar ${index}`,
@@ -205,14 +218,23 @@ function realizeSectionNode(childNode, component, sectionText, screen, manifest,
       tokens: compactTokens(childNode.tokens),
       semanticId: `${screen.id}/${component ? component.role : "calendar"}/${index}`,
       componentRole: component ? component.role : "calendar",
-      themeVariant,
       children: cells,
     };
   }
 
   const content = contentFor(component, screen);
-  const style = resolveNodeStyle(component?.tokenBindings, manifest, themeVariant);
+  const style = resolveNodeStyleTokens(component?.tokenBindings, manifest);
   const typography = resolveTypographyToken(manifest, "typography.cardTitle") || { size: 16, weight: "600" };
+
+  // A label sitting on a strongly-colored fill (a primary action button, a
+  // status pill) needs the token PAIRED for exactly that contrast, not the
+  // generic neutral-surface text color — text.primary is near-black/near-
+  // white and was never designed to sit on a saturated accent fill.
+  // action.primaryText is the one token the 026A.2 manifest schema
+  // guarantees is contrast-checked against a strong fill, so it's reused
+  // here for any strong-fill card, not just literal action.primary ones.
+  const STRONG_FILL_TOKENS = new Set(["action.primary", "status.success", "status.warning", "status.danger"]);
+  const textFillRef = STRONG_FILL_TOKENS.has(style.fillRef) ? "action.primaryText" : "text.primary";
 
   const textChild = {
     type: "text",
@@ -222,28 +244,24 @@ function realizeSectionNode(childNode, component, sectionText, screen, manifest,
     content: content.title,
     fontSize: typography.size || 16,
     fontWeight: typography.weight || "600",
-    fill: resolveColorToken(manifest, themeVariant, "text.primary") || "#000000",
-    tokens: compactTokens({ textStyleToken: "typography.cardTitle", fillToken: "text.primary" }),
+    tokens: compactTokens({ textStyleToken: "typography.cardTitle", fillToken: textFillRef }),
     semanticId: `${screen.id}/${component ? component.role : "content"}/${index}/label`,
     componentRole: component ? `${component.role}-label` : "label",
-    themeVariant,
   };
 
   return {
     type: "card",
     name: component ? component.name : `Section ${index}`,
     x: childNode.x, y: childNode.y, width: childNode.width, height: childNode.height,
-    fill: style.fill,
     borderRadius: style.borderRadius,
     tokens: compactTokens({ fillToken: style.fillRef, radiusToken: style.radiusRef, ...(childNode.tokens || {}) }),
     semanticId: `${screen.id}/${component ? component.role : "section"}/${index}`,
     componentRole: component ? component.role : "section",
-    themeVariant,
     children: [textChild],
   };
 }
 
-function buildBackgroundNodes(assets, manifest, themeVariant, screenId) {
+function buildBackgroundNodes(assets, screenId) {
   const backgroundAsset = (assets?.assets || []).find((a) => a.role.startsWith("background."));
   if (!backgroundAsset) return [];
   return (backgroundAsset.sceneNodes || [])
@@ -255,39 +273,26 @@ function buildBackgroundNodes(assets, manifest, themeVariant, screenId) {
         return null;
       }
       const fillToken = fragment?.tokens?.fillToken;
-      const fill = fillToken ? (resolveColorToken(manifest, themeVariant, fillToken) || "#CCCCCC") : "#CCCCCC";
       return {
         type: fragment.type === "ellipse" ? "ellipse" : "rectangle",
         name: fragment.name || `bg-shape-${i + 1}`,
         x: fragment.x || 0, y: fragment.y || 0, width: fragment.width || 100, height: fragment.height || 100,
         opacity: fragment.opacity, rotation: fragment.rotation,
-        fill,
         tokens: compactTokens({ fillToken }),
         semanticId: `${screenId}/background/${i}`,
         componentRole: "background",
-        themeVariant,
       };
     })
     .filter(Boolean);
 }
 
 /**
- * buildScreenSpec({ screen, layout, manifest, components, assets, themeVariant, frame }) ->
- *   { screenSpec, report }
- *   screen        - one ProductArchitecture.screens[] entry
- *   layout        - the layout-planner's SemanticLayout tree for this
- *                   screen (one child per screen.sections[i], positionally)
- *   manifest      - DesignSystemManifest
- *   components    - ComponentDefinition[]
- *   assets        - AssetResolution (for the background)
- *   themeVariant  - "light" | "dark"
- *   frame         - { width, height, safeAreaTop, safeAreaBottom, safeAreaLeft, safeAreaRight }
- * `screenSpec` is a plain object ready for the EXISTING 025A
- * parseScene()/compileScene() pipeline — nothing here talks to Penpot.
- * `report` includes layout-engine's node-budget report plus the section ->
- * component matching, for diagnostics.
+ * buildLogicalScene({ screen, layout, manifest, components, assets, frame }) -> { scene, report }
+ * Theme-AGNOSTIC: geometry, structure, content, and token REFERENCES only —
+ * no node in the returned tree carries a resolved `fill`. See this
+ * module's header for why the split exists.
  */
-export function buildScreenSpec({ screen, layout, manifest, components, assets, themeVariant = "light", frame }) {
+export function buildLogicalScene({ screen, layout, manifest, components, assets, frame }) {
   const sections = screen.sections || [];
   const matchedComponents = matchComponentsToSections(sections, components);
   const expandedLayout = expandCalendarSections(layout, sections);
@@ -299,27 +304,154 @@ export function buildScreenSpec({ screen, layout, manifest, components, assets, 
   const budgetReport = enforceNodeBudget(rootLayoutNode, MAX_NODES, {});
 
   const contentNodes = rootLayoutNode.children.map((childNode, i) =>
-    realizeSectionNode(childNode, matchedComponents[i], sections[i], screen, manifest, themeVariant, i));
+    realizeSectionNode(childNode, matchedComponents[i], sections[i], screen, manifest, i));
 
-  const backgroundNodes = buildBackgroundNodes(assets, manifest, themeVariant, screen.id);
+  const backgroundNodes = buildBackgroundNodes(assets, screen.id);
 
-  const canvasColor = resolveColorToken(manifest, themeVariant, "background.canvas") || "#FFFFFF";
   const contentBottom = rootLayoutNode.y + rootLayoutNode.height;
   const height = Math.max(frame.height, contentBottom + (frame.safeAreaBottom || 0));
 
-  const screenSpec = {
-    name: `${screen.id} (${themeVariant})`,
+  const scene = {
+    name: screen.id,
     width: frame.width,
     height,
-    fill: canvasColor,
     semanticId: screen.id,
-    themeVariant,
     tokens: compactTokens({ fillToken: "background.canvas", ...(rootLayoutNode.tokens || {}) }),
     children: [...backgroundNodes, ...contentNodes],
   };
 
   return {
-    screenSpec,
+    scene,
     report: { ...budgetReport, matchedComponents: matchedComponents.map((c) => (c ? c.id : null)) },
   };
+}
+
+// ── PATCH 026A.5 — theme resolution ─────────────────────────────────────
+// Dark decorative backgrounds get a subtler treatment than a straight
+// color-swap would give them — real design systems don't just re-tint a
+// background shape's fill for dark mode, they usually also pull back its
+// opacity so it doesn't compete with dark mode's naturally reduced
+// contrast headroom (per ArtDirection.themeStrategy). This is the ONE
+// place this module deliberately introduces a light/dark geometry-adjacent
+// difference, which is exactly why it's declared via devMeta.themeDelta —
+// theme-parity.mjs's undeclared-difference check would otherwise (rightly)
+// reject it.
+const DARK_BACKGROUND_OPACITY_FACTOR = 0.7;
+
+function resolveThemeNode(node, manifest, themeVariant) {
+  const clone = { ...node, themeVariant };
+
+  if (node.tokens?.fillToken) {
+    const fill = resolveColorToken(manifest, themeVariant, node.tokens.fillToken);
+    if (fill) clone.fill = fill;
+  }
+
+  if (node.componentRole === "background" && themeVariant === "dark" && typeof node.opacity === "number") {
+    clone.opacity = Number((node.opacity * DARK_BACKGROUND_OPACITY_FACTOR).toFixed(3));
+    clone.devMeta = { ...(node.devMeta || {}), themeDelta: "background vector opacity reduced for dark-theme legibility" };
+  }
+
+  if (Array.isArray(node.children)) {
+    clone.children = node.children.map((child) => resolveThemeNode(child, manifest, themeVariant));
+  }
+  return clone;
+}
+
+/**
+ * resolveThemeBoard(logicalScene, manifest, themeVariant, opts) -> board
+ * Pure code, no LLM (026A.5 global rule 3). Resolves every `tokens.fillToken`
+ * reference in the logical scene against ONE theme, sets `themeVariant` on
+ * every node, and positions the board via `opts.xOffset` (for the
+ * side-by-side pairing — see buildPairedThemeBoards()). Does NOT mutate
+ * `logicalScene` — returns an independent deep structure.
+ */
+export function resolveThemeBoard(logicalScene, manifest, themeVariant, opts = {}) {
+  const board = resolveThemeNode(logicalScene, manifest, themeVariant);
+  board.name = opts.name || `${logicalScene.name} (${themeVariant})`;
+  board.x = opts.xOffset || 0;
+  board.y = 0;
+  return board;
+}
+
+function baseScreenName(screen) {
+  const id = String(screen?.id || "screen").replace(/-day$|-night$/i, "");
+  return id.split(/[-_]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+/**
+ * buildScreenSpec({ screen, layout, manifest, components, assets, themeVariant, frame }) ->
+ *   { screenSpec, report }
+ * Single-theme entry point (026A.4) — a thin wrapper over
+ * buildLogicalScene() + resolveThemeBoard(), kept so stage-invoker.mjs's
+ * existing "scene" stage needs no changes.
+ */
+export function buildScreenSpec({ screen, layout, manifest, components, assets, themeVariant = "light", frame }) {
+  const { scene, report } = buildLogicalScene({ screen, layout, manifest, components, assets, frame });
+  const screenSpec = resolveThemeBoard(scene, manifest, themeVariant, { name: `${screen.id} (${themeVariant})` });
+  return { screenSpec, report };
+}
+
+/**
+ * buildPairedThemeBoards({ screen, layout, manifest, components, assets, frame, gap }) ->
+ *   { lightBoard, darkBoard, logicalScene, report }
+ * Each screen is its own top-level board (root frame); the pair is placed
+ * side by side with a deterministic offset (`gap` px, default 80) so
+ * they never overlap on the same Penpot page.
+ */
+export function buildPairedThemeBoards({ screen, layout, manifest, components, assets, frame, gap = 80 }) {
+  const { scene: logicalScene, report } = buildLogicalScene({ screen, layout, manifest, components, assets, frame });
+  const base = baseScreenName(screen);
+  const lightBoard = resolveThemeBoard(logicalScene, manifest, "light", { name: `${base} / Day`, xOffset: 0 });
+  const darkBoard = resolveThemeBoard(logicalScene, manifest, "dark", { name: `${base} / Night`, xOffset: lightBoard.width + gap });
+  return { lightBoard, darkBoard, logicalScene, report };
+}
+
+/**
+ * compilePairedBoards(lightBoard, darkBoard, { pageId, newId }) ->
+ *   { ok: true, changes, light: {mapping,snapshot,scene}, dark: {...} }
+ *   { ok: false, error }
+ * Runs EACH board through the full existing 025A pipeline independently
+ * (compileScene() only ever handles one root at a time) and merges both
+ * Change IR lists into one array — Task 3's "both boards compile through
+ * compileScene() create-mode in ONE apply" means one COMBINED changes
+ * array handed to persistence-adapter.js's existing, unmodified
+ * `Persistence.applyChanges()`, not two separate apply calls.
+ */
+export function compilePairedBoards(lightBoard, darkBoard, opts = {}) {
+  const pageId = opts.pageId;
+
+  const lightParsed = parseScene(JSON.stringify(lightBoard));
+  if (!lightParsed.ok) return { ok: false, error: `light board failed parseScene(): ${lightParsed.error}` };
+  const darkParsed = parseScene(JSON.stringify(darkBoard));
+  if (!darkParsed.ok) return { ok: false, error: `dark board failed parseScene(): ${darkParsed.error}` };
+
+  const lightNormalized = normalizeScene(canonicalizeScene(lightParsed.scene, {}));
+  const darkNormalized = normalizeScene(canonicalizeScene(darkParsed.scene, {}));
+
+  const lightCompiled = compileScene(lightNormalized.scene, { pageId, newId: opts.newId });
+  if (!lightCompiled.ok) return { ok: false, error: `light board compile failed: ${lightCompiled.error}` };
+  const darkCompiled = compileScene(darkNormalized.scene, { pageId, newId: opts.newId });
+  if (!darkCompiled.ok) return { ok: false, error: `dark board compile failed: ${darkCompiled.error}` };
+
+  return {
+    ok: true,
+    changes: [...lightCompiled.changes, ...darkCompiled.changes],
+    light: { mapping: lightCompiled.mapping, snapshot: lightCompiled.snapshot, scene: lightNormalized.scene },
+    dark: { mapping: darkCompiled.mapping, snapshot: darkCompiled.snapshot, scene: darkNormalized.scene },
+  };
+}
+
+/**
+ * buildPairedIdempotencyKey({ operationId, fileId, pageId, rootSemanticId, sceneHash, mode }) -> string
+ * Extends persistence-adapter.js's EXISTING idempotency key convention
+ * (`operationId::fileId::pageId::normalizedSceneHash::mode` — see
+ * verify-025a-scene-pipeline.mjs's section E/F) with the pair's shared
+ * logical root semanticId, inserted before the hash — the pair is applied
+ * as ONE operation (one combined changes array, one key), so this key
+ * covers both boards together; `sceneHash` should already be computed over
+ * BOTH boards' combined normalized content so an edit to either board
+ * invalidates the cached entry.
+ */
+export function buildPairedIdempotencyKey({ operationId, fileId, pageId, rootSemanticId, sceneHash, mode = "create" }) {
+  return `${operationId}::${fileId}::${pageId}::${rootSemanticId}::${sceneHash}::${mode}`;
 }
