@@ -21,6 +21,8 @@ import { planLayout } from "./layout-planner.mjs";
 import { buildScreenSpec } from "./designer-scene-builder.mjs";
 import { computeTokenCoverage } from "./token-coverage.mjs";
 import { parseScene } from "../scene/scene-validator.mjs";
+import { critiqueScreen } from "./visual-critic.mjs";
+import { planRepairs } from "./repair-planner.mjs";
 
 function stageError(stage, code, message, recoverable) {
   return Object.assign(new Error(message), { stage, code, message, recoverable: !!recoverable });
@@ -211,6 +213,58 @@ const STAGE_IMPLEMENTATIONS = {
     }
 
     return JSON.stringify(screenSpec);
+  },
+
+  // PATCH 026A.7 — single-shot critique of the current "scene" stage board.
+  // Screenshots, if any were captured for this board's semanticId, come
+  // from session.captures (see session-store.mjs's saveCaptureArtifact()) —
+  // this stage never triggers a capture itself, it only consumes whatever
+  // is already there. The multi-pass loop (pipeline.mjs's
+  // runCritiqueRepairLoop()) calls visual-critic.mjs directly instead of
+  // going through this stage, since it needs to re-evaluate the SAME
+  // logical stage multiple times, which runPipelineStage()'s cache doesn't
+  // support (see pipeline.mjs's header).
+  async critique(stageDef, session, { aiSettingsService, role }) {
+    const board = session?.stageArtifacts?.scene?.output;
+    const manifest = session?.stageArtifacts?.design_system?.output;
+    const brief = session?.stageArtifacts?.brief?.output;
+    if (!board || !manifest) {
+      throw stageError(
+        "critique",
+        "missing_input",
+        "critique stage requires completed 'scene' and 'design_system' stage artifacts in the session",
+        false,
+      );
+    }
+    const captureRevisions = session?.captures?.[board.semanticId];
+    const latestRevisionKey = captureRevisions ? Object.keys(captureRevisions).sort().slice(-1)[0] : null;
+    const latestCapture = latestRevisionKey ? captureRevisions[latestRevisionKey] : null;
+    const screenshots = latestCapture ? [{ mimeType: "image/png", dataBase64: latestCapture.pngBase64 }] : [];
+
+    const result = await critiqueScreen({ board, manifest, productBrief: brief, screenshots }, { aiSettingsService, role });
+    if (result.ok) return JSON.stringify(result.critique);
+    throw stageError("critique", result.error.code, result.error.message, false);
+  },
+
+  // PATCH 026A.7 — single-shot repair plan from the last critique. Same
+  // "not the loop" caveat as critique() above.
+  async repair(stageDef, session, { aiSettingsService, role }) {
+    const board = session?.stageArtifacts?.scene?.output;
+    const critique = session?.stageArtifacts?.critique?.output;
+    const manifest = session?.stageArtifacts?.design_system?.output;
+    if (!board || !critique || !manifest) {
+      throw stageError(
+        "repair",
+        "missing_input",
+        "repair stage requires completed 'scene', 'critique', and 'design_system' stage artifacts in the session",
+        false,
+      );
+    }
+    const result = await planRepairs({ critique, board, manifest }, { aiSettingsService, role });
+    if (result.ok) {
+      return JSON.stringify(result.localRepairImpossible ? { localRepairImpossible: true, reason: result.reason } : result.operations);
+    }
+    throw stageError("repair", result.error.code, result.error.message, false);
   },
 };
 

@@ -1352,6 +1352,10 @@ export function createAISettingsService(log = () => {}) {
         providerLabel: PROVIDER_DEFS[exactAssignment.providerId].label,
         modelId: model.id,
         modelLabel: model.displayName,
+        // PATCH 026A.7 — capability routing (see visual-critic.mjs): the
+        // resolved model's own registry capabilities (from hasCapability()
+        // above), not re-derived by the caller.
+        capabilities: Array.isArray(model.capabilities) ? model.capabilities : [],
       };
     }
 
@@ -1366,6 +1370,7 @@ export function createAISettingsService(log = () => {}) {
         providerLabel: PROVIDER_DEFS[defaultAssignment.providerId].label,
         modelId: model.id,
         modelLabel: model.displayName,
+        capabilities: Array.isArray(model.capabilities) ? model.capabilities : [],
       };
     }
 
@@ -1384,6 +1389,7 @@ export function createAISettingsService(log = () => {}) {
         providerLabel: PROVIDER_DEFS[providerId].label,
         modelId: model.id,
         modelLabel: model.displayName,
+        capabilities: Array.isArray(model.capabilities) ? model.capabilities : [],
       };
     }
 

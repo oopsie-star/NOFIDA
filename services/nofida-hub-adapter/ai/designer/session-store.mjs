@@ -159,3 +159,31 @@ export async function getCaptureArtifact(profileId, sessionId, semanticId, revis
   const revisionKey = String(revision ?? "latest");
   return session.captures?.[semanticId]?.[revisionKey] || null;
 }
+
+// PATCH 026A.7 — critique/repair loop pass artifacts. Keyed by pass index
+// (0 = the initial pre-repair evaluation, 1..N = post-repair re-evaluations
+// — see pipeline.mjs's runCritiqueRepairLoop()), NOT by pipeline stage —
+// unlike saveStageArtifact() above, the critique/repair cycle deliberately
+// re-runs the same logical stage multiple times within one session, so a
+// single stageArtifacts.critique slot can't hold the whole history.
+export async function saveRepairPass(profileId, sessionId, passRecord) {
+  if (typeof passRecord?.pass !== "number") {
+    throw Object.assign(new Error("pass index is required"), { code: "invalid_pass_index", status: 400 });
+  }
+  const store = await readStore(profileId);
+  const session = store.sessions.find((s) => s.id === sessionId);
+  if (!session) throw Object.assign(new Error("designer session not found"), { code: "session_not_found", status: 404 });
+
+  session.repairPasses = (session.repairPasses || []).filter((p) => p.pass !== passRecord.pass);
+  session.repairPasses.push({ ...passRecord, at: new Date().toISOString() });
+  session.repairPasses.sort((a, b) => a.pass - b.pass);
+  session.updatedAt = new Date().toISOString();
+
+  await writeStore(profileId, store);
+  return session;
+}
+
+export async function getRepairPasses(profileId, sessionId) {
+  const session = await getSession(profileId, sessionId);
+  return session ? (session.repairPasses || []) : [];
+}

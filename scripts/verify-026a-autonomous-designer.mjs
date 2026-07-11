@@ -212,14 +212,15 @@ section("0.3 Prompt registry (11 designer tasks) + intent-router flag gate");
   const { getPromptDefinition, DESIGNER_TASK_TYPES, TASK_TYPES } = await importFrom("services/nofida-hub-adapter/ai/prompt-registry.mjs");
   const { routeTask } = await importFrom("services/nofida-hub-adapter/ai/intent-router.mjs");
 
-  // PATCH 026A.1/026A.2/026A.3/026A.4 implement eight of the eleven
-  // prompts for real; the rest stay 026A.0 stubs until their own sub-patch
-  // lands.
+  // PATCH 026A.1/026A.2/026A.3/026A.4/026A.7 implement ten of the eleven
+  // prompts for real; only designer_handoff_generator (026A.8) stays an
+  // 026A.0 stub.
   const IMPLEMENTED_TASK_TYPES = new Set([
     "designer_brief_interpreter", "designer_product_architect",
     "designer_art_director", "designer_system_generator",
     "designer_component_architect", "designer_asset_resolver",
     "designer_layout_planner", "designer_scene_builder",
+    "designer_visual_critic", "designer_repair_planner",
   ]);
 
   ok(DESIGNER_TASK_TYPES.size === 11, "DESIGNER_TASK_TYPES has exactly 11 entries", DESIGNER_TASK_TYPES.size);
@@ -330,7 +331,7 @@ section("0.4 Pipeline orchestrator: sequential stages, contract gating, session 
   const { STAGE_ORDER, runPipeline, runPipelineStage } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
 
   ok(STAGE_ORDER.length === 10, "STAGE_ORDER has 10 stages (11th designer task, handoff, is not a pipeline stage)", STAGE_ORDER.length);
-  ok(STAGE_ORDER.filter((s) => !s.implemented).map((s) => s.stage).join(",") === "critique,repair", "only critique/repair are marked not-implemented in this sub-patch");
+  ok(STAGE_ORDER.every((s) => s.implemented === true), "every stage is implemented as of PATCH 026A.7 (critique/repair single-shot building blocks)", JSON.stringify(STAGE_ORDER.filter((s) => !s.implemented).map((s) => s.stage)));
 
   const canned = {
     brief: { productType: "mobile app", domain: "fitness", targetUsers: ["beginners"], primaryJob: "track workouts", requiredScreens: ["home"], requiredFeatures: ["logging"], contentPriorities: ["today"], platform: { type: "mobile", width: 360, height: 800 }, confidence: 0.9 },
@@ -341,6 +342,8 @@ section("0.4 Pipeline orchestrator: sequential stages, contract gating, session 
     assets: { assets: [] },
     layout: { type: "stack", children: [] },
     scene: { name: "Home", width: 360, height: 800, children: [] },
+    critique: { score: 92, issues: [], approved: true },
+    repair: [],
   };
 
   let invokeCount = 0;
@@ -355,12 +358,11 @@ section("0.4 Pipeline orchestrator: sequential stages, contract gating, session 
   const persisted = [];
   const run1 = await runPipeline({ session, invokeStage, persistStageResult: async (stage, output) => persisted.push({ stage, output }) });
   ok(run1.ok === true, "full pipeline run succeeds with contract-valid canned stage outputs", JSON.stringify(run1.error));
-  ok(run1.results.length === 10, "pipeline produces one result per stage, including not-implemented ones", run1.results.length);
-  ok(run1.results.filter((r) => r.status === "ok").length === 8, "8 implemented stages report status 'ok'");
-  ok(run1.results.filter((r) => r.status === "not_implemented").length === 2, "critique/repair report status 'not_implemented'");
-  ok(run1.results.find((r) => r.stage === "critique").marker.includes("not implemented"), "not-implemented stages carry an explicit marker");
-  ok(persisted.length === 8, "persistStageResult is called once per successfully-validated stage", persisted.length);
-  ok(invokeCount === 8, "invokeStage is called exactly once per implemented stage on a cold run", invokeCount);
+  ok(run1.results.length === 10, "pipeline produces one result per stage", run1.results.length);
+  ok(run1.results.filter((r) => r.status === "ok").length === 10, "all 10 stages report status 'ok'");
+  ok(run1.results.filter((r) => r.status === "not_implemented").length === 0, "no stage reports 'not_implemented' as of PATCH 026A.7");
+  ok(persisted.length === 10, "persistStageResult is called once per successfully-validated stage", persisted.length);
+  ok(invokeCount === 10, "invokeStage is called exactly once per stage on a cold run", invokeCount);
 
   // Re-running the same session must resume from cache, not re-invoke.
   invokeCount = 0;
@@ -2060,6 +2062,381 @@ if (LIVE) {
   console.log("  SKIP  live canvas capture requires a real browser + Penpot session + companion plugin — not exercisable from this Node-only verify harness even with the live flag set");
 } else {
   console.log("  SKIP  live capture round-trip (set NOFIDA_AI_VERIFY_LIVE=1 to see the live-path note)");
+}
+
+// =============================================================================
+// SECTION 026A.7 — Visual Critic + Automatic Repair Loop
+// =============================================================================
+console.log("\nPATCH 026A.7 — Visual Critic + Automatic Repair Loop");
+
+// ── Seeded-defect fixture: one clipping defect, one low-contrast defect ────
+const DEFECT_BOARD = {
+  type: "frame", name: "Screen", semanticId: "defect-screen", themeVariant: "light",
+  x: 0, y: 0, width: 360, height: 400, fill: "#FFFFFF",
+  children: [
+    {
+      type: "card", name: "Prediction card", semanticId: "defect-screen/card/0", themeVariant: "light",
+      x: 20, y: 40, width: 200, height: 100, fill: "#FFFFFF",
+      children: [
+        {
+          type: "text", name: "Clipped label", semanticId: "defect-screen/card/0/label", themeVariant: "light",
+          x: 20, y: 40, width: 260, height: 30, content: "This label is far too wide for its card", fill: "#111111",
+        },
+      ],
+    },
+    {
+      type: "text", name: "Low contrast caption", semanticId: "defect-screen/caption", themeVariant: "light",
+      x: 20, y: 160, width: 200, height: 20, content: "Barely readable", fill: "#F5F5F5",
+    },
+  ],
+};
+
+const DEFECT_REPAIR_OPERATIONS = [
+  { semanticId: "defect-screen/card/0/label", op: "resize", params: { width: 180 }, reason: "shrink the label so it fits inside its card without clipping" },
+  { semanticId: "defect-screen/caption", op: "adjust-color-token", params: { fillToken: "text.primary" }, reason: "bind the caption to a higher-contrast text token" },
+];
+
+section("7.1 Seeded-defect test: rule-based critic finds clipping + low-contrast defects with correct semanticIds; repair closes them and the score improves");
+{
+  const { ruleBasedCritique } = await importFrom("services/nofida-hub-adapter/ai/designer/visual-critic.mjs");
+  const { planRepairs, applyRepairOperations } = await importFrom("services/nofida-hub-adapter/ai/designer/repair-planner.mjs");
+
+  const before = ruleBasedCritique(DEFECT_BOARD);
+  ok(before.score === 60, "seeded fixture scores exactly 60 (two error-severity issues, -20 each)", before.score);
+  ok(before.approved === false, "the seeded fixture is not approved");
+  const clippingIssue = before.issues.find((i) => i.category === "clipping");
+  const contrastIssue = before.issues.find((i) => i.category === "contrast");
+  ok(!!clippingIssue && clippingIssue.nodeId === "defect-screen/card/0/label", "clipping defect is reported against the exact offending semanticId", JSON.stringify(clippingIssue));
+  ok(!!contrastIssue && contrastIssue.nodeId === "defect-screen/caption", "low-contrast defect is reported against the exact offending semanticId", JSON.stringify(contrastIssue));
+
+  const repairService = makeFakeAiSettingsService({ answers: [JSON.stringify(DEFECT_REPAIR_OPERATIONS)] });
+  const planResult = await planRepairs({ critique: before, board: DEFECT_BOARD, manifest: RECORDED_CYCLE_MANIFEST }, { aiSettingsService: repairService });
+  ok(planResult.ok === true && planResult.operations.length === 2, "repair planner produces one local operation per defect", JSON.stringify(planResult));
+
+  const { board: repairedBoard } = applyRepairOperations(DEFECT_BOARD, planResult.operations, { manifest: RECORDED_CYCLE_MANIFEST });
+  const after = ruleBasedCritique(repairedBoard);
+  ok(after.issues.length === 0, "after applying the repair operations, no defects remain", JSON.stringify(after.issues));
+  ok(after.score === 100 && after.score > before.score, "the score improves after repair (60 -> 100)", `${before.score} -> ${after.score}`);
+  ok(after.approved === true, "the repaired board is approved");
+}
+
+section("7.2 Visual critic: capability-based vision routing (screenshot attached only when the model supports it AND one was supplied)");
+{
+  const { critiqueScreen } = await importFrom("services/nofida-hub-adapter/ai/designer/visual-critic.mjs");
+  const simpleBoard = { type: "frame", name: "S", semanticId: "s", x: 0, y: 0, width: 100, height: 100, fill: "#FFFFFF", children: [] };
+
+  let capturedMessage = null;
+  const visionService = {
+    async resolveModelForRole() { return { providerId: "fake", modelId: "vision-model", capabilities: ["vision", "reasoning"] }; },
+    async callWithResolvedModel({ message }) {
+      capturedMessage = message;
+      return { answer: JSON.stringify({ score: 90, issues: [], approved: true }) };
+    },
+  };
+  const visionResult = await critiqueScreen({ board: simpleBoard, manifest: {}, screenshots: [{ mimeType: "image/png", dataBase64: "aGVsbG8=" }] }, { aiSettingsService: visionService });
+  ok(visionResult.ok === true && visionResult.confidence === "full", "vision-capable model + a screenshot takes the LLM path", JSON.stringify(visionResult));
+  ok(capturedMessage && Array.isArray(capturedMessage.images) && capturedMessage.images.length === 1, "the screenshot is attached to the call message", JSON.stringify(capturedMessage && capturedMessage.images));
+
+  let noVisionCalls = 0;
+  const noVisionService = {
+    async resolveModelForRole() { return { providerId: "fake", modelId: "text-model", capabilities: ["reasoning"] }; },
+    async callWithResolvedModel() { noVisionCalls += 1; return { answer: "{}" }; },
+  };
+  const noVisionResult = await critiqueScreen({ board: simpleBoard, manifest: {}, screenshots: [{ mimeType: "image/png", dataBase64: "aGVsbG8=" }] }, { aiSettingsService: noVisionService });
+  ok(noVisionResult.ok === true && noVisionResult.confidence === "reduced", "a non-vision model falls back to the rule-based critic, reporting reduced confidence", JSON.stringify(noVisionResult));
+  ok(noVisionCalls === 0, "the rule-based fallback never calls the LLM", noVisionCalls);
+
+  let noScreenshotCalls = 0;
+  const noScreenshotService = {
+    async resolveModelForRole() { return { providerId: "fake", modelId: "vision-model", capabilities: ["vision"] }; },
+    async callWithResolvedModel() { noScreenshotCalls += 1; return { answer: "{}" }; },
+  };
+  const noScreenshotResult = await critiqueScreen({ board: simpleBoard, manifest: {}, screenshots: [] }, { aiSettingsService: noScreenshotService });
+  ok(noScreenshotResult.ok === true && noScreenshotResult.confidence === "reduced", "a vision-capable model with no screenshot still falls back to the rule-based critic", JSON.stringify(noScreenshotResult));
+  ok(noScreenshotCalls === 0, "no screenshot means no LLM call even though the model could support vision", noScreenshotCalls);
+}
+
+section("7.3 Visual critic: approval is recomputed deterministically, never trusted from the raw LLM output");
+{
+  const { critiqueScreen, applyApprovalPolicy, APPROVAL_MIN_SCORE } = await importFrom("services/nofida-hub-adapter/ai/designer/visual-critic.mjs");
+  ok(APPROVAL_MIN_SCORE === 85, "approval threshold is 85", APPROVAL_MIN_SCORE);
+
+  const overridden = applyApprovalPolicy({ score: 40, issues: [{ severity: "error", nodeId: "n1", category: "clipping", message: "x" }] });
+  ok(overridden.approved === false, "a low score with an error-severity clipping issue is never approved, regardless of what the caller passed in");
+
+  const clean = applyApprovalPolicy({ score: 95, issues: [{ severity: "info", nodeId: "n1", category: "polish", message: "x" }] });
+  ok(clean.approved === true, "a high score with only info-severity issues is approved");
+
+  const board = { type: "frame", name: "S", semanticId: "s", x: 0, y: 0, width: 100, height: 100, fill: "#FFFFFF", children: [] };
+  const dishonestService = {
+    async resolveModelForRole() { return { providerId: "fake", modelId: "vision-model", capabilities: ["vision"] }; },
+    async callWithResolvedModel() {
+      return { answer: JSON.stringify({ score: 30, issues: [{ severity: "error", nodeId: "s", category: "clipping", message: "bad" }], approved: true }) };
+    },
+  };
+  const dishonestResult = await critiqueScreen({ board, manifest: {}, screenshots: [{ mimeType: "image/png", dataBase64: "aGVsbG8=" }] }, { aiSettingsService: dishonestService });
+  ok(dishonestResult.ok === true && dishonestResult.critique.approved === false, "the model's own approved:true claim is overridden by the deterministic policy", JSON.stringify(dishonestResult.critique));
+}
+
+section("7.4 Repair planner: structural validation, retry-on-invalid, localRepairImpossible path");
+{
+  const { planRepairs, validateRepairOperations, REPAIR_OP_TYPES } = await importFrom("services/nofida-hub-adapter/ai/designer/repair-planner.mjs");
+
+  ok(REPAIR_OP_TYPES.includes("resize") && REPAIR_OP_TYPES.includes("adjust-color-token") && REPAIR_OP_TYPES.includes("improve-dark-separation"), "repair op vocabulary covers resize/reposition/font/gap/token-rebind kinds", JSON.stringify(REPAIR_OP_TYPES));
+
+  const goodOps = [{ semanticId: "s/a", op: "resize", params: { width: 100 }, reason: "fits now" }];
+  const goodResult = validateRepairOperations(goodOps);
+  ok(goodResult.ok === true && goodResult.operations.length === 1, "a well-formed operations array validates", JSON.stringify(goodResult));
+
+  const badResult = validateRepairOperations([{ semanticId: "s/a", op: "delete-everything", reason: "x" }]);
+  ok(badResult.ok === false && badResult.errors.some((e) => e.includes("not a recognized repair operation")), "an unrecognized op type is rejected", JSON.stringify(badResult));
+
+  const impossibleResult = validateRepairOperations({ localRepairImpossible: true, reason: "needs full regeneration" });
+  ok(impossibleResult.ok === true && impossibleResult.localRepairImpossible === true, "the localRepairImpossible escape hatch validates", JSON.stringify(impossibleResult));
+
+  const critique = { score: 60, issues: [{ severity: "error", nodeId: "s/a", category: "clipping", message: "x" }], approved: false };
+  const board = { type: "frame", name: "S", semanticId: "s", x: 0, y: 0, width: 200, height: 200, children: [{ type: "text", name: "a", semanticId: "s/a", x: 0, y: 0, width: 50, height: 20, content: "x" }] };
+
+  const happyService = makeFakeAiSettingsService({ answers: [JSON.stringify(goodOps)] });
+  const happyResult = await planRepairs({ critique, board, manifest: {} }, { aiSettingsService: happyService });
+  ok(happyResult.ok === true && happyResult.operations.length === 1 && happyService.callCount() === 1, "valid first-attempt operations are accepted without a retry", JSON.stringify(happyResult));
+
+  const retryService = makeFakeAiSettingsService({ answers: ['{"op":"not-an-array"}', JSON.stringify(goodOps)] });
+  const retryResult = await planRepairs({ critique, board, manifest: {} }, { aiSettingsService: retryService });
+  ok(retryResult.ok === true && retryService.callCount() === 2, "repair planner recovers after one invalid attempt", JSON.stringify(retryResult));
+
+  const impossibleService = makeFakeAiSettingsService({ answers: [JSON.stringify({ localRepairImpossible: true, reason: "the whole layout needs to change" })] });
+  const impossiblePlan = await planRepairs({ critique, board, manifest: {} }, { aiSettingsService: impossibleService });
+  ok(impossiblePlan.ok === true && impossiblePlan.localRepairImpossible === true && /whole layout/.test(impossiblePlan.reason), "a localRepairImpossible response is accepted structurally, not treated as a contract violation", JSON.stringify(impossiblePlan));
+
+  const failService = makeFakeAiSettingsService({ answers: ["not json", "still not json"] });
+  const failResult = await planRepairs({ critique, board, manifest: {} }, { aiSettingsService: failService });
+  ok(failResult.ok === false && failResult.error.code === "contract_violation", "exhausting the retry budget fails structurally", JSON.stringify(failResult));
+}
+
+section("7.5 Pipeline stage-invoker: critique/repair wired to the real modules");
+{
+  const { runPipelineStage, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { createDesignerInvokeStage } = await importFrom("services/nofida-hub-adapter/ai/designer/stage-invoker.mjs");
+
+  const board = { type: "frame", name: "S", semanticId: "cycle-home-day", x: 0, y: 0, width: 393, height: 852, fill: "#FFFFFF", children: [] };
+  const critiqueStageDef = STAGE_ORDER.find((s) => s.stage === "critique");
+  const repairStageDef = STAGE_ORDER.find((s) => s.stage === "repair");
+
+  const providerFake = makeFakeAiSettingsService({ answers: [] });
+  const emptySession = { stageArtifacts: {} };
+  const invoke = createDesignerInvokeStage({ aiSettingsService: providerFake, briefInput: {} });
+  let threwMissingInput = false;
+  try {
+    await runPipelineStage(critiqueStageDef, { session: emptySession, invokeStage: invoke });
+  } catch (err) {
+    threwMissingInput = err.code === "missing_input";
+  }
+  ok(threwMissingInput, "critique stage refuses without completed 'scene'/'design_system' artifacts");
+
+  const session = { stageArtifacts: { scene: { status: "ok", output: board }, design_system: { status: "ok", output: RECORDED_CYCLE_MANIFEST } } };
+  const critiqueStage = await runPipelineStage(critiqueStageDef, { session, invokeStage: invoke });
+  ok(critiqueStage.status === "ok" && typeof critiqueStage.output.score === "number", "critique stage runs via the real module and produces a contract-valid CritiqueReport", JSON.stringify(critiqueStage));
+  session.stageArtifacts.critique = { status: "ok", output: critiqueStage.output };
+
+  const repairService = makeFakeAiSettingsService({ answers: [JSON.stringify([])] });
+  const invokeRepair = createDesignerInvokeStage({ aiSettingsService: repairService, briefInput: {} });
+  const repairStage = await runPipelineStage(repairStageDef, { session, invokeStage: invokeRepair });
+  ok(repairStage.status === "ok" && Array.isArray(repairStage.output), "repair stage runs via the real module and produces an operations array", JSON.stringify(repairStage));
+}
+
+section("7.6 runCritiqueRepairLoop: exhausts max repair passes honestly (never claims success below threshold)");
+{
+  const { runCritiqueRepairLoop, MAX_REPAIR_PASSES } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  ok(MAX_REPAIR_PASSES === 3, "max repair passes is 3", MAX_REPAIR_PASSES);
+
+  let critiqueCalls = 0;
+  let repairCalls = 0;
+  const board0 = { semanticId: "s", pass: 0 };
+
+  async function capture() { return { ok: true, screenshots: [] }; }
+  async function critique() {
+    critiqueCalls += 1;
+    return { ok: true, critique: { score: 60, issues: [{ severity: "warning", nodeId: "s", category: "spacing", message: "still off" }], approved: false }, confidence: "reduced" };
+  }
+  async function repair() {
+    repairCalls += 1;
+    return { ok: true, operations: [{ semanticId: "s", op: "resize", params: { width: 10 }, reason: "x" }] };
+  }
+  function applyRepair(board) { return { board: { ...board, pass: (board.pass || 0) + 1 }, pairedBoard: undefined }; }
+  async function rollbackAndRecreate() { return { ok: true }; }
+
+  const result = await runCritiqueRepairLoop({ board: board0, capture, critique, repair, applyRepair, rollbackAndRecreate });
+  ok(result.ok === true && result.approved === false, "loop reports ok but not approved once max passes are exhausted", JSON.stringify(result));
+  ok(result.stoppedReason === "max_passes_exhausted", "loop reports the honest stop reason", result.stoppedReason);
+  ok(repairCalls === 3, "repair() is called exactly MAX_REPAIR_PASSES (3) times, never more", repairCalls);
+  ok(critiqueCalls === 4, "critique() runs once as a baseline plus once after each of the 3 repair passes", critiqueCalls);
+  ok(result.passes.length === 4, "the loop records one pass entry for the baseline plus each repair pass", result.passes.length);
+  ok(result.bestPass.critique.score === 60, "the best-scoring version is returned even though it never cleared the approval threshold", result.bestPass.critique.score);
+  ok(Array.isArray(result.unresolvedIssues) && result.unresolvedIssues.length === 1, "unresolved issues from the best pass are surfaced, not swallowed", JSON.stringify(result.unresolvedIssues));
+}
+
+section("7.7 runCritiqueRepairLoop: stops repairing as soon as the critic approves");
+{
+  const { runCritiqueRepairLoop } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  let repairCalls = 0;
+  const scores = [60, 90];
+  let evalIndex = 0;
+
+  async function capture() { return { ok: true, screenshots: [] }; }
+  async function critique() {
+    const score = scores[evalIndex];
+    evalIndex += 1;
+    const approved = score >= 85;
+    return { ok: true, critique: { score, issues: approved ? [] : [{ severity: "warning", nodeId: "s", category: "spacing", message: "x" }], approved }, confidence: "reduced" };
+  }
+  async function repair() {
+    repairCalls += 1;
+    return { ok: true, operations: [{ semanticId: "s", op: "resize", params: { width: 10 }, reason: "x" }] };
+  }
+  function applyRepair(board) { return { board: { ...board }, pairedBoard: undefined }; }
+  async function rollbackAndRecreate() { return { ok: true }; }
+
+  const result = await runCritiqueRepairLoop({ board: { semanticId: "s" }, capture, critique, repair, applyRepair, rollbackAndRecreate });
+  ok(result.ok === true && result.approved === true, "loop reports approved:true once the critic's score clears the threshold", JSON.stringify(result));
+  ok(repairCalls === 1, "only one repair pass ran before approval — the loop does not keep repairing after success", repairCalls);
+  ok(result.finalPass.critique.score === 90, "the final pass is the one that got approved", result.finalPass.critique.score);
+}
+
+section("7.8 runCritiqueRepairLoop: an honest 'local repair impossible' verdict stops the loop without a full-regeneration attempt");
+{
+  const { runCritiqueRepairLoop } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+
+  async function capture() { return { ok: true, screenshots: [] }; }
+  async function critique() { return { ok: true, critique: { score: 40, issues: [{ severity: "error", nodeId: "s", category: "clipping", message: "x" }], approved: false }, confidence: "reduced" }; }
+  async function repair() { return { ok: true, localRepairImpossible: true, reason: "the screen needs full regeneration" }; }
+  let applyCalled = false;
+  function applyRepair() { applyCalled = true; return { board: {}, pairedBoard: undefined }; }
+  let recreateCalled = false;
+  async function rollbackAndRecreate() { recreateCalled = true; return { ok: true }; }
+
+  const result = await runCritiqueRepairLoop({ board: { semanticId: "s" }, capture, critique, repair, applyRepair, rollbackAndRecreate });
+  ok(result.ok === true && result.approved === false && result.stoppedReason === "local_repair_impossible", "loop stops honestly when local repair is impossible", JSON.stringify(result));
+  ok(/full regeneration/.test(result.reason), "the planner's reason is surfaced", result.reason);
+  ok(applyCalled === false && recreateCalled === false, "no repair is applied and nothing is rolled back/re-created once local repair is declared impossible", JSON.stringify({ applyCalled, recreateCalled }));
+}
+
+section("7.9 runCritiqueRepairLoop: a repair that breaks the token-coverage/theme-parity gates is rejected, not silently accepted");
+{
+  const { runCritiqueRepairLoop } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { checkPostRepairGates } = await importFrom("services/nofida-hub-adapter/ai/designer/repair-planner.mjs");
+
+  const boardWithBoundColor = { type: "frame", name: "S", semanticId: "s", x: 0, y: 0, width: 100, height: 100, fill: "#FFFFFF", tokens: { fillToken: "background.canvas" }, children: [] };
+
+  async function capture() { return { ok: true, screenshots: [] }; }
+  async function critique() { return { ok: true, critique: { score: 70, issues: [{ severity: "warning", nodeId: "s", category: "spacing", message: "x" }], approved: false }, confidence: "reduced" }; }
+  async function repair() { return { ok: true, operations: [] }; }
+  // The "repaired" board this fake applyRepair returns deliberately drops the
+  // token binding (fill stays, tokens.fillToken disappears) — exactly the
+  // kind of regression checkPostRepairGates() exists to catch.
+  function applyRepair() { return { board: { ...boardWithBoundColor, tokens: undefined }, pairedBoard: undefined }; }
+  let recreateCalled = false;
+  async function rollbackAndRecreate() { recreateCalled = true; return { ok: true }; }
+  function checkGates({ board }) { return checkPostRepairGates({ board }); }
+
+  const result = await runCritiqueRepairLoop({ board: boardWithBoundColor, capture, critique, repair, applyRepair, rollbackAndRecreate, checkGates });
+  ok(result.ok === true && result.approved === false && result.stoppedReason === "post_repair_gate_failed", "loop rejects a repair that regresses the token-coverage gate", JSON.stringify(result));
+  ok(result.gateFailure && result.gateFailure.tokenCoverage.ok === false, "the surfaced gate failure identifies the token-coverage regression specifically", JSON.stringify(result.gateFailure && result.gateFailure.tokenCoverage));
+  ok(recreateCalled === false, "a gate-failing repair is never rolled back + re-created onto the canvas", recreateCalled);
+}
+
+section("7.10 Designer session store persists repair-loop pass artifacts");
+{
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), "nofida-026a7-sessions-"));
+  process.env.NOFIDA_AI_DESIGNER_SESSIONS_DIR = scratchDir;
+  const { createSession, saveRepairPass, getRepairPasses } = await importFrom("services/nofida-hub-adapter/ai/designer/session-store.mjs");
+
+  const profileId = crypto.randomUUID();
+  const session = await createSession(profileId, { userPrompt: "cycle app" });
+
+  await saveRepairPass(profileId, session.id, { pass: 0, board: { semanticId: "s" }, critique: { score: 60, issues: [], approved: false }, confidence: "reduced" });
+  await saveRepairPass(profileId, session.id, { pass: 1, board: { semanticId: "s" }, critique: { score: 75, issues: [], approved: false }, confidence: "reduced" });
+  await saveRepairPass(profileId, session.id, { pass: 1, board: { semanticId: "s" }, critique: { score: 80, issues: [], approved: false }, confidence: "reduced" });
+
+  const passesList = await getRepairPasses(profileId, session.id);
+  ok(passesList.length === 2, "repair passes are stored one entry per pass index, re-saves replace rather than duplicate", passesList.length);
+  ok(passesList[0].pass === 0 && passesList[1].pass === 1, "passes are returned sorted by pass index");
+  ok(passesList[1].critique.score === 80, "re-saving a pass index overwrites the earlier artifact for that pass", passesList[1].critique.score);
+
+  const missingIndex = await saveRepairPass(profileId, session.id, { board: {} }).catch((err) => err);
+  ok(missingIndex instanceof Error && missingIndex.code === "invalid_pass_index", "saving a repair pass with no pass index fails structurally", missingIndex && missingIndex.code);
+
+  fs.rmSync(scratchDir, { recursive: true, force: true });
+  delete process.env.NOFIDA_AI_DESIGNER_SESSIONS_DIR;
+}
+
+section("7.11 A repair pass reaches Penpot only via rollback + idempotent re-create (0 mod-obj) — real persistence-adapter.js");
+{
+  function loadBrowserFile(sandbox, relPath) {
+    const code = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
+    vm.runInNewContext(code, sandbox, { filename: relPath });
+  }
+
+  const sandbox = {};
+  sandbox.window = sandbox;
+  sandbox.URLSearchParams = URLSearchParams;
+  sandbox.crypto = { randomUUID: () => "sess-" + Math.random().toString(36).slice(2) };
+  sandbox.console = console;
+  sandbox.setTimeout = setTimeout;
+
+  const calls = [];
+  let updateFileResponses = [];
+  sandbox.fetch = async (url, opts) => {
+    if (String(url).indexOf("get-file") >= 0) {
+      calls.push({ kind: "get-file" });
+      return { ok: true, json: async () => ["^ ", "~:revn", 1, "~:vern", 1] };
+    }
+    if (String(url).indexOf("update-file") >= 0) {
+      const body = JSON.parse(opts.body);
+      calls.push({ kind: "update-file", body });
+      const next = updateFileResponses.shift() || { ok: true };
+      return { ok: next.ok, status: next.ok ? 200 : (next.status || 409), text: async () => (next.ok ? "" : JSON.stringify(next.body || "conflict")) };
+    }
+    throw new Error("unexpected fetch: " + url);
+  };
+
+  loadBrowserFile(sandbox, "branding/ai-core/designer/transit-adapter.js");
+  loadBrowserFile(sandbox, "branding/ai-core/designer/persistence-adapter.js");
+  const Persistence = sandbox.window.NofidaDesigner.Persistence;
+  const Transit = sandbox.window.NofidaDesigner.Transit;
+
+  const { buildPairedIdempotencyKey } = await importFrom("services/nofida-hub-adapter/ai/designer/designer-scene-builder.mjs");
+
+  const initialChanges = [{ op: "add-obj", id: "shape-1", kind: "rect", pageId: "page-1", parentId: "00000000-0000-0000-0000-000000000000", frameId: "00000000-0000-0000-0000-000000000000", fields: { name: "r1", x: 0, y: 0, width: 10, height: 10 } }];
+  updateFileResponses = [{ ok: true }];
+  const initialApply = await Persistence.applyChanges(initialChanges, { fileId: "file-1", pageId: "page-1", mode: "create" });
+  ok(initialApply.ok === true, "initial create-mode apply succeeds", JSON.stringify(initialApply));
+  const key0 = buildPairedIdempotencyKey({ operationId: "op-1", fileId: "file-1", pageId: "page-1", rootSemanticId: "s", sceneHash: "hash-v0" });
+  Persistence.storeIdempotentEntry(key0, { ids: ["shape-1"] });
+
+  const callsBeforeRepair = calls.length;
+  const rollback = await Persistence.rollbackLastApply();
+  ok(rollback.ok === true, "repair pass rolls back the affected board", JSON.stringify(rollback));
+
+  const repairedChanges = [{ op: "add-obj", id: "shape-2", kind: "rect", pageId: "page-1", parentId: "00000000-0000-0000-0000-000000000000", frameId: "00000000-0000-0000-0000-000000000000", fields: { name: "r1", x: 0, y: 0, width: 8, height: 10 } }];
+  const key1 = buildPairedIdempotencyKey({ operationId: "op-1", fileId: "file-1", pageId: "page-1", rootSemanticId: "s", sceneHash: "hash-v1" });
+  ok(key1 !== key0, "the repaired board's idempotency key differs from the pre-repair key", `${key0} vs ${key1}`);
+  ok(Persistence.getIdempotentEntry(key1) === undefined, "no stale entry exists yet for the repaired content's key — re-create will not collide with the old one");
+
+  const recreateApply = await Persistence.applyChanges(repairedChanges, { fileId: "file-1", pageId: "page-1", mode: "create" });
+  ok(recreateApply.ok === true, "idempotent re-create of the repaired board succeeds", JSON.stringify(recreateApply));
+  Persistence.storeIdempotentEntry(key1, { ids: ["shape-2"] });
+
+  const repairCallSequence = calls.slice(callsBeforeRepair).filter((c) => c.kind === "update-file");
+  const decodedOps = repairCallSequence.map((c) => {
+    const decoded = Transit.decode(c.body);
+    return (decoded.changes || []).map((ch) => ch.type);
+  }).flat();
+  ok(decodedOps.filter((op) => op === "mod-obj").length === 0, "the repair pass never emits a mod-obj change", JSON.stringify(decodedOps));
+  ok(decodedOps.includes("del-obj") && decodedOps.includes("add-obj"), "the repair pass emits del-obj (rollback) then add-obj (re-create)", JSON.stringify(decodedOps));
+  ok(decodedOps.indexOf("del-obj") < decodedOps.lastIndexOf("add-obj"), "the del-obj precedes the add-obj — rollback happens before re-create", JSON.stringify(decodedOps));
+
+  ok(Persistence.getIdempotentEntry(key0).ids[0] === "shape-1" && Persistence.getIdempotentEntry(key1).ids[0] === "shape-2", "the old and new idempotency entries coexist without colliding", JSON.stringify({ key0: Persistence.getIdempotentEntry(key0), key1: Persistence.getIdempotentEntry(key1) }));
 }
 
 console.log(`\n${passed} passed, ${failures} failed`);

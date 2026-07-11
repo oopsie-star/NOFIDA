@@ -13,9 +13,16 @@
 // without a live provider and the actual ai-service.mjs wiring can evolve
 // independently of the stage sequence/contract-gating logic below.
 //
-// PATCH 026A.7 will add the critic/repair loop (currently present in
-// STAGE_ORDER but marked `implemented: false` and skipped with an explicit
-// marker) and PATCH 026A.8 will add handoff generation (deliberately not a
+// PATCH 026A.7 adds the critic/repair loop: STAGE_ORDER's "critique" and
+// "repair" entries are now `implemented: true` (single-shot building blocks,
+// wired in stage-invoker.mjs to visual-critic.mjs/repair-planner.mjs — same
+// contract-gated pattern as every other stage). The actual multi-pass loop
+// (capture -> critique -> repair -> rollback+re-create -> capture -> ...,
+// max 3 repair passes) is a SEPARATE function, runCritiqueRepairLoop() below
+// — it can't be expressed as a single runPipelineStage() call because
+// runPipelineStage()'s per-stage cache (see below) is a "run once" cache,
+// while the loop deliberately re-evaluates the SAME logical stage multiple
+// times. PATCH 026A.8 will add handoff generation (deliberately not a
 // pipeline stage at all — it's a separate, user-triggered action once a
 // screen is approved, not part of the sequential build).
 
@@ -31,8 +38,8 @@ export const STAGE_ORDER = Object.freeze([
   { stage: "assets", taskType: "designer_asset_resolver", contract: "AssetResolution", implemented: true },
   { stage: "layout", taskType: "designer_layout_planner", contract: "SemanticLayout", implemented: true },
   { stage: "scene", taskType: "designer_scene_builder", contract: null, implemented: true },
-  { stage: "critique", taskType: "designer_visual_critic", contract: "CritiqueReport", implemented: false },
-  { stage: "repair", taskType: "designer_repair_planner", contract: null, implemented: false },
+  { stage: "critique", taskType: "designer_visual_critic", contract: "CritiqueReport", implemented: true },
+  { stage: "repair", taskType: "designer_repair_planner", contract: null, implemented: true },
 ]);
 
 function pipelineError(stage, code, message, recoverable) {
@@ -148,4 +155,131 @@ export async function runPipeline({ session, invokeStage, persistStageResult }) 
     }
   }
   return { ok: true, results };
+}
+
+// ── PATCH 026A.7 — critique/repair loop ─────────────────────────────────────
+// Deliberately NOT built on runPipelineStage()'s cache (see this file's
+// header) — every dependency (capture/critique/repair/gate-check/apply) is
+// caller-injected, same pattern as invokeStage() above, so this stays pure
+// orchestration with zero concrete-implementation imports. A real caller
+// wires `critique`/`repair` to visual-critic.mjs/repair-planner.mjs,
+// `capture` to the browser canvas-capture bridge, and `rollbackAndRecreate`
+// to persistence-adapter.js's rollbackLastApply()+applyChanges(); tests wire
+// plain injected fakes (see verify-026a-autonomous-designer.mjs section 7).
+
+export const MAX_REPAIR_PASSES = 3;
+
+/**
+ * runCritiqueRepairLoop({
+ *   board, pairedBoard,
+ *   capture,             // async (board, passIndex) -> { ok, screenshots? } | { ok:false, reason }
+ *   critique,            // async ({ board, screenshots, passIndex }) -> { ok, critique, confidence } | { ok:false, error }
+ *   repair,               // async ({ board, critique, passIndex }) -> { ok, operations } | { ok, localRepairImpossible, reason } | { ok:false, error }
+ *   applyRepair,          // (board, operations, pairedBoard) -> { board, pairedBoard }
+ *   rollbackAndRecreate,  // async ({ previousBoard, repairedBoard, pairedBoard, passIndex }) -> { ok, message? }
+ *   checkGates,           // optional (({ board, pairedBoard }) -> { ok, ... }) — re-run 026A.4/026A.5 gates
+ *   persistPass,          // optional async (passRecord) -> void — store {pass, board, critique, confidence, capture}
+ *   maxPasses = MAX_REPAIR_PASSES,
+ * }) ->
+ *   { ok: true, approved: true, finalPass, bestPass, passes }
+ *   { ok: true, approved: false, stoppedReason, bestPass, passes, unresolvedIssues? }
+ *   { ok: false, error: { code, message, passIndex }, passes, bestPass? }
+ *
+ * "pass 0" is the initial evaluation of `board` as supplied — establishing a
+ * baseline, not itself one of the "max 3 repair passes" (PATCH 026A.7 global
+ * rule 3). Passes 1..maxPasses each perform exactly one repair() call,
+ * apply it, re-check gates, roll back + re-create, and re-evaluate — so
+ * `repair` is called AT MOST `maxPasses` times, never more. The loop never
+ * claims success (`approved: true`) below the critic's own approval
+ * threshold — see visual-critic.mjs's applyApprovalPolicy().
+ */
+export async function runCritiqueRepairLoop({
+  board,
+  pairedBoard,
+  capture,
+  critique,
+  repair,
+  applyRepair,
+  rollbackAndRecreate,
+  checkGates,
+  persistPass,
+  maxPasses = MAX_REPAIR_PASSES,
+}) {
+  const passes = [];
+
+  async function evaluate(currentBoard, passIndex) {
+    const captureResult = await capture(currentBoard, passIndex);
+    if (!captureResult || captureResult.ok !== true) {
+      return { ok: false, error: { code: "capture_failed", message: captureResult?.reason || "capture failed", passIndex } };
+    }
+    const critiqueResult = await critique({ board: currentBoard, screenshots: captureResult.screenshots, passIndex });
+    if (!critiqueResult || critiqueResult.ok !== true) {
+      return {
+        ok: false,
+        error: { code: critiqueResult?.error?.code || "critique_failed", message: critiqueResult?.error?.message || "critique failed", passIndex },
+      };
+    }
+    const record = {
+      pass: passIndex,
+      board: currentBoard,
+      critique: critiqueResult.critique,
+      confidence: critiqueResult.confidence,
+      capture: captureResult,
+    };
+    if (persistPass) await persistPass(record);
+    return { ok: true, record };
+  }
+
+  const initial = await evaluate(board, 0);
+  if (!initial.ok) return { ok: false, error: initial.error, passes };
+  passes.push(initial.record);
+  let latest = initial.record;
+  let best = initial.record;
+  let currentBoard = board;
+  let currentPaired = pairedBoard;
+
+  for (let pass = 1; pass <= maxPasses; pass++) {
+    if (latest.critique.approved) break;
+
+    const repairResult = await repair({ board: currentBoard, critique: latest.critique, passIndex: pass });
+    if (!repairResult || repairResult.ok !== true) {
+      return { ok: false, error: { ...(repairResult?.error || { code: "repair_failed", message: "repair planner failed" }), passIndex: pass }, passes, bestPass: best };
+    }
+    if (repairResult.localRepairImpossible) {
+      return { ok: true, approved: false, stoppedReason: "local_repair_impossible", reason: repairResult.reason, bestPass: best, passes };
+    }
+
+    const { board: repairedBoard, pairedBoard: repairedPaired } = applyRepair(currentBoard, repairResult.operations, currentPaired);
+
+    const gates = checkGates ? checkGates({ board: repairedBoard, pairedBoard: repairedPaired }) : { ok: true };
+    if (!gates.ok) {
+      return { ok: true, approved: false, stoppedReason: "post_repair_gate_failed", gateFailure: gates, bestPass: best, passes };
+    }
+
+    const applied = await rollbackAndRecreate({ previousBoard: currentBoard, repairedBoard, pairedBoard: repairedPaired, passIndex: pass });
+    if (!applied || applied.ok !== true) {
+      return { ok: false, error: { code: "repair_apply_failed", message: applied?.message || "rollback + re-create failed", passIndex: pass }, passes, bestPass: best };
+    }
+
+    currentBoard = repairedBoard;
+    currentPaired = repairedPaired;
+
+    const evalResult = await evaluate(currentBoard, pass);
+    if (!evalResult.ok) return { ok: false, error: evalResult.error, passes, bestPass: best };
+    passes.push(evalResult.record);
+    latest = evalResult.record;
+    if (latest.critique.score > best.critique.score) best = latest;
+  }
+
+  if (latest.critique.approved) {
+    return { ok: true, approved: true, finalPass: latest, bestPass: latest, passes };
+  }
+  return {
+    ok: true,
+    approved: false,
+    stoppedReason: "max_passes_exhausted",
+    bestPass: best,
+    passes,
+    unresolvedIssues: best.critique.issues,
+  };
 }
