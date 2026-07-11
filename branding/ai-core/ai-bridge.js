@@ -219,9 +219,15 @@
     CTX_RES:     "nofida-ai:context",
     CONNECT_REQ: "nofida-ai:connect-libraries",
     CONNECT_RES: "nofida-ai:connect-libraries-result",
+    CAPTURE_REQ: "nofida-ai:capture-board",
+    CAPTURE_RES: "nofida-ai:capture-board-result",
   };
   var CONTEXT_TIMEOUT_MS = 5000;
   var CONNECT_LIBRARIES_TIMEOUT_MS = 15000;
+  // Board export (026A.6) goes through Penpot's own render path (see
+  // docs/nofida-canvas-capture-026a.md) — generous relative to the other
+  // plugin round trips above, since export() has to actually rasterize.
+  var CAPTURE_TIMEOUT_MS = 20000;
   // Penpot itself places no restriction on which origin hosts a plugin's
   // manifest/UI (verified against plugins-runtime's manifest schema — it's
   // just url()). Our own plugin is served from this same app origin, so we
@@ -377,6 +383,43 @@
 
         window.addEventListener("message", onMessage);
         pluginWindow.postMessage({ type: MSG.CTX_REQ, id: id }, pluginOrigin);
+      });
+    },
+
+    /* PATCH 026A.6 — captures a board to PNG via Penpot's own Plugin API
+       shape.export() (see docs/nofida-canvas-capture-026a.md), relayed
+       through the same plugin transport extractContext() uses.
+       Returns Promise<{ok:true, pngBase64, width, height, scale, capturedAt}
+              | {ok:false, error:"capture_unavailable", reason}> — NEVER a
+       bare success with no image; a missing plugin connection or a timeout
+       both resolve the same structured failure shape, not a silent null. */
+    captureBoard: function (boardId, opts) {
+      opts = opts || {};
+      var scale = opts.scale === 2 ? 2 : 1;
+      if (!pluginWindow) {
+        return Promise.resolve({ ok: false, error: "capture_unavailable", reason: "companion plugin not connected" });
+      }
+      if (!boardId) {
+        return Promise.resolve({ ok: false, error: "capture_unavailable", reason: "no boardId supplied" });
+      }
+
+      return new Promise(function (resolve) {
+        var id = Math.random().toString(36).slice(2);
+        var timer = setTimeout(function () {
+          window.removeEventListener("message", onMessage);
+          resolve({ ok: false, error: "capture_unavailable", reason: "capture timed out after " + CAPTURE_TIMEOUT_MS + "ms" });
+        }, CAPTURE_TIMEOUT_MS);
+
+        function onMessage(e) {
+          if (e.source !== pluginWindow) return;
+          if (!e.data || e.data.type !== MSG.CAPTURE_RES || e.data.id !== id) return;
+          window.removeEventListener("message", onMessage);
+          clearTimeout(timer);
+          resolve(e.data.result || { ok: false, error: "capture_unavailable", reason: "empty response from plugin" });
+        }
+
+        window.addEventListener("message", onMessage);
+        pluginWindow.postMessage({ type: MSG.CAPTURE_REQ, id: id, boardId: boardId, scale: scale }, pluginOrigin);
       });
     },
   };

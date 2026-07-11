@@ -12,6 +12,10 @@
  *                                       file so their components become real,
  *                                       instantiable Screen Spec targets
  *                                       (016G — see note below)
+ *   nofida-plugin:capture-board      — export a board to PNG via Penpot's
+ *                                       own Plugin API shape.export() (read-
+ *                                       only; 026A.6 — see docs/nofida-
+ *                                       canvas-capture-026a.md for why)
  *
  * Why connect-libraries needs no user confirmation: every library it can see
  * is a NOFIDA Hub library the team already deliberately imported for reuse
@@ -60,6 +64,20 @@ penpot.ui.onMessage(function (msg) {
       })
       .catch(function (err) {
         penpot.ui.sendMessage({ type: "nofida-plugin:connect-libraries-result", id: msg.id, result: { ok: false, message: String(err && err.message || err) } });
+      });
+    return;
+  }
+
+  if (msg.type === "nofida-plugin:capture-board") {
+    captureBoard(msg.boardId, msg.scale)
+      .then(function (result) {
+        penpot.ui.sendMessage({ type: "nofida-plugin:capture-board-result", id: msg.id, result: result });
+      })
+      .catch(function (err) {
+        penpot.ui.sendMessage({
+          type: "nofida-plugin:capture-board-result", id: msg.id,
+          result: { ok: false, error: "capture_unavailable", reason: String(err && err.message || err) },
+        });
       });
     return;
   }
@@ -267,3 +285,61 @@ async function connectLibraries(libraryIds) {
   return { ok: failed.length < libraryIds.length, connected: connected, failed: failed, libraries: libraries };
 }
 
+// ── Canvas capture (026A.6) ──────────────────────────────────────────────
+//
+// Uses Penpot's own documented Plugin API export() call — see
+// docs/nofida-canvas-capture-026a.md for why this was chosen over reading
+// pixels off the WASM viewport canvas directly or hand-rolling the
+// exporter-service RPC. export() crops to the shape's own bounds
+// internally, so "capture is cropped to the board" needs no extra code
+// here. Never returns a bare success with no image — a lookup miss or a
+// thrown export() call always resolves the SAME { ok:false,
+// error:"capture_unavailable", reason } shape the caller (canvas-capture.js)
+// and the server (capture-validator.mjs) both expect.
+
+async function captureBoard(boardId, scale) {
+  var id = String(boardId || "");
+  if (!id) return { ok: false, error: "capture_unavailable", reason: "no boardId supplied" };
+
+  var shape;
+  try {
+    shape = penpot.currentPage && penpot.currentPage.getShapeById(id);
+  } catch (err) {
+    return { ok: false, error: "capture_unavailable", reason: "getShapeById failed: " + String(err && err.message || err) };
+  }
+  if (!shape) {
+    return { ok: false, error: "capture_unavailable", reason: "no shape found for boardId " + id };
+  }
+
+  var effectiveScale = (scale === 2) ? 2 : 1;
+  var bytes;
+  try {
+    bytes = await shape.export({ type: "png", scale: effectiveScale });
+  } catch (err) {
+    return { ok: false, error: "capture_unavailable", reason: "export() failed: " + String(err && err.message || err) };
+  }
+  if (!bytes || !bytes.length) {
+    return { ok: false, error: "capture_unavailable", reason: "export() returned no image data" };
+  }
+
+  return {
+    ok: true,
+    pngBase64: uint8ToBase64(bytes),
+    width: Math.round((shape.width || 0) * effectiveScale),
+    height: Math.round((shape.height || 0) * effectiveScale),
+    scale: effectiveScale,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+// btoa() has no direct Uint8Array overload and a huge board can exceed the
+// call-stack limit of String.fromCharCode(...bytes) spread — chunk it.
+function uint8ToBase64(bytes) {
+  var binary = "";
+  var chunkSize = 0x8000;
+  for (var i = 0; i < bytes.length; i += chunkSize) {
+    var chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}

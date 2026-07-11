@@ -18,6 +18,10 @@
  *   nofida-ai:connect-libraries            →  nofida-plugin:connect-libraries            (down)
  *   nofida-plugin:connect-libraries-result → nofida-ai:connect-libraries-result          (up)
  *
+ * 026A.6 additions (canvas capture — see docs/nofida-canvas-capture-026a.md):
+ *   nofida-ai:capture-board            →  nofida-plugin:capture-board            (down)
+ *   nofida-plugin:capture-board-result → nofida-ai:capture-board-result         (up)
+ *
  * This iframe, the top window, and the parent frame Penpot forwards into are
  * all served from the same app origin — so every relay below targets that
  * origin explicitly instead of "*".
@@ -79,6 +83,22 @@
     if (d.type === "nofida-plugin:connect-libraries-result") {
       window.top.postMessage(
         { type: "nofida-ai:connect-libraries-result", id: d.id, result: d.result }, SELF_ORIGIN
+      );
+      return;
+    }
+
+    // ── overlay → plugin code: capture-board request (026A.6) ─────────────
+    if (d.type === "nofida-ai:capture-board") {
+      window.parent.postMessage(
+        { type: "nofida-plugin:capture-board", id: d.id, boardId: d.boardId, scale: d.scale }, SELF_ORIGIN
+      );
+      return;
+    }
+
+    // ── plugin code → overlay: capture-board result (026A.6) ──────────────
+    if (d.type === "nofida-plugin:capture-board-result") {
+      window.top.postMessage(
+        { type: "nofida-ai:capture-board-result", id: d.id, result: d.result }, SELF_ORIGIN
       );
       return;
     }

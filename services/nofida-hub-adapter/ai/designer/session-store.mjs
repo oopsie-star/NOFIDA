@@ -124,3 +124,38 @@ export async function setSessionStatus(profileId, sessionId, status) {
   await writeStore(profileId, store);
   return session;
 }
+
+// PATCH 026A.6 — canvas capture artifacts. Keyed by board semanticId root
+// (not by pipeline stage — a capture isn't a designer_* stage output, it's
+// a snapshot of what's actually on the live canvas) and then by revision,
+// so re-capturing after an edit doesn't overwrite the prior snapshot the
+// Visual Critic (026A.7) may still want to compare against. Only ever
+// called with an ALREADY-VALIDATED capture (see capture-validator.mjs) —
+// this store, like saveStageArtifact(), never holds a rejected image.
+export async function saveCaptureArtifact(profileId, sessionId, { semanticId, revision, pngBase64, width, height, scale }) {
+  if (typeof semanticId !== "string" || !semanticId.trim()) {
+    throw Object.assign(new Error("semanticId is required"), { code: "invalid_semantic_id", status: 400 });
+  }
+  const revisionKey = String(revision ?? "latest");
+
+  const store = await readStore(profileId);
+  const session = store.sessions.find((s) => s.id === sessionId);
+  if (!session) throw Object.assign(new Error("designer session not found"), { code: "session_not_found", status: 404 });
+
+  session.captures = session.captures || {};
+  session.captures[semanticId] = session.captures[semanticId] || {};
+  session.captures[semanticId][revisionKey] = {
+    pngBase64, width, height, scale: scale || 1, capturedAt: new Date().toISOString(),
+  };
+  session.updatedAt = new Date().toISOString();
+
+  await writeStore(profileId, store);
+  return session;
+}
+
+export async function getCaptureArtifact(profileId, sessionId, semanticId, revision) {
+  const session = await getSession(profileId, sessionId);
+  if (!session) return null;
+  const revisionKey = String(revision ?? "latest");
+  return session.captures?.[semanticId]?.[revisionKey] || null;
+}

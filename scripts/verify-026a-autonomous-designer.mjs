@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import vm from "node:vm";
+import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -1769,6 +1770,296 @@ section("5.5/5.6 Persistence adapter (stubbed fetch): paired idempotency key, no
   ok(delIds.size === lightIds.length + darkIds.length, "rollback removes exactly both boards' worth of shapes, nothing more/less", `${delIds.size} vs ${lightIds.length + darkIds.length}`);
   const allHavePageId = (decodedRollback.changes || []).filter((c) => c.type === "del-obj").every((c) => !!c["page-id"]);
   ok(allHavePageId, "every del-obj wire entry carries page-id (required by Penpot, silently ignored otherwise)");
+}
+
+// =============================================================================
+// SECTION 026A.6 — Canvas Capture Infrastructure
+// =============================================================================
+console.log("\nPATCH 026A.6 — Canvas Capture Infrastructure");
+
+// ── PNG test-fixture encoder (test-only — Node has no built-in PNG writer) ─
+function crc32Table() {
+  const table = [];
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c;
+  }
+  return table;
+}
+const CRC_TABLE = crc32Table();
+function crc32(buf) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) crc = CRC_TABLE[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function pngChunk(type, data) {
+  const typeBuf = Buffer.from(type, "ascii");
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32BE(data.length, 0);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
+  return Buffer.concat([lenBuf, typeBuf, data, crcBuf]);
+}
+function encodeTestPng(width, height, channels, pixelFn) {
+  const bytesPerPixel = channels;
+  const rowBytes = width * bytesPerPixel;
+  const raw = Buffer.alloc((rowBytes + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (rowBytes + 1)] = 0; // filter type None
+    for (let x = 0; x < width; x++) {
+      const px = pixelFn(x, y);
+      for (let c = 0; c < channels; c++) raw[y * (rowBytes + 1) + 1 + x * bytesPerPixel + c] = px[c];
+    }
+  }
+  const idat = zlib.deflateSync(raw);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt8(8, 8);
+  ihdr.writeUInt8(channels === 4 ? 6 : channels === 3 ? 2 : channels === 2 ? 4 : 0, 9);
+  ihdr.writeUInt8(0, 10);
+  ihdr.writeUInt8(0, 11);
+  ihdr.writeUInt8(0, 12);
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return Buffer.concat([signature, pngChunk("IHDR", ihdr), pngChunk("IDAT", idat), pngChunk("IEND", Buffer.alloc(0))]);
+}
+// ── 6.1 capture-validator: unit tests (empty/flat/malformed/real PNG) ──────
+section("6.1 capture-validator: rejects empty/flat/malformed images, accepts a real PNG fixture");
+{
+  const { decodePng, isFlatImage, validateCapture } = await importFrom("services/nofida-hub-adapter/ai/designer/capture-validator.mjs");
+
+  const flatPng = encodeTestPng(12, 12, 4, () => [255, 255, 255, 255]);
+  const flatDecoded = decodePng(flatPng);
+  ok(isFlatImage(flatDecoded) === true, "isFlatImage() detects an all-white solid fixture");
+
+  const realPng = encodeTestPng(24, 18, 4, (x, y) => [(x * 11) % 256, (y * 19) % 256, ((x + y) * 7) % 256, 255]);
+  const realDecoded = decodePng(realPng);
+  ok(isFlatImage(realDecoded) === false, "isFlatImage() does not flag a gradient/noise fixture as flat");
+
+  const flatResult = validateCapture({ pngBase64: flatPng.toString("base64"), width: 12, height: 12 });
+  ok(flatResult.ok === false && flatResult.error === "capture_unavailable" && /flat color/.test(flatResult.reason), "validateCapture() rejects a flat image with the structured capture_unavailable shape", JSON.stringify(flatResult));
+
+  const realResult = validateCapture({ pngBase64: realPng.toString("base64"), width: 24, height: 18 });
+  ok(realResult.ok === true && realResult.width === 24 && realResult.height === 18, "validateCapture() accepts a real (non-flat) PNG fixture", JSON.stringify(realResult));
+
+  const emptyResult = validateCapture({ pngBase64: "" });
+  ok(emptyResult.ok === false && emptyResult.error === "capture_unavailable", "validateCapture() rejects an empty payload", JSON.stringify(emptyResult));
+
+  const garbageResult = validateCapture({ pngBase64: Buffer.from("definitely not a png").toString("base64") });
+  ok(garbageResult.ok === false && /invalid PNG/.test(garbageResult.reason), "validateCapture() rejects a malformed (non-PNG) payload", JSON.stringify(garbageResult));
+
+  const mismatchResult = validateCapture({ pngBase64: realPng.toString("base64"), width: 999, height: 999 });
+  ok(mismatchResult.ok === false && /does not match/.test(mismatchResult.reason), "validateCapture() rejects a declared-size mismatch against the actual PNG", JSON.stringify(mismatchResult));
+
+  const rgbPng = encodeTestPng(10, 10, 3, (x, y) => [x * 25, y * 25, (x ^ y) * 9]);
+  const rgbResult = validateCapture({ pngBase64: rgbPng.toString("base64") });
+  ok(rgbResult.ok === true && rgbResult.channels === 3, "validateCapture() also supports 3-channel (no-alpha) PNGs", JSON.stringify(rgbResult));
+}
+
+// ── 6.2 Feature flag default + server-side gate ─────────────────────────────
+section("6.2 nofida_ai_visual_critic_v1 defaults off");
+{
+  delete process.env.NOFIDA_AI_VISUAL_CRITIC_V1;
+  const { getDesignerFeatureFlags } = await importFrom("services/nofida-hub-adapter/ai/designer/feature-flags.mjs");
+  ok(getDesignerFeatureFlags().visualCriticV1 === false, "visualCriticV1 defaults off (env unset)");
+  process.env.NOFIDA_AI_VISUAL_CRITIC_V1 = "1";
+  ok(getDesignerFeatureFlags().visualCriticV1 === true, "visualCriticV1 reads true when the env var is set");
+  delete process.env.NOFIDA_AI_VISUAL_CRITIC_V1;
+}
+
+// ── 6.3 Session store: capture artifacts keyed by semanticId + revision ────
+section("6.3 Designer session store persists capture artifacts by semanticId + revision");
+{
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), "nofida-026a6-sessions-"));
+  process.env.NOFIDA_AI_DESIGNER_SESSIONS_DIR = scratchDir;
+  const { createSession, saveCaptureArtifact, getCaptureArtifact } = await importFrom("services/nofida-hub-adapter/ai/designer/session-store.mjs");
+
+  const profileId = crypto.randomUUID();
+  const session = await createSession(profileId, { userPrompt: "cycle app" });
+
+  await saveCaptureArtifact(profileId, session.id, { semanticId: "cycle-home-day", revision: 1, pngBase64: "aaaa", width: 393, height: 852, scale: 1 });
+  await saveCaptureArtifact(profileId, session.id, { semanticId: "cycle-home-day", revision: 2, pngBase64: "bbbb", width: 393, height: 852, scale: 1 });
+
+  const rev1 = await getCaptureArtifact(profileId, session.id, "cycle-home-day", 1);
+  const rev2 = await getCaptureArtifact(profileId, session.id, "cycle-home-day", 2);
+  ok(rev1 && rev1.pngBase64 === "aaaa", "revision 1 is stored and retrievable independently");
+  ok(rev2 && rev2.pngBase64 === "bbbb", "revision 2 does NOT overwrite revision 1 — both coexist under the same semanticId", JSON.stringify({ rev1: rev1 && rev1.pngBase64, rev2: rev2 && rev2.pngBase64 }));
+
+  const missing = await getCaptureArtifact(profileId, session.id, "nonexistent-board", 1);
+  ok(missing === null, "a capture for an unknown semanticId returns null, not a throw");
+
+  const missingSemanticId = await saveCaptureArtifact(profileId, session.id, { semanticId: "", pngBase64: "x" }).catch((err) => err);
+  ok(missingSemanticId instanceof Error && missingSemanticId.code === "invalid_semantic_id", "saving a capture with no semanticId fails structurally", missingSemanticId && missingSemanticId.code);
+
+  fs.rmSync(scratchDir, { recursive: true, force: true });
+  delete process.env.NOFIDA_AI_DESIGNER_SESSIONS_DIR;
+}
+
+// ── 6.4 canvas-capture.js (vm sandbox): flag gate + structured error passthrough ─
+section("6.4 canvas-capture.js: flag-gated, structured failure never a silent skip");
+{
+  function loadBrowserFile(sandbox, relPath) {
+    const code = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
+    vm.runInNewContext(code, sandbox, { filename: relPath });
+  }
+
+  // 6.4a — the REAL feature-flags.js hard gate is still false by default,
+  // so even a server that SAYS visualCriticV1 is on must still refuse
+  // (proves the two-sided AND gate, not just the server's opinion).
+  {
+    const sandbox = {};
+    sandbox.window = sandbox;
+    sandbox.console = console;
+    sandbox.setTimeout = setTimeout;
+    sandbox.NofidaAIBridge = { captureBoard: async () => ({ ok: true, pngBase64: "x", width: 10, height: 10, scale: 1, capturedAt: "now" }) };
+    sandbox.NofidaDesigner = undefined;
+    loadBrowserFile(sandbox, "branding/ai-core/designer/feature-flags.js");
+    loadBrowserFile(sandbox, "branding/ai-core/designer/canvas-capture.js");
+
+    const result = await sandbox.window.NofidaDesigner.CanvasCapture.captureBoard("board-1", { serverFlags: { visualCriticV1: true } });
+    ok(result.ok === false && result.error === "capture_unavailable", "captureBoard() refuses even when the SERVER reports the flag on, because the client hard gate is still false", JSON.stringify(result));
+  }
+
+  // 6.4b — with the flag gate mocked open, verify canvas-capture.js's OWN
+  // result-shaping logic: success passthrough, structured-error passthrough
+  // (the "capture on a non-existent board" failure path), and the fallback
+  // for a truthy-but-unusable plugin response.
+  {
+    function freshSandbox(bridgeImpl) {
+      const sandbox = {};
+      sandbox.window = sandbox;
+      sandbox.console = console;
+      sandbox.setTimeout = setTimeout;
+      sandbox.NofidaDesigner = { FeatureFlags: { isEnabled: () => true } };
+      sandbox.NofidaAIBridge = { captureBoard: bridgeImpl };
+      loadBrowserFile(sandbox, "branding/ai-core/designer/canvas-capture.js");
+      return sandbox;
+    }
+
+    const successSandbox = freshSandbox(async () => ({ ok: true, pngBase64: "aGVsbG8=", width: 393, height: 852, scale: 1, capturedAt: "2026-01-01T00:00:00.000Z" }));
+    const successResult = await successSandbox.window.NofidaDesigner.CanvasCapture.captureBoard("board-1", {});
+    ok(successResult.ok === true && successResult.pngBase64 === "aGVsbG8=", "a usable capture result is passed through unchanged", JSON.stringify(successResult));
+
+    const notFoundSandbox = freshSandbox(async () => ({ ok: false, error: "capture_unavailable", reason: "no shape found for boardId nonexistent-board" }));
+    const notFoundResult = await notFoundSandbox.window.NofidaDesigner.CanvasCapture.captureBoard("nonexistent-board", {});
+    ok(notFoundResult.ok === false && notFoundResult.error === "capture_unavailable" && /no shape found/.test(notFoundResult.reason), "capture on a non-existent board returns the structured error, unchanged", JSON.stringify(notFoundResult));
+
+    const garbageSandbox = freshSandbox(async () => ({ ok: true })); // truthy but missing pngBase64/width/height
+    const garbageResult = await garbageSandbox.window.NofidaDesigner.CanvasCapture.captureBoard("board-1", {});
+    ok(garbageResult.ok === false && garbageResult.error === "capture_unavailable", "a truthy-but-unusable plugin response is NEVER passed through as a silent success", JSON.stringify(garbageResult));
+
+    const noBoardIdSandbox = freshSandbox(async () => ({ ok: true, pngBase64: "x", width: 10, height: 10 }));
+    const noBoardIdResult = await noBoardIdSandbox.window.NofidaDesigner.CanvasCapture.captureBoard(null, {});
+    ok(noBoardIdResult.ok === false && /boardId/.test(noBoardIdResult.reason), "captureBoard() refuses immediately with no boardId, never calling the bridge");
+  }
+
+  // 6.4c — submitCapture(): flag gate + client-side sanity check both stop
+  // an upload before fetch() is ever called.
+  {
+    let fetchCalls = 0;
+    const sandbox = {};
+    sandbox.window = sandbox;
+    sandbox.console = console;
+    sandbox.setTimeout = setTimeout;
+    sandbox.NofidaDesigner = { FeatureFlags: { isEnabled: (flags) => Boolean(flags && flags.visualCriticV1) } };
+    sandbox.fetch = async () => { fetchCalls += 1; return { json: async () => ({ ok: true }) }; };
+    loadBrowserFile(sandbox, "branding/ai-core/designer/canvas-capture.js");
+
+    const flagOffResult = await sandbox.window.NofidaDesigner.CanvasCapture.submitCapture({ sessionId: "s1", semanticId: "cycle-home-day", capture: { pngBase64: "x", width: 10, height: 10 }, serverFlags: { visualCriticV1: false } });
+    ok(flagOffResult.ok === false && fetchCalls === 0, "submitCapture() refuses when the flag is off, making zero fetch calls", fetchCalls);
+
+    const unusableResult = await sandbox.window.NofidaDesigner.CanvasCapture.submitCapture({ sessionId: "s1", semanticId: "cycle-home-day", capture: { ok: true }, serverFlags: { visualCriticV1: true } });
+    ok(unusableResult.ok === false && fetchCalls === 0, "submitCapture() refuses an unusable capture object before ever calling fetch", fetchCalls);
+
+    const goodResult = await sandbox.window.NofidaDesigner.CanvasCapture.submitCapture({ sessionId: "s1", semanticId: "cycle-home-day", revision: 3, capture: { pngBase64: "aGVsbG8=", width: 393, height: 852, scale: 2 }, serverFlags: { visualCriticV1: true } });
+    ok(goodResult.ok === true && fetchCalls === 1, "submitCapture() uploads exactly once when the flag is on and the capture is usable", fetchCalls);
+  }
+}
+
+// ── 6.5 ai-bridge.js captureBoard (vm sandbox): plugin relay + structured errors ─
+section("6.5 ai-bridge.js captureBoard(): plugin relay, no-plugin refusal, structured failure passthrough");
+{
+  function makeWindowSandbox() {
+    const sandbox = {};
+    sandbox.window = sandbox;
+    sandbox.location = { origin: "http://test.origin" };
+    sandbox.console = console;
+    sandbox.setTimeout = setTimeout;
+    sandbox.clearTimeout = clearTimeout;
+    sandbox.crypto = { randomUUID: () => "sess-" + Math.random().toString(36).slice(2) };
+    const listeners = [];
+    sandbox.addEventListener = (type, fn) => { if (type === "message") listeners.push(fn); };
+    sandbox.removeEventListener = (type, fn) => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); };
+    sandbox.__dispatch = (data, source) => { listeners.slice().forEach((fn) => fn({ data, source })); };
+    return sandbox;
+  }
+  function loadBridge(sandbox) {
+    const code = fs.readFileSync(path.join(REPO_ROOT, "branding/ai-core/ai-bridge.js"), "utf8");
+    vm.runInNewContext(code, sandbox, { filename: "ai-bridge.js" });
+    return sandbox.window.NofidaAIBridge;
+  }
+
+  // No plugin connected — refuses immediately, no postMessage traffic.
+  {
+    const sandbox = makeWindowSandbox();
+    const bridge = loadBridge(sandbox);
+    const result = await bridge.captureBoard("board-1", {});
+    ok(result.ok === false && result.reason === "companion plugin not connected", "captureBoard() refuses with a structured error when no plugin is connected", JSON.stringify(result));
+  }
+
+  // Plugin connected, board not found — the plugin's structured error is
+  // relayed back unchanged (the exact "failure path: capture on a
+  // non-existent board" scenario, at the bridge layer this time).
+  {
+    const sandbox = makeWindowSandbox();
+    const bridge = loadBridge(sandbox);
+    let posted = null;
+    const pluginWindowMock = {
+      postMessage(msg) {
+        posted = msg;
+        sandbox.__dispatch({ type: sandbox.window.NofidaAIBridge.messages.CAPTURE_RES, id: msg.id, result: { ok: false, error: "capture_unavailable", reason: "no shape found for boardId missing-board" } }, pluginWindowMock);
+      },
+    };
+    bridge.connectPlugin(pluginWindowMock, "http://test.origin");
+    const result = await bridge.captureBoard("missing-board", {});
+    ok(posted && posted.boardId === "missing-board", "captureBoard() posts the boardId to the plugin transport", JSON.stringify(posted));
+    ok(result.ok === false && /no shape found/.test(result.reason), "a non-existent-board failure from the plugin is relayed back unchanged", JSON.stringify(result));
+  }
+
+  // Plugin connected, successful export — the success shape round-trips.
+  {
+    const sandbox = makeWindowSandbox();
+    const bridge = loadBridge(sandbox);
+    const pluginWindowMock = {
+      postMessage(msg) {
+        sandbox.__dispatch({ type: sandbox.window.NofidaAIBridge.messages.CAPTURE_RES, id: msg.id, result: { ok: true, pngBase64: "aGVsbG8=", width: 393, height: 852, scale: msg.scale, capturedAt: "2026-01-01T00:00:00.000Z" } }, pluginWindowMock);
+      },
+    };
+    bridge.connectPlugin(pluginWindowMock, "http://test.origin");
+    const result = await bridge.captureBoard("cycle-home-day", { scale: 2 });
+    ok(result.ok === true && result.scale === 2 && result.pngBase64 === "aGVsbG8=", "a successful export round-trips through the plugin transport with the requested scale", JSON.stringify(result));
+  }
+}
+
+// ── 6.6 Governance: renderer source untouched ───────────────────────────────
+section("6.6 Renderer source (.codex-temp vendored Penpot) untouched");
+{
+  let diffOutput = "";
+  try {
+    diffOutput = execFileSync("git", ["status", "--porcelain", "--", ".codex-temp"], { cwd: REPO_ROOT, encoding: "utf8" });
+  } catch (err) {
+    diffOutput = String(err.stdout || err.message || "");
+  }
+  ok(diffOutput.trim() === "", "no changes are staged/pending under .codex-temp (vendored upstream Penpot) — read-only research only", diffOutput.trim().slice(0, 300));
+}
+
+// ── 6.7 Live check (optional, gated) ────────────────────────────────────────
+section(`6.7 Live capture round-trip (${LIVE ? "ENABLED via NOFIDA_AI_VERIFY_LIVE=1" : "skipped — requires a live Penpot session + companion plugin, not available in this environment"})`);
+if (LIVE) {
+  console.log("  SKIP  live canvas capture requires a real browser + Penpot session + companion plugin — not exercisable from this Node-only verify harness even with the live flag set");
+} else {
+  console.log("  SKIP  live capture round-trip (set NOFIDA_AI_VERIFY_LIVE=1 to see the live-path note)");
 }
 
 console.log(`\n${passed} passed, ${failures} failed`);

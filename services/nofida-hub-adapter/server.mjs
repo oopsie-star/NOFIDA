@@ -14,6 +14,9 @@ import { canonicalizeScene } from "./ai/scene/scene-canonicalizer.mjs";
 import { normalizeScene } from "./ai/scene/scene-normalizer.mjs";
 import { fetchUrlReference } from "./ai/url-reference-fetcher.mjs";
 import * as threadStore from "./ai/thread-store.mjs";
+import * as designerSessionStore from "./ai/designer/session-store.mjs";
+import { getDesignerFeatureFlags } from "./ai/designer/feature-flags.mjs";
+import { validateCapture } from "./ai/designer/capture-validator.mjs";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3101);
@@ -41,6 +44,11 @@ const AI_ASK_LIMIT_BYTES = 8 * 1024 * 1024;
 const MAX_ATTACHMENTS = 4;
 const MAX_ATTACHMENT_BASE64_CHARS = 6 * 1024 * 1024; // ~4.5MB decoded per image
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+// PATCH 026A.6 — canvas captures are always PNG (see canvas-capture.js) and
+// can be a 2x-scale full board, so this gets its own, slightly larger cap
+// than the general JSON_LIMIT_BYTES default (a 2x capture of a large board
+// can comfortably exceed a couple MB of base64).
+const CAPTURE_LIMIT_BYTES = 12 * 1024 * 1024;
 const MAX_REFERENCE_URLS = 2;
 
 // Operation Plan Schema — valid operation types for PATCH 016A (preview-only).
@@ -1298,6 +1306,70 @@ function buildTypedOperationPlan(taskType, context, hubCtx) {
   };
 }
 
+// PATCH 026A.6 — receives a canvas capture from canvas-capture.js and stores
+// it as a designer-session artifact keyed by board semanticId root +
+// revision (see session-store.mjs's saveCaptureArtifact()). Reuses the
+// existing { mimeType, dataBase64 } attachment shape server.mjs already
+// accepts elsewhere (see the AI_ASK_LIMIT_BYTES comment near the top of
+// this file) rather than inventing a new one.
+//
+// The server NEVER trusts the client's word that a capture is real —
+// capture-validator.mjs's validateCapture() independently decodes the PNG
+// and rejects an empty/flat/malformed image before anything is persisted,
+// regardless of what canvas-capture.js already checked client-side.
+async function handleAiDesignerCapturePost(req, res) {
+  const cookieHeader = requireSession(req, res, "Authenticated session required for canvas capture.");
+  if (!cookieHeader) return;
+
+  const flags = getDesignerFeatureFlags();
+  if (!flags.visualCriticV1) {
+    fail(res, 403, "capture_unavailable", "nofida_ai_visual_critic_v1 is disabled.", { error: "capture_unavailable", reason: "nofida_ai_visual_critic_v1 is disabled" });
+    return;
+  }
+
+  let body;
+  try {
+    body = await parseBody(req, CAPTURE_LIMIT_BYTES);
+  } catch (error) {
+    fail(res, error.status || 400, error.code || "invalid_json", error.message);
+    return;
+  }
+
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+  const semanticId = typeof body.semanticId === "string" ? body.semanticId.trim() : "";
+  if (!sessionId || !semanticId) {
+    fail(res, 400, "invalid_request", "sessionId and semanticId are required.");
+    return;
+  }
+  if (body.mimeType !== "image/png") {
+    fail(res, 400, "capture_unavailable", "Only image/png captures are accepted.", { error: "capture_unavailable", reason: `unsupported mimeType: ${body.mimeType}` });
+    return;
+  }
+
+  const validated = validateCapture({ pngBase64: body.dataBase64, width: body.width, height: body.height });
+  if (!validated.ok) {
+    fail(res, 422, validated.error, validated.reason, { error: validated.error, reason: validated.reason });
+    return;
+  }
+
+  const profileId = await resolveProfileIdOrFail(cookieHeader, res);
+  if (!profileId) return;
+
+  try {
+    await designerSessionStore.saveCaptureArtifact(profileId, sessionId, {
+      semanticId,
+      revision: body.revision,
+      pngBase64: body.dataBase64,
+      width: validated.width,
+      height: validated.height,
+      scale: body.scale,
+    });
+    json(res, 200, { ok: true, semanticId, revision: body.revision ?? "latest", width: validated.width, height: validated.height });
+  } catch (error) {
+    fail(res, error.status || 500, error.code || "capture_store_failed", error.message);
+  }
+}
+
 async function handleAiSettingsGet(req, res, url) {
   if (!requireSession(req, res, "Authenticated session required for AI settings.")) return;
   try {
@@ -1955,6 +2027,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/ai/test-model") {
     await handleAiTestModel(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ai/designer/captures") {
+    await handleAiDesignerCapturePost(req, res);
     return;
   }
 
