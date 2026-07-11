@@ -1,20 +1,22 @@
-// PATCH 026A.1/026A.2 — Wires real stage implementations into pipeline.mjs's
-// injectable `invokeStage` signature.
+// PATCH 026A.1/026A.2/026A.3 — Wires real stage implementations into
+// pipeline.mjs's injectable `invokeStage` signature.
 //
 // pipeline.mjs stays a pure, network-agnostic orchestrator (see its header)
 // — it never imports a concrete stage implementation itself. This module is
 // the adapter that plugs the real brief-interpreter/product-architect/
-// art-director/design-system-generator modules into that injection point.
-// Stages without a real implementation yet (components, assets, layout,
-// scene, critique, repair) deliberately have NO fallback here — a caller
-// trying to run one gets a loud, structured "stage_not_wired" error instead
-// of a silent no-op, so it's obvious which 026A sub-patch still needs to
-// land.
+// art-director/design-system-generator/component-architect/asset-resolver
+// modules into that injection point. Stages without a real implementation
+// yet (layout, scene, critique, repair) deliberately have NO fallback here
+// — a caller trying to run one gets a loud, structured "stage_not_wired"
+// error instead of a silent no-op, so it's obvious which 026A sub-patch
+// still needs to land.
 
 import { interpretBrief } from "./brief-interpreter.mjs";
 import { planArchitecture } from "./product-architect.mjs";
 import { directArt } from "./art-director.mjs";
 import { generateDesignSystem } from "./design-system-generator.mjs";
+import { architectComponents } from "./component-architect.mjs";
+import { resolveAssets } from "./asset-resolver.mjs";
 
 function stageError(stage, code, message, recoverable) {
   return Object.assign(new Error(message), { stage, code, message, recoverable: !!recoverable });
@@ -85,6 +87,41 @@ const STAGE_IMPLEMENTATIONS = {
     const result = await generateDesignSystem({ productBrief: brief, artDirection }, { aiSettingsService, role });
     if (result.ok) return JSON.stringify(result.manifest);
     throw stageError("design_system", result.error.code, result.error.message, false);
+  },
+
+  async components(stageDef, session, { aiSettingsService, role }) {
+    const architecture = session?.stageArtifacts?.product_architecture?.output;
+    const artDirection = session?.stageArtifacts?.art_direction?.output;
+    const manifest = session?.stageArtifacts?.design_system?.output;
+    if (!architecture || !artDirection || !manifest) {
+      throw stageError(
+        "components",
+        "missing_input",
+        "components stage requires completed 'product_architecture', 'art_direction', and 'design_system' stage artifacts in the session",
+        false,
+      );
+    }
+    const result = await architectComponents({ productArchitecture: architecture, artDirection, manifest }, { aiSettingsService, role });
+    if (result.ok) return JSON.stringify(result.components);
+    throw stageError("components", result.error.code, result.error.message, false);
+  },
+
+  // Deterministic — see asset-resolver.mjs's header for why this stage
+  // ignores aiSettingsService/role entirely.
+  async assets(stageDef, session) {
+    const architecture = session?.stageArtifacts?.product_architecture?.output;
+    const artDirection = session?.stageArtifacts?.art_direction?.output;
+    const components = session?.stageArtifacts?.components?.output;
+    if (!architecture || !artDirection || !components) {
+      throw stageError(
+        "assets",
+        "missing_input",
+        "assets stage requires completed 'product_architecture', 'art_direction', and 'components' stage artifacts in the session",
+        false,
+      );
+    }
+    const resolution = resolveAssets({ productArchitecture: architecture, artDirection, components });
+    return JSON.stringify(resolution);
   },
 };
 

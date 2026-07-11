@@ -210,11 +210,12 @@ section("0.3 Prompt registry (11 designer tasks) + intent-router flag gate");
   const { getPromptDefinition, DESIGNER_TASK_TYPES, TASK_TYPES } = await importFrom("services/nofida-hub-adapter/ai/prompt-registry.mjs");
   const { routeTask } = await importFrom("services/nofida-hub-adapter/ai/intent-router.mjs");
 
-  // PATCH 026A.1/026A.2 implement four of the eleven prompts for real; the
-  // rest stay 026A.0 stubs until their own sub-patch lands.
+  // PATCH 026A.1/026A.2/026A.3 implement six of the eleven prompts for
+  // real; the rest stay 026A.0 stubs until their own sub-patch lands.
   const IMPLEMENTED_TASK_TYPES = new Set([
     "designer_brief_interpreter", "designer_product_architect",
     "designer_art_director", "designer_system_generator",
+    "designer_component_architect", "designer_asset_resolver",
   ]);
 
   ok(DESIGNER_TASK_TYPES.size === 11, "DESIGNER_TASK_TYPES has exactly 11 entries", DESIGNER_TASK_TYPES.size);
@@ -928,9 +929,13 @@ section("2.7 Validators run without any network access");
 }
 
 // ── 2.8 Pipeline wiring: art_direction + design_system stages run and cache ─
+// Exercises these two stages in isolation via runPipelineStage() rather than
+// a full runPipeline() run, for the same forward-compatibility reason as
+// section 1.5 — 026A.3 wires components/assets right after this, which would
+// otherwise make an "and then it stops here" assertion stale immediately.
 section("2.8 Pipeline runs art_direction + design_system with the real modules and caches them");
 {
-  const { runPipeline, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { runPipelineStage, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
   const { createDesignerInvokeStage } = await importFrom("services/nofida-hub-adapter/ai/designer/stage-invoker.mjs");
 
   const answers = [
@@ -943,17 +948,327 @@ section("2.8 Pipeline runs art_direction + design_system with the real modules a
   const invokeStage = createDesignerInvokeStage({ aiSettingsService: providerFake, briefInput: { request: CYCLE_APP_REQUEST } });
   const session = { stageArtifacts: {} };
 
-  const firstRun = await runPipeline({ session, invokeStage });
-  ok(firstRun.ok === false && firstRun.error.stage === "components" && firstRun.error.code === "stage_not_wired", "pipeline runs all four real stages then stops cleanly at the next un-wired stage", JSON.stringify(firstRun.error));
-  ok(firstRun.results.length === 4 && firstRun.results.every((r) => r.status === "ok"), "brief, product_architecture, art_direction, and design_system all complete with status 'ok'", JSON.stringify(firstRun.results.map((r) => [r.stage, r.status])));
+  const stageNames = ["brief", "product_architecture", "art_direction", "design_system"];
+  for (let i = 0; i < stageNames.length; i++) {
+    const result = await runPipelineStage(STAGE_ORDER[i], { session, invokeStage });
+    ok(result.status === "ok", `${stageNames[i]} stage runs via the real module and reports 'ok'`, JSON.stringify(result));
+    session.stageArtifacts[stageNames[i]] = { status: "ok", output: result.output };
+  }
   ok(providerFake.callCount() === 4, "provider invoked exactly once per real stage on a cold run", providerFake.callCount());
 
   const artDirectionArtifact = session.stageArtifacts.art_direction.output;
   ok(artDirectionArtifact && !("rationale" in artDirectionArtifact), "the cached art_direction artifact holds pure ArtDirection fields, not the rationale wrapper");
 
-  const secondRun = await runPipeline({ session, invokeStage });
-  ok(secondRun.error.stage === "components", "second run against the same session reaches the same un-wired stage");
-  ok(providerFake.callCount() === 4, "second run resumes all four real stages from the session cache — no additional provider invocations", providerFake.callCount());
+  for (let i = 0; i < stageNames.length; i++) {
+    const cached = await runPipelineStage(STAGE_ORDER[i], { session, invokeStage });
+    ok(cached.status === "cached", `${stageNames[i]} stage individually reports 'cached' on rerun`);
+  }
+  ok(providerFake.callCount() === 4, "rerunning all four cached stages makes no new provider call", providerFake.callCount());
+}
+
+// =============================================================================
+// SECTION 026A.3 — Component Architect + Asset Resolver
+// =============================================================================
+console.log("\nPATCH 026A.3 — Component Architect + Asset Resolver");
+
+// Recorded fixture components (built on 026A.1/026A.2's cycle-tracker brief/
+// architecture/manifest) — every tokenBinding below references an actual
+// token name present in RECORDED_CYCLE_MANIFEST; every layout is a valid
+// SemanticLayout. Repeated patterns (DateCell for week-day cells,
+// CalendarDay for month-day cells, MetricCard for cycle summary) are their
+// own components, not inlined.
+const RECORDED_CYCLE_COMPONENTS = [
+  {
+    id: "component.app-header", name: "AppHeader", role: "header",
+    props: { title: "string", subtitle: "string" },
+    variants: ["light", "dark"], states: ["default"],
+    layout: { type: "stack", direction: "row", gapToken: "spacing.scale", alignment: "center" },
+    tokenBindings: { fill: "background.canvas", titleColor: "text.primary", subtitleColor: "text.secondary" },
+    children: [],
+  },
+  {
+    id: "component.date-cell", name: "DateCell", role: "calendar-cell",
+    props: { day: "number", isToday: "boolean", isSelected: "boolean" },
+    variants: ["light", "dark"], states: ["default", "selected", "disabled"],
+    layout: { type: "stack", direction: "column", gapToken: "spacing.scale", alignment: "center" },
+    tokenBindings: { fill: "background.surface", selectedFill: "state.selected", textColor: "text.primary", cornerRadius: "radius.control" },
+    children: [],
+  },
+  {
+    id: "component.week-calendar", name: "WeekCalendar", role: "calendar",
+    props: { weekStart: "date" },
+    variants: ["light", "dark"], states: ["default", "loading"],
+    layout: { type: "grid", direction: "row", gapToken: "spacing.scale" },
+    tokenBindings: { fill: "background.surface", cornerRadius: "radius.card" },
+    children: [],
+  },
+  {
+    id: "component.prediction-card", name: "PredictionCard", role: "summary",
+    props: { predictedDate: "string", daysRemaining: "number" },
+    variants: ["light", "dark"], states: ["default", "loading", "error"],
+    layout: { type: "stack", direction: "column", gapToken: "spacing.scale" },
+    tokenBindings: { fill: "background.surfaceElevated", titleColor: "text.primary", cornerRadius: "radius.card" },
+    children: [],
+  },
+  {
+    id: "component.status-pill", name: "StatusPill", role: "status-indicator",
+    props: { label: "string", tone: "string" },
+    variants: ["light", "dark"], states: ["default"],
+    layout: { type: "stack", direction: "row", gapToken: "spacing.scale" },
+    tokenBindings: { fill: "status.success", textColor: "action.primaryText", cornerRadius: "radius.pill" },
+    children: [],
+  },
+  {
+    id: "component.segmented-tabs", name: "SegmentedTabs", role: "navigation",
+    props: { tabs: "array", activeIndex: "number" },
+    variants: ["light", "dark"], states: ["default"],
+    layout: { type: "stack", direction: "row", gapToken: "spacing.scale" },
+    tokenBindings: { fill: "background.surface", activeFill: "action.primary", cornerRadius: "radius.control" },
+    children: [],
+  },
+  {
+    id: "component.metric-card", name: "MetricCard", role: "metric",
+    props: { label: "string", value: "string" },
+    variants: ["light", "dark"], states: ["default"],
+    layout: { type: "stack", direction: "column", gapToken: "spacing.scale" },
+    tokenBindings: { fill: "background.surfaceElevated", valueColor: "text.primary", labelColor: "text.secondary", cornerRadius: "radius.card" },
+    children: [],
+  },
+  {
+    id: "component.calendar-day", name: "CalendarDay", role: "calendar-cell",
+    props: { day: "number", hasEvent: "boolean" },
+    variants: ["light", "dark"], states: ["default", "selected", "disabled"],
+    layout: { type: "stack", direction: "column", gapToken: "spacing.scale", alignment: "center" },
+    tokenBindings: { fill: "background.surface", selectedFill: "state.selected", textColor: "text.primary", cornerRadius: "radius.control" },
+    children: [],
+  },
+  {
+    id: "component.month-calendar", name: "MonthCalendar", role: "calendar",
+    props: { month: "date" },
+    variants: ["light", "dark"], states: ["default", "loading"],
+    layout: { type: "grid", direction: "row", gapToken: "spacing.scale" },
+    tokenBindings: { fill: "background.surface", cornerRadius: "radius.panel" },
+    children: [],
+  },
+  {
+    id: "component.primary-button", name: "PrimaryButton", role: "primary-action",
+    props: { label: "string", disabled: "boolean" },
+    variants: ["light", "dark"], states: ["default", "disabled"],
+    layout: { type: "stack", direction: "row", gapToken: "spacing.scale", alignment: "center" },
+    tokenBindings: { fill: "action.primary", textColor: "action.primaryText", cornerRadius: "radius.control" },
+    children: [],
+  },
+];
+
+// ── 3.1 Component architect fixture is contract-valid + patterns mapped ────
+section("3.1 Recorded ComponentDefinition fixtures validate; repeated patterns are componentized");
+{
+  const { validateContract } = await importFrom("services/nofida-hub-adapter/ai/designer/contracts.mjs");
+  const { validateComponentDeep } = await importFrom("services/nofida-hub-adapter/ai/designer/component-validators.mjs");
+
+  for (const component of RECORDED_CYCLE_COMPONENTS) {
+    const shallow = validateContract("ComponentDefinition", component);
+    ok(shallow.ok === true, `"${component.name}" validates against the ComponentDefinition contract`, shallow.errors.join("; "));
+    const deep = validateComponentDeep(component, RECORDED_CYCLE_MANIFEST);
+    ok(deep.ok === true, `"${component.name}" passes the deep check (tokenBindings + layout) against the recorded manifest`, deep.errors.join("; "));
+  }
+
+  const archText = architectureText(RECORDED_CYCLE_ARCHITECTURE);
+  ok(/week/i.test(archText), "architecture sections reference a week-day-cell pattern");
+  const dateCell = RECORDED_CYCLE_COMPONENTS.find((c) => c.name === "DateCell");
+  ok(!!dateCell && dateCell.role === "calendar-cell", "week-day cells map to the DateCell component (role calendar-cell)");
+
+  ok(/month/i.test(archText), "architecture sections reference a month-day-cell pattern");
+  const calendarDay = RECORDED_CYCLE_COMPONENTS.find((c) => c.name === "CalendarDay");
+  ok(!!calendarDay && calendarDay.role === "calendar-cell", "month-day cells map to the CalendarDay component (role calendar-cell)");
+
+  ok(/summary/i.test(archText), "architecture sections reference a cycle-summary pattern");
+  const metricCard = RECORDED_CYCLE_COMPONENTS.find((c) => c.name === "MetricCard");
+  ok(!!metricCard && metricCard.role === "metric", "cycle summary maps to the MetricCard component (role metric)");
+}
+
+// ── 3.2 tokenBindings cross-check against the manifest ──────────────────────
+section("3.2 Every tokenBindings value resolves into the DesignSystemManifest");
+{
+  const { checkTokenBindings, resolveTokenBinding } = await importFrom("services/nofida-hub-adapter/ai/designer/component-validators.mjs");
+
+  for (const component of RECORDED_CYCLE_COMPONENTS) {
+    const result = checkTokenBindings(component, RECORDED_CYCLE_MANIFEST);
+    ok(result.ok === true, `"${component.name}"'s tokenBindings all resolve into the manifest`, result.errors.join("; "));
+  }
+
+  ok(resolveTokenBinding(RECORDED_CYCLE_MANIFEST, "background.surface") === true, "a semantic token name resolves directly");
+  ok(resolveTokenBinding(RECORDED_CYCLE_MANIFEST, "radius.card") === true, "a dotted path into tokens.* resolves");
+  ok(resolveTokenBinding(RECORDED_CYCLE_MANIFEST, "color.brand.900") === false, "an invented token path does not resolve");
+
+  const badComponent = { ...RECORDED_CYCLE_COMPONENTS[0], tokenBindings: { fill: "color.brand.invented-shade" } };
+  const badResult = checkTokenBindings(badComponent, RECORDED_CYCLE_MANIFEST);
+  ok(badResult.ok === false, "a component with an invented token name is rejected by the cross-check", JSON.stringify(badResult.errors));
+}
+
+// ── 3.3 layout is a valid SemanticLayout ────────────────────────────────────
+section("3.3 Component layout must itself be a valid SemanticLayout");
+{
+  const { checkLayoutIsSemanticLayout } = await importFrom("services/nofida-hub-adapter/ai/designer/component-validators.mjs");
+
+  for (const component of RECORDED_CYCLE_COMPONENTS) {
+    const result = checkLayoutIsSemanticLayout(component);
+    ok(result.ok === true, `"${component.name}"'s layout is a valid SemanticLayout`, result.errors.join("; "));
+  }
+
+  const noLayout = { id: "component.x", name: "X", role: "x" };
+  ok(checkLayoutIsSemanticLayout(noLayout).ok === true, "a component with no layout at all is fine (layout is optional)");
+
+  const badLayout = { ...RECORDED_CYCLE_COMPONENTS[0], layout: { type: "flow" } };
+  ok(checkLayoutIsSemanticLayout(badLayout).ok === false, "an invalid layout.type is rejected");
+}
+
+// ── 3.4 Light/dark are variants, not duplicate components ──────────────────
+section("3.4 Light/dark are variants of one component, never *Dark duplicates");
+{
+  const { checkNoLightDarkDuplicateNames } = await importFrom("services/nofida-hub-adapter/ai/designer/component-validators.mjs");
+
+  const goodResult = checkNoLightDarkDuplicateNames(RECORDED_CYCLE_COMPONENTS);
+  ok(goodResult.ok === true, "the recorded fixture (variants, no *Dark names) passes the check", JSON.stringify(goodResult.errors));
+  ok(RECORDED_CYCLE_COMPONENTS.every((c) => (c.variants || []).includes("light") && c.variants.includes("dark")), "every recorded component declares both light and dark as variants of itself");
+
+  const splitComponents = [
+    { id: "component.prediction-card", name: "PredictionCard", role: "summary" },
+    { id: "component.prediction-card-dark", name: "PredictionCardDark", role: "summary" },
+  ];
+  const badResult = checkNoLightDarkDuplicateNames(splitComponents);
+  ok(badResult.ok === false, "a component set that splits light/dark into two named components is rejected", JSON.stringify(badResult.errors));
+}
+
+// ── 3.5 Deduplication merges structurally identical definitions ────────────
+section("3.5 Deduplication merges structurally identical component definitions");
+{
+  const { dedupeComponents } = await importFrom("services/nofida-hub-adapter/ai/designer/component-validators.mjs");
+
+  const duplicated = [
+    { id: "component.date-cell", name: "DateCell", role: "calendar-cell", props: { day: "number" }, variants: ["light"], states: ["default"], layout: { type: "stack" }, tokenBindings: { fill: "background.surface" }, children: [] },
+    { id: "component.date-cell-2", name: "DateCellDuplicate", role: "calendar-cell", props: { day: "number" }, variants: ["dark"], states: ["default"], layout: { type: "stack" }, tokenBindings: { fill: "background.surface" }, children: [] },
+    { id: "component.metric-card", name: "MetricCard", role: "metric", props: { label: "string" }, variants: ["light", "dark"], states: ["default"], layout: { type: "stack" }, tokenBindings: { fill: "background.surfaceElevated" }, children: [] },
+  ];
+  const deduped = dedupeComponents(duplicated);
+  ok(deduped.length === 2, "two structurally identical definitions merge into one; the distinct one survives separately", deduped.length);
+  const mergedDateCell = deduped.find((c) => c.id === "component.date-cell");
+  ok(!!mergedDateCell, "the first occurrence's id/name is kept for the merged component");
+  ok(mergedDateCell && mergedDateCell.variants.includes("light") && mergedDateCell.variants.includes("dark"), "the merged component's variants are the union of the duplicates' variants", JSON.stringify(mergedDateCell && mergedDateCell.variants));
+}
+
+// ── 3.6 Component architect: contract validation + retry-on-invalid ────────
+section("3.6 Component architect: contract validation + retry-on-invalid");
+{
+  const { architectComponents } = await importFrom("services/nofida-hub-adapter/ai/designer/component-architect.mjs");
+
+  const happyService = makeFakeAiSettingsService({ answers: [JSON.stringify(RECORDED_CYCLE_COMPONENTS)] });
+  const happyResult = await architectComponents(
+    { productArchitecture: RECORDED_CYCLE_ARCHITECTURE, artDirection: RECORDED_CYCLE_ART_DIRECTION, manifest: RECORDED_CYCLE_MANIFEST },
+    { aiSettingsService: happyService },
+  );
+  ok(happyResult.ok === true && happyService.callCount() === 1, "a valid first-attempt component array is accepted without a retry", JSON.stringify(happyResult.error));
+  ok(happyResult.ok && happyResult.components.length === RECORDED_CYCLE_COMPONENTS.length, "no duplicates existed in the fixture, so dedup is a no-op here", happyResult.ok && happyResult.components.length);
+
+  const brokenThenGood = [JSON.stringify([{ id: "component.x", name: "X" }]), JSON.stringify(RECORDED_CYCLE_COMPONENTS)]; // missing required "role" once
+  const retryService = makeFakeAiSettingsService({ answers: brokenThenGood });
+  const retryResult = await architectComponents(
+    { productArchitecture: RECORDED_CYCLE_ARCHITECTURE, artDirection: RECORDED_CYCLE_ART_DIRECTION, manifest: RECORDED_CYCLE_MANIFEST },
+    { aiSettingsService: retryService },
+  );
+  ok(retryResult.ok === true && retryService.callCount() === 2, "component architect recovers after one contract-violating attempt", retryService.callCount());
+}
+
+// ── 3.7 Asset resolver: priority chain, editable vector background, no hotlinks/emoji ─
+section("3.7 Asset resolver: priority chain, editable vector background, no hotlinks or emoji");
+{
+  const { resolveAssets } = await importFrom("services/nofida-hub-adapter/ai/designer/asset-resolver.mjs");
+  const { validateContract } = await importFrom("services/nofida-hub-adapter/ai/designer/contracts.mjs");
+  const { REQUIRED_SEMANTIC_TOKENS } = await importFrom("services/nofida-hub-adapter/ai/designer/design-system-validators.mjs");
+  const isNonEmptyStringLocal = (v) => typeof v === "string" && v.trim().length > 0;
+
+  const resolution = resolveAssets({
+    productArchitecture: RECORDED_CYCLE_ARCHITECTURE,
+    artDirection: RECORDED_CYCLE_ART_DIRECTION,
+    components: RECORDED_CYCLE_COMPONENTS,
+  });
+  const contractResult = validateContract("AssetResolution", resolution);
+  ok(contractResult.ok === true, "resolved assets validate against the AssetResolution contract", contractResult.errors.join("; "));
+
+  const background = resolution.assets.find((a) => a.role.startsWith("background."));
+  ok(!!background, "an abstract-vector-background need is resolved for the cycle-tracker product");
+  ok(background && background.source === "generated-vector", "the background resolves to source 'generated-vector' (programmatic, not a raster asset)", background && background.source);
+  ok(background && background.editable === true, "the generated background is editable", background && background.editable);
+  ok(background && Array.isArray(background.sceneNodes) && background.sceneNodes.length >= 3 && background.sceneNodes.length <= 8, "the background has between 3 and 8 vector shapes", background && background.sceneNodes.length);
+  const parsedNodes = (background?.sceneNodes || []).map((n) => JSON.parse(n));
+  ok(parsedNodes.every((n) => ["ellipse", "rectangle", "path"].includes(n.type)), "every background shape is an ellipse/rectangle/path primitive, never a raster image", JSON.stringify(parsedNodes.map((n) => n.type)));
+  ok(parsedNodes.every((n) => isNonEmptyStringLocal(n?.tokens?.fillToken)), "every background shape's fill is bound to a semantic token (tokens.fillToken), not a literal color", JSON.stringify(parsedNodes.map((n) => n?.tokens?.fillToken)));
+  ok(parsedNodes.every((n) => REQUIRED_SEMANTIC_TOKENS.includes(n.tokens.fillToken)), "every bound fillToken is one of the manifest's canonical semantic token names");
+
+  const icons = resolution.assets.filter((a) => a.role.startsWith("icon."));
+  ok(icons.length > 0, "at least one icon role is derived from the architecture's sections/actions", icons.length);
+  ok(icons.every((i) => i.source.startsWith("icon-library:")), "icons resolve through the approved icon library tier", JSON.stringify(icons.map((i) => i.source)));
+  ok(icons.every((i) => !/\p{Extended_Pictographic}/u.test(i.role) && !/\p{Extended_Pictographic}/u.test(i.source)), "zero emoji glyphs appear anywhere in icon results");
+
+  const allText = JSON.stringify(resolution);
+  ok(!/https?:\/\//i.test(allText), "zero external URLs appear anywhere in the resolved assets", allText.match(/https?:\/\/\S+/) || "none");
+
+  // Priority chain: an existing project asset for a role wins over media
+  // bank / generated / placeholder.
+  const withProjectAsset = resolveAssets({
+    productArchitecture: RECORDED_CYCLE_ARCHITECTURE,
+    artDirection: RECORDED_CYCLE_ART_DIRECTION,
+    components: RECORDED_CYCLE_COMPONENTS,
+    existingProjectAssets: [{ id: "proj-bg-1", role: "background.hero", license: "project-owned", editable: true }],
+  });
+  const projectBackground = withProjectAsset.assets.find((a) => a.role === "background.hero");
+  ok(projectBackground && projectBackground.source === "project-asset:proj-bg-1", "an existing project asset is preferred over generating a new one", projectBackground && projectBackground.source);
+
+  // A candidate without a verifiable license is skipped, not accepted.
+  const withUnlicensedMedia = resolveAssets({
+    productArchitecture: RECORDED_CYCLE_ARCHITECTURE,
+    artDirection: RECORDED_CYCLE_ART_DIRECTION,
+    components: RECORDED_CYCLE_COMPONENTS,
+    mediaCatalogItems: [{ id: "media-1", title: "hero background", category: "background", tags: ["hero"] }], // no license
+  });
+  const fallbackBackground = withUnlicensedMedia.assets.find((a) => a.role === "background.hero");
+  ok(fallbackBackground && fallbackBackground.source !== "media-bank:media-1", "an unlicensed media-bank candidate is skipped, falling through to the next tier", fallbackBackground && fallbackBackground.source);
+}
+
+// ── 3.8 Pipeline wiring: components + assets stages run and cache ──────────
+section("3.8 Pipeline runs components + assets with the real modules and caches them");
+{
+  const { runPipelineStage, STAGE_ORDER } = await importFrom("services/nofida-hub-adapter/ai/designer/pipeline.mjs");
+  const { createDesignerInvokeStage } = await importFrom("services/nofida-hub-adapter/ai/designer/stage-invoker.mjs");
+
+  const providerFake = makeFakeAiSettingsService({ answers: [JSON.stringify(RECORDED_CYCLE_COMPONENTS)] });
+  const invokeStage = createDesignerInvokeStage({ aiSettingsService: providerFake, briefInput: { request: CYCLE_APP_REQUEST } });
+  const session = {
+    stageArtifacts: {
+      brief: { status: "ok", output: RECORDED_CYCLE_BRIEF },
+      product_architecture: { status: "ok", output: RECORDED_CYCLE_ARCHITECTURE },
+      art_direction: { status: "ok", output: RECORDED_CYCLE_ART_DIRECTION },
+      design_system: { status: "ok", output: RECORDED_CYCLE_MANIFEST },
+    },
+  };
+
+  const componentsStageDef = STAGE_ORDER.find((s) => s.stage === "components");
+  const componentsResult = await runPipelineStage(componentsStageDef, { session, invokeStage });
+  ok(componentsResult.status === "ok", "components stage runs via the real module and reports 'ok'", JSON.stringify(componentsResult).slice(0, 300));
+  session.stageArtifacts.components = { status: "ok", output: componentsResult.output };
+  ok(providerFake.callCount() === 1, "components stage invokes the provider exactly once on a cold run");
+
+  const assetsStageDef = STAGE_ORDER.find((s) => s.stage === "assets");
+  const assetsResult = await runPipelineStage(assetsStageDef, { session, invokeStage });
+  ok(assetsResult.status === "ok", "assets stage runs and reports 'ok' without ever calling the provider", JSON.stringify(assetsResult).slice(0, 300));
+  ok(providerFake.callCount() === 1, "assets stage is fully deterministic — no additional provider invocation", providerFake.callCount());
+  session.stageArtifacts.assets = { status: "ok", output: assetsResult.output };
+
+  const cachedComponents = await runPipelineStage(componentsStageDef, { session, invokeStage });
+  ok(cachedComponents.status === "cached", "components stage reports 'cached' on rerun");
+  const cachedAssets = await runPipelineStage(assetsStageDef, { session, invokeStage });
+  ok(cachedAssets.status === "cached", "assets stage reports 'cached' on rerun");
+  ok(providerFake.callCount() === 1, "rerunning both cached stages makes no new provider call", providerFake.callCount());
 }
 
 console.log(`\n${passed} passed, ${failures} failed`);
